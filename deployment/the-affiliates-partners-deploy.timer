@@ -1,0 +1,12 @@
+[Unit]
+Description=Check The Affiliates Partners repository for updates
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=3min
+RandomizedDelaySec=20s
+Persistent=true
+Unit=the-affiliates-partners-deploy.service
+
+[Install]
+WantedBy=timers.target
