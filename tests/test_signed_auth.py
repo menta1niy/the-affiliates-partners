@@ -90,6 +90,23 @@ class SignedAuthTests(unittest.TestCase):
             "telegram_id": app.ADMIN_ID, "username": "owner", "name": "Owner",
             "phone": "+79991111111", "status": "active"})
 
+    def test_owner_without_database_row_still_receives_verified_profile(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_port}/api/auth/telegram"
+        request = urllib.request.Request(url, json.dumps({"initData": signed_data(app.ADMIN_ID)}).encode(),
+                                         {"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=3) as response:
+            result = json.load(response)
+        self.assertTrue(result["isAdmin"])
+        self.assertEqual(result["profile"]["telegram_id"], app.ADMIN_ID)
+        self.assertEqual(result["profile"]["status"], "active")
+        self.assertIsNone(app.partner_for(app.ADMIN_ID))
+
     def test_notification_failure_never_raises(self):
         with patch("app.urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
             app.notify_partner_status(12345, "active")
