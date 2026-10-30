@@ -153,7 +153,8 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
         return send_with_retry(request)
 
     pending = call(root + "/identity/requests", {"workspace_id": str(workspace_id)})
-    requested = {str(UUID(x)) for x in pending["blogger_ids"]}
+    mappings = pending["mappings"]
+    requested = {str(UUID(item["blogger_id"])) for item in mappings}
     if len(requested) > 10000:
         raise ValueError("Too many identity requests")
     try:
@@ -170,7 +171,14 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
             existing = [str(UUID(str(row[0]))) for row in rows if str(row[0]) in requested]
     finally:
         engine.dispose()
-    result = call(root + "/identity", {"workspace_id": str(workspace_id), "blogger_ids": existing})
+    found = set(existing)
+    attestations = [{
+        "telegram_id": item["telegram_id"],
+        "blogger_id": str(UUID(item["blogger_id"])),
+        "mapping_version": item["mapping_version"],
+        "exists": str(UUID(item["blogger_id"])) in found
+    } for item in mappings]
+    result = call(root + "/identity", {"workspace_id": str(workspace_id), "attestations": attestations})
     if not result.get("ok"):
         raise RuntimeError("CRM identity attestation failed")
     return result.get("verified", 0)

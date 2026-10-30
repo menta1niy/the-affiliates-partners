@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
 from crm_feed import normalize_feed, apply_feed, finalize_snapshot
 from crm_snapshot import begin as snapshot_begin, batch as snapshot_batch, finalize as snapshot_finalize
-from crm_identity import schema as identity_schema, owner_assign, attest
+from crm_identity import schema as identity_schema, owner_assign, attest, issue_checks
 
 load_local_env()
 
@@ -221,16 +221,14 @@ class Handler(BaseHTTPRequestHandler):
                 if body != {"workspace_id": workspace}:
                     return self.respond(400, {"error": "Invalid identity lookup"})
                 with db() as conn:
-                    ids = [row[0] for row in conn.execute(
-                        "SELECT blogger_id FROM crm_partner_links WHERE workspace_id=? ORDER BY blogger_id",
-                        (workspace,))]
-                return self.respond(200, {"blogger_ids": ids})
+                    mappings = issue_checks(conn, workspace)
+                return self.respond(200, {"mappings": mappings})
             if route == "/api/internal/crm/identity":
-                if body.get("workspace_id") != workspace or set(body) != {"workspace_id", "blogger_ids"}:
+                if body.get("workspace_id") != workspace or set(body) != {"workspace_id", "attestations"}:
                     return self.respond(400, {"error": "Invalid CRM identity attestation"})
                 try:
                     with db() as conn:
-                        verified = attest(conn, workspace, body["blogger_ids"], int(time.time()))
+                        verified = attest(conn, workspace, body["attestations"], int(time.time()))
                 except ValueError as error:
                     return self.respond(400, {"error": str(error)})
                 return self.respond(200, {"ok": True, "verified": verified})

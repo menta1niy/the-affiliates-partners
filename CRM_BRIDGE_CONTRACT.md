@@ -119,6 +119,18 @@ independently configured.
 
 ### Explicit Telegram ↔ CRM identity association
 
+**Attestation response ordering:** each owner-selected mapping has a
+`mapping_version`. The authenticated `identity/requests` call now also
+issues a fresh `check_version` for that particular verification round.
+The read-only publisher must echo both values and the requested Telegram ID,
+CRM Blogger UUID and its explicit `exists` boolean in
+`identity/attestations`. Only the currently selected mapping and most
+recent verification round can change `crmLinked`. Old positive responses
+cannot restore a link after a newer negative CRM check. The SQLite schema
+is upgraded additively; previously verified legacy rows without versions
+are reset to unverified until checked again. This is intentional fail-closed
+behavior, not evidence of account deletion.
+
 Partners stores a separate additive table `crm_partner_links`. An approved
 partner with a verified Telegram contact can be proposed for linking by the
 **signed Telegram owner** in the administrative UI, using the actual
