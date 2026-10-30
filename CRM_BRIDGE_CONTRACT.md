@@ -40,6 +40,29 @@ publisher and verified production credentials have **not** yet been installed.
 
 ### Standalone read-only publisher (implemented, opt-in)
 
+**Interrupted snapshot recovery:** the publisher accepts `--run-id UUID`.
+If an HTTP batch or commit acknowledgement fails, its error reports that
+run ID without printing credentials. Re-run against **the same CRM source
+snapshot** with `--send --run-id UUID` before the one-hour lease expires.
+The server safely accepts already-staged identical batches and checks the
+SHA-256 digest on a completed run; it will reject changed content for the
+same run ID. If the underlying CRM data has changed, allow the unfinished
+lease to expire and begin a fresh run rather than mixing snapshots.
+
+**Notifications:** administrative partner status transitions and their bot
+notifications are saved in one SQLite transaction. Repeated identical status
+updates are acknowledged without adding duplicate events. The polling bot
+retries delivery from the existing `bot_outbox`; this provides at-least-once
+delivery, not an exactly-once Telegram guarantee.
+
+**Safe update order:** the Partners deployment script now backs up the
+configured server SQLite through the SQLite backup API and verifies the
+backup **before** switching the Mini App release or restarting the services.
+The script refuses a server-code update if its configured DB is missing.
+Because the deploy runner and both services can have different environment
+sources, an authorized operator must verify that all three resolve the same
+`PARTNERS_DB_PATH` before approving the production merge/deploy.
+
 **Staged protocol (current):** the publisher now uses a new UUID `run_id`
 per run, `mode=begin` with the expected offer count, repeated `mode=batch`
 requests (up to 100 offers per request), and `mode=commit` with a SHA-256

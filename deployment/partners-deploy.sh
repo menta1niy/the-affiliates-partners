@@ -41,6 +41,26 @@ npm run build
 test -s dist/index.html
 grep -q '/partners/assets/' dist/index.html
 
+if [ "$API_CHANGED" = true ] || [ "$BOT_CHANGED" = true ]; then
+  mkdir -p "$ROOT/.database-backups"
+  # Resolve the same configured DB path as bot and API; never assume the
+  # default repository path if PARTNERS_DB_PATH is configured.
+  python3 - "$REMOTE" "$ROOT/.database-backups" <<'PY'
+import sys
+from pathlib import Path
+from sqlite3 import connect
+sys.path.insert(0, str(Path.cwd() / "server"))
+from app import DB
+if not DB.is_file():
+    raise SystemExit("Refusing to restart: configured Partners database is missing")
+destination = Path(sys.argv[2]) / ("before-" + sys.argv[1][:12] + ".sqlite3")
+with connect(DB) as source, connect(destination) as backup:
+    source.backup(backup)
+    if backup.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise SystemExit("Refusing to restart: backup integrity failed")
+PY
+fi
+
 mkdir -p "${TARGET}.releases"
 RELEASE="${TARGET}.releases/${REMOTE:0:12}"
 mkdir -p "$RELEASE"
@@ -59,20 +79,6 @@ if [ "$SERVICE_CHANGED" = true ]; then
   systemctl daemon-reload
   API_CHANGED=true
   BOT_CHANGED=true
-fi
-if [ "$API_CHANGED" = true ] || [ "$BOT_CHANGED" = true ]; then
-  if [ -f "$ROOT/server/partners.sqlite3" ]; then
-    mkdir -p "$ROOT/.database-backups"
-    python3 - "$REMOTE" <<'PY'
-import sqlite3, sys
-from pathlib import Path
-root = Path("/opt/the-affiliates-partners")
-source = root / "server/partners.sqlite3"
-destination = root / ".database-backups" / ("before-" + sys.argv[1][:12] + ".sqlite3")
-with sqlite3.connect(source) as original, sqlite3.connect(destination) as backup:
-    original.backup(backup)
-PY
-  fi
 fi
 if [ "$API_CHANGED" = true ]; then
   systemctl restart the-affiliates-partners-api.service

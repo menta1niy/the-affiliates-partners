@@ -86,6 +86,18 @@ class Stage2Workflows(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertEqual(self.post("/api/auth/telegram", uid)[1]["profile"]["status"], "pending")
 
+    def test_repeated_admin_status_is_idempotent_and_queues_once(self):
+        uid = 28491
+        self.post("/api/me", uid)
+        with app.db() as conn:
+            conn.execute("UPDATE partners SET phone=? WHERE telegram_id=?", ("+79990000000", uid))
+        endpoint = "/api/admin/partners/status"
+        self.assertEqual(self.post(endpoint, app.ADMIN_ID, telegram_id=uid, status="active")[0], 200)
+        self.assertEqual(self.post(endpoint, app.ADMIN_ID, telegram_id=uid, status="active")[0], 200)
+        with app.db() as conn:
+            queued = conn.execute("SELECT count(*) FROM bot_outbox WHERE chat_id=?", (uid,)).fetchone()[0]
+        self.assertEqual(queued, 1)
+
     def test_owner_me_ignores_stale_partner_row(self):
         with app.db() as conn:
             conn.execute("INSERT INTO partners(telegram_id,status,created_at) VALUES(?,'rejected',0)",

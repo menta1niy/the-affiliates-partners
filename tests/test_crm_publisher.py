@@ -60,10 +60,63 @@ class PublisherTests(unittest.TestCase):
         with patch.object(crm_publisher, "safe_urlopen", side_effect=service), patch.object(
             crm_publisher.time, "sleep"
         ):
-            with self.assertRaises(urllib.error.HTTPError):
+            with self.assertRaisesRegex(RuntimeError, "retry with same --run-id"):
                 crm_publisher.publish("https://example.org/feed", "t"*40, workspace, rows)
         self.assertTrue(seen)
         self.assertTrue(all(request.get("mode") != "finalize" for request in seen))
+
+    def test_retry_same_run_id_recovers_after_failed_batch(self):
+        workspace, run_id, offer_id = uuid4(), str(uuid4()), str(uuid4())
+        offer = {"id": offer_id, "name": "Verified", "offer_type": "debit",
+                 "target_action": "Card", "is_active": True}
+        seen, fail = [], [True]
+
+        class Response(io.BytesIO):
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                self.close()
+
+        def service(req, timeout):
+            data = json.loads(req.data)
+            seen.append(data)
+            if data["mode"] == "batch" and fail[0]:
+                fail[0] = False
+                raise urllib.error.HTTPError(req.full_url, 403, "temporary simulation", {}, None)
+            result = {"ok": True, "state": "pending"}
+            if data["mode"] == "batch":
+                result["received"] = 1
+            return Response(json.dumps(result).encode())
+
+        with patch.object(crm_publisher, "safe_urlopen", side_effect=service):
+            with self.assertRaisesRegex(RuntimeError, run_id):
+                crm_publisher.publish("https://example.org/feed", "t"*40,
+                                      workspace, [offer], run_id=run_id)
+            self.assertEqual(crm_publisher.publish("https://example.org/feed", "t"*40,
+                                                 workspace, [offer], run_id=run_id), 1)
+        self.assertEqual({item["run_id"] for item in seen}, {run_id})
+        self.assertEqual(seen[-1]["mode"], "commit")
+
+    def test_completed_run_rechecks_digest_without_replaying_batches(self):
+        workspace, run_id = uuid4(), str(uuid4())
+        offer = {"id": str(uuid4()), "name": "Bank", "offer_type": "debit",
+                 "target_action": "Card", "is_active": True}
+        seen = []
+        class Response(io.BytesIO):
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                self.close()
+        def service(req, timeout):
+            payload = json.loads(req.data)
+            seen.append(payload)
+            return Response(json.dumps({"ok": True, "state": "complete"}).encode())
+        with patch.object(crm_publisher, "safe_urlopen", side_effect=service):
+            self.assertEqual(crm_publisher.publish("https://example.org/feed",
+                "t"*40, workspace, [offer], run_id=run_id), 1)
+        self.assertEqual([payload["mode"] for payload in seen], ["begin", "commit"])
 
 
 if __name__ == "__main__":

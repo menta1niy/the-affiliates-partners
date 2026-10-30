@@ -154,24 +154,25 @@ def admin_snapshot():
     return {"partners": partners, "offers": offers}
 
 
-def notify_partner_status(telegram_id, status):
-    """Best-effort Telegram notification; database changes never depend on delivery."""
-    if not TOKEN or os.environ.get("TELEGRAM_NOTIFICATIONS_ENABLED") == "0":
-        return
+def queue_partner_status(conn, telegram_id, status):
+    """Queue in the same transaction as the partner status change."""
     messages = {
         "active": "Ваша заявка The Affiliates Partners одобрена. Откройте кабинет через бота.",
         "rejected": "Ваша заявка The Affiliates Partners отклонена. Для повторной подачи отправьте /retry боту.",
         "pending": "Статус вашей заявки The Affiliates Partners: на рассмотрении.",
     }
-    payload = json.dumps({"chat_id": telegram_id, "text": messages[status]}).encode()
-    request = urllib.request.Request(
-        f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload,
-        headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            response.read()
-    except (urllib.error.URLError, TimeoutError, OSError):
-        print("Partner status notification failed", flush=True)
+    if os.environ.get("TELEGRAM_NOTIFICATIONS_ENABLED") == "0":
+        return
+    conn.execute("""CREATE TABLE IF NOT EXISTS bot_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,
+        message TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+    conn.execute("INSERT INTO bot_outbox(chat_id,message,created_at) VALUES(?,?,?)",
+                 (telegram_id, messages[status], int(time.time())))
+
+
+def notify_partner_status(telegram_id, status):
+    with db() as conn:
+        queue_partner_status(conn, telegram_id, status)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -325,15 +326,14 @@ class Handler(BaseHTTPRequestHandler):
                 if partner_id == ADMIN_ID:
                     return self.respond(400, {"error": "Нельзя менять собственную роль"})
                 with db() as conn:
+                    row = conn.execute("SELECT phone,status FROM partners WHERE telegram_id=?", (partner_id,)).fetchone()
                     if status == "active":
-                        row = conn.execute("SELECT phone FROM partners WHERE telegram_id=?", (partner_id,)).fetchone()
                         if row and not row[0]:
                             return self.respond(400, {"error": "Сначала требуется подтверждение телефона"})
-                    changed = conn.execute("UPDATE partners SET status=? WHERE telegram_id=?",
-                                           (status, partner_id)).rowcount
-                if changed:
-                    notify_partner_status(partner_id, status)
-                return self.respond(200 if changed else 404, {"ok": bool(changed)})
+                    if row and row[1] != status:
+                        conn.execute("UPDATE partners SET status=? WHERE telegram_id=?", (status, partner_id))
+                        queue_partner_status(conn, partner_id, status)
+                return self.respond(200 if row else 404, {"ok": bool(row)})
             if route == "/api/admin/offers/save":
                 offer = body.get("offer")
                 if not isinstance(offer, dict):
