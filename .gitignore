@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+server/*.sqlite3
+server/*.log
+server/__pycache__/
+*.pyc
+deployment/*.zip
