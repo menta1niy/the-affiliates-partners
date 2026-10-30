@@ -86,6 +86,39 @@ class Stage2Workflows(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertEqual(self.post("/api/auth/telegram", uid)[1]["profile"]["status"], "pending")
 
+    def test_partner_isolation_and_closed_financial_fields(self):
+        first, second = 28491, 28492
+        for uid in (first, second):
+            self.post("/api/auth/telegram", uid)
+        with app.db() as conn:
+            conn.execute("UPDATE partners SET phone='+79990000001',status='active' WHERE telegram_id=?", (first,))
+            conn.execute("UPDATE partners SET phone='+79990000002',status='pending' WHERE telegram_id=?", (second,))
+        self.assertEqual(self.post("/api/admin/snapshot", first)[0], 403)
+        self.assertEqual(self.post("/api/offers", second)[0], 403)
+        status, identity = self.post("/api/auth/telegram", first)
+        self.assertEqual(status, 200)
+        self.assertEqual(identity["profile"]["telegram_id"], first)
+        self.assertNotIn(str(second), json.dumps(identity))
+        self.assertFalse(identity["isAdmin"])
+        status, offers = self.post("/api/offers", first)
+        self.assertEqual(status, 200)
+        self.assertEqual(offers, {"offers": []})
+        for private_field in ("agency_rate", "agency_profit", "blogger_accrual"):
+            self.assertNotIn(private_field, json.dumps(identity) + json.dumps(offers))
+
+    def test_rejected_access_and_repeated_approval_are_durable(self):
+        partner = 28491
+        self.post("/api/auth/telegram", partner)
+        with app.db() as conn:
+            conn.execute("UPDATE partners SET phone='+79990000001' WHERE telegram_id=?", (partner,))
+        endpoint = "/api/admin/partners/status"
+        self.assertEqual(self.post(endpoint, app.ADMIN_ID, telegram_id=partner, status="rejected")[0], 200)
+        self.assertEqual(self.post("/api/offers", partner)[0], 403)
+        for _ in range(2):
+            self.assertEqual(self.post(endpoint, app.ADMIN_ID, telegram_id=partner, status="active")[0], 200)
+        self.assertEqual(self.post("/api/auth/telegram", partner)[1]["profile"]["status"], "active")
+        self.assertEqual(self.post("/api/offers", partner)[0], 200)
+
 
 if __name__ == "__main__":
     unittest.main()
