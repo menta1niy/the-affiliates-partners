@@ -55,7 +55,7 @@ class PublisherTests(unittest.TestCase):
             seen.append(payload)
             if len(seen) >= 2:
                 raise urllib.error.HTTPError(request.full_url, 503, "Unavailable", {}, None)
-            return Response(json.dumps({"ok": True, "imported": len(payload["offers"])}).encode())
+            return Response(json.dumps({"ok": True, "state": "pending"}).encode())
 
         with patch.object(crm_publisher.urllib.request, "urlopen", side_effect=service), patch.object(
             crm_publisher.time, "sleep"

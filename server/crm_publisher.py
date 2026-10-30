@@ -5,6 +5,7 @@ cookies, owner sessions, financial fields, or schema changes are involved.
 Dry-run by default. --send is an explicit opt-in.
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -12,7 +13,8 @@ import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
-from uuid import UUID
+from uuid import UUID, uuid4
+from crm_feed import normalize_feed
 
 
 def sanitized_offers(records, workspace_id):
@@ -57,8 +59,15 @@ def publish(endpoint, token, workspace_id, offers):
         raise ValueError("Publisher requires an HTTPS endpoint without embedded credentials")
     if len(token) < 32:
         raise ValueError("Configured CRM feed token is missing or too short")
-    if len(offers) > 300:
-        raise ValueError("Snapshot exceeds current atomic finalization limit (300)")
+    run_id = str(uuid4())
+    def send(payload):
+        req = urllib.request.Request(endpoint, data=json.dumps(payload).encode("utf-8"), method="POST",
+             headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token})
+        result = send_with_retry(req)
+        if not result.get("ok"):
+            raise RuntimeError("CRM snapshot request failed")
+        return result
+    send({"mode":"begin","workspace_id":str(workspace_id),"run_id":run_id,"expected":len(offers)})
     total = 0
     batches = []
     pending = []
@@ -77,26 +86,17 @@ def publish(endpoint, token, workspace_id, offers):
     if pending:
         batches.append(pending)
     for items in batches:
-        batch = {"workspace_id": str(workspace_id), "offers": items}
-        req = urllib.request.Request(
-            endpoint, data=json.dumps(batch).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token},
-        )
-        result = send_with_retry(req)
-        if not result.get("ok") or result.get("imported") != len(batch["offers"]):
-            raise RuntimeError("CRM feed did not acknowledge the entire batch")
-        total += len(batch["offers"])
-    # Only acknowledge a complete source read after every batch succeeded.
-    # This is a separate request so a transient failure never hides stale items.
-    manifest = {"mode": "finalize", "workspace_id": str(workspace_id),
-                "offer_ids": [item["id"] for item in offers]}
-    req = urllib.request.Request(
-        endpoint, data=json.dumps(manifest).encode("utf-8"), method="POST",
-        headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token},
-    )
-    result = send_with_retry(req)
-    if not result.get("ok"):
-        raise RuntimeError("CRM snapshot finalization failed")
+        result = send({"mode":"batch","workspace_id":str(workspace_id),"run_id":run_id,"offers":items})
+        if result.get("received",0) < len(items):
+            raise RuntimeError("CRM feed did not acknowledge the batch")
+        total += len(items)
+    normalized = normalize_feed({"workspace_id":str(workspace_id),"offers":[]}, str(workspace_id))
+    # Apply the exact same canonical type projection used by the receiver.
+    for item in offers:
+        normalized += normalize_feed({"workspace_id":str(workspace_id),"offers":[item]},str(workspace_id))
+    ordered = sorted(normalized, key=lambda item:item[0])
+    digest = hashlib.sha256("\n".join(json.dumps(list(row),ensure_ascii=False) for row in ordered).encode()).hexdigest()
+    send({"mode":"commit","workspace_id":str(workspace_id),"run_id":run_id,"digest":digest})
     return total
 
 

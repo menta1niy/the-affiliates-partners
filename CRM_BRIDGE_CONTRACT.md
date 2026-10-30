@@ -40,6 +40,19 @@ publisher and verified production credentials have **not** yet been installed.
 
 ### Standalone read-only publisher (implemented, opt-in)
 
+**Staged protocol (current):** the publisher now uses a new UUID `run_id`
+per run, `mode=begin` with the expected offer count, repeated `mode=batch`
+requests (up to 100 offers per request), and `mode=commit` with a SHA-256
+digest over canonical ordered public DTOs. The server stores batches in a
+separate SQLite staging table. Only a complete verified commit updates the
+offer catalog and pauses missing source offers in one transaction. An
+incomplete/expired run (TTL one hour), interrupted request or invalid digest
+does not change the published catalog. Replays are idempotent; previously
+completed newer runs block stale finalization of older ones. More than 300
+offers are supported. The legacy unversioned receiver is **disabled by
+default**; `CRM_ALLOW_LEGACY_FEED=1` is reserved for explicitly controlled
+compatibility tests and must not be enabled in production.
+
 `server/crm_publisher.py` reads the actual CRM PostgreSQL `offers` table
 through SQLAlchemy with `SET TRANSACTION READ ONLY` and a required workspace
 filter. It requires a **dedicated least-privilege PostgreSQL account** restricted

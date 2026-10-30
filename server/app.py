@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
 from crm_feed import normalize_feed, apply_feed, finalize_snapshot
+from crm_snapshot import begin as snapshot_begin, batch as snapshot_batch, finalize as snapshot_finalize
 
 load_local_env()
 
@@ -202,6 +203,28 @@ class Handler(BaseHTTPRequestHandler):
             presented = self.headers.get("X-CRM-Feed-Token", "")
             if not hmac.compare_digest(token, presented):
                 return self.respond(403, {"error": "CRM feed not authorized"})
+            if body.get("mode") in {"begin", "batch", "commit"}:
+                if body.get("workspace_id") != workspace or not isinstance(body.get("run_id"), str):
+                    return self.respond(400, {"error": "Invalid snapshot identity"})
+                try:
+                    mode = body["mode"]
+                    with db() as conn:
+                        conn.execute("BEGIN IMMEDIATE")
+                        if mode == "begin":
+                            state = snapshot_begin(conn, workspace, body["run_id"], body.get("expected"))
+                            result = {"state": state}
+                        elif mode == "batch":
+                            prepared = normalize_feed({"workspace_id": workspace, "offers": body.get("offers")}, workspace)
+                            result = {"received": snapshot_batch(conn, workspace, body["run_id"], prepared)}
+                        else:
+                            result = {"paused": snapshot_finalize(conn, workspace, body["run_id"], body.get("digest"))}
+                    return self.respond(200, {"ok": True, **result})
+                except (ValueError, TypeError) as error:
+                    return self.respond(409, {"error": str(error)})
+            # Older unversioned calls cannot guarantee a complete snapshot.
+            # Keep an explicit local-test compatibility switch, disabled in production.
+            if os.environ.get("CRM_ALLOW_LEGACY_FEED") != "1":
+                return self.respond(409, {"error": "Staged CRM sync protocol required"})
             if body.get("mode") == "finalize":
                 if set(body) != {"mode", "workspace_id", "offer_ids"} or body["workspace_id"] != workspace:
                     return self.respond(400, {"error": "Invalid CRM manifest"})

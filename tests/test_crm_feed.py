@@ -19,6 +19,9 @@ class CRMFeedTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.legacy_patch = patch.dict(os.environ, {"CRM_ALLOW_LEGACY_FEED": "1"})
+        self.legacy_patch.start()
+        self.addCleanup(self.legacy_patch.stop)
         self.db_patch = patch.object(app, "DB", Path(self.tmp.name) / "test.sqlite3")
         self.db_patch.start()
         self.addCleanup(self.db_patch.stop)
@@ -117,6 +120,40 @@ class CRMFeedTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 urllib.request.urlopen(req, timeout=4)
         self.assertEqual(raised.exception.code, 409)
+
+    def test_staged_http_snapshot_over_previous_limit(self):
+        import hashlib
+        from uuid import uuid4
+        from crm_feed import normalize_feed
+        workspace = "5b101265-838f-4ed0-a3ee-f57913dfcae7"
+        items = [{"id": str(uuid4()), "name": f"Offer {i}", "offer_type": "debit",
+                  "target_action": "Card", "is_active": True} for i in range(350)]
+        run_id = str(uuid4())
+        with patch.dict(os.environ, {"CRM_FEED_TOKEN": "x"*40, "CRM_WORKSPACE_ID": workspace}):
+            self.assertEqual(self.submit({"mode":"begin","workspace_id":workspace,
+                "run_id":run_id,"expected":350}, "x"*40)[0], 200)
+            for start in range(0,350,50):
+                status,_ = self.submit({"mode":"batch","workspace_id":workspace,
+                    "run_id":run_id,"offers":items[start:start+50]}, "x"*40)
+                self.assertEqual(status,200)
+            prepared = normalize_feed({"workspace_id":workspace,"offers":items[:100]},workspace)
+            for start in range(100,350,100):
+                prepared += normalize_feed({"workspace_id":workspace,"offers":items[start:start+100]},workspace)
+            digest = hashlib.sha256("\n".join(
+                json.dumps(list(row),ensure_ascii=False) for row in sorted(prepared)).encode()).hexdigest()
+            status, result = self.submit({"mode":"commit","workspace_id":workspace,
+                "run_id":run_id,"digest":digest}, "x"*40)
+            self.assertEqual(status,200)
+            self.assertTrue(result["ok"])
+        with app.db() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM offers").fetchone()[0],350)
+
+    def test_legacy_protocol_disabled_by_default(self):
+        workspace = "5b101265-838f-4ed0-a3ee-f57913dfcae7"
+        with patch.dict(os.environ, {"CRM_ALLOW_LEGACY_FEED": "0",
+                                     "CRM_FEED_TOKEN": "x"*40, "CRM_WORKSPACE_ID": workspace}):
+            status, _ = self.submit({"workspace_id":workspace,"offers":[]}, "x"*40)
+            self.assertEqual(status,409)
 
 
 if __name__ == "__main__":
