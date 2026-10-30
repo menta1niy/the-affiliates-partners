@@ -11,3 +11,36 @@
  .top{padding-top:max(env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px));height:calc(68px + max(env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px)))}
  .bottom-nav{bottom:calc(12px + max(env(safe-area-inset-bottom,0px),var(--tg-safe-area-inset-bottom,0px)));width:min(calc(100% - 32px),400px)}
 }
+
+/* Administrative controls are mounted only after server-confirmed isAdmin. */
+.bottom-nav.admin-nav{width:min(calc(100% - 32px),420px);grid-template-columns:repeat(3,minmax(0,1fr))}
+.bottom-nav.admin-nav button{font-size:10px;gap:5px}
+.admin-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.admin-heading h1{font-size:clamp(17px,5vw,23px);margin-bottom:15px}
+.admin-heading button,.admin-card-top button{background:#293527;color:#c8f03c;padding:9px;border-radius:10px}
+.admin-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 18px}
+.admin-tabs button{padding:13px 6px;background:#283226;color:#cbd5c4;border-radius:12px;font-size:10px;font-weight:800}
+.admin-tabs button.active{background:#c8f03c;color:#151913}
+.admin-card{background:#1b241c;border:1px solid #3e523c;border-radius:18px;padding:16px;margin-bottom:13px;overflow-wrap:anywhere}
+.admin-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.admin-card-top strong{font-size:14px}
+.admin-card-top span{font-size:10px;color:#c8f03c}
+.admin-card small{display:block;margin-top:10px;font-size:11px;color:#a9b5a5}
+.admin-card p{color:#d3ddd0;font-size:12px}
+.admin-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.admin-actions button{flex:1;min-width:110px;padding:12px 8px;border-radius:11px;background:#364232;color:#f3f1ea;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:5px}
+.admin-actions button.approve,.admin-new,.admin-save{background:#c8f03c;color:#101610}
+.admin-actions button.reject{background:#4c2b2a;color:#ffc7bd}
+.admin-new{width:100%;padding:15px;border-radius:13px;font-weight:800;font-size:11px;margin-bottom:15px}
+.admin-status.rejected{color:#f09288}.admin-status.paused{color:#f7cb7d}
+.admin-status-select{margin-top:16px}
+.admin-field{display:grid;gap:7px;font-size:10px;font-weight:800;color:#abbba6;letter-spacing:.03em;margin:11px 0}
+.admin-field input,.admin-field select,.admin-field textarea{width:100%;min-width:0;border:1px solid #44553f;background:#121a14;color:#f3f1ea;border-radius:11px;padding:12px;font-size:13px;outline:none}
+.admin-field select{color-scheme:dark}
+.admin-error{padding:14px;border:1px solid #a65d58;border-radius:12px;color:#ffb5ad;font-size:12px;margin-bottom:15px}
+.admin-error button{margin-left:10px;background:transparent;color:#f3f1ea;text-decoration:underline}
+.admin-modal{position:fixed;z-index:40;inset:0;background:#070b08e8;display:flex;justify-content:center;align-items:center;padding:12px}
+.admin-editor{width:min(100%,480px);max-height:calc(100dvh - 30px);overflow:auto;background:#202a20;border:1px solid #4d6343;border-radius:20px;padding:18px 20px 24px}
+.admin-editor h2{font-size:15px;margin:7px 0 12px}
+.admin-save{width:100%;padding:16px;border-radius:12px;font-weight:800;margin-top:15px}
+.admin-page button:disabled{opacity:.55;cursor:not-allowed}
