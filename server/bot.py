@@ -75,7 +75,11 @@ def handle(message):
     sender = message.get("from", {})
     uid = sender.get("id")
     cid = message["chat"]["id"]
-    if not isinstance(uid, int) or message["chat"].get("type") != "private":
+    if type(uid) is not int or uid <= 0 or message["chat"].get("type") != "private" or cid != uid:
+        return
+    if uid == ADMIN_ID:
+        if (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0] == "/start" or message.get("contact") is not None:
+            send(cid, "Администратор The Affiliates Partners. Откройте кабинет:", app_button())
         return
     with db() as con:
         profile = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
@@ -87,20 +91,23 @@ def handle(message):
         phone = normalized_phone(contact.get("phone_number"))
         if not phone:
             return send(cid, "Контакт не содержит номера телефона. Попробуйте ещё раз.")
+        # Serialize check and update: two simultaneous contacts cannot claim the same number.
         with db() as con:
+            con.execute("BEGIN IMMEDIATE")
             existing = con.execute(
                 "SELECT telegram_id FROM partners WHERE phone=? AND telegram_id<>?",
                 (phone, uid)).fetchone()
+            if not existing:
+                current = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
+                first_registration = not current or (not current[1] and current[0] == "pending")
+                # Contact updates identity details but never overwrites an admin decision.
+                con.execute("""INSERT INTO partners(telegram_id,username,name,phone,status,created_at)
+                    VALUES(?,?,?,?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET
+                    username=excluded.username,name=excluded.name,phone=excluded.phone""",
+                    (uid, sender.get("username") or "", sender.get("first_name") or "Партнёр", phone,
+                     "pending", int(time.time())))
         if existing:
             return send(cid, "Этот номер уже привязан к другому Telegram-аккаунту. Обратитесь к администратору.")
-        # A contact can update user details, but cannot change an approval decision.
-        first_registration = not profile or (not profile[1] and profile[0] == "pending")
-        with db() as con:
-            con.execute("""INSERT INTO partners(telegram_id,username,name,phone,status,created_at)
-                VALUES(?,?,?,?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET
-                username=excluded.username,name=excluded.name,phone=excluded.phone""",
-                (uid, sender.get("username") or "", sender.get("first_name") or "Партнёр", phone,
-                 "pending", int(time.time())))
         if first_registration:
             try:
                 send(ADMIN_ID, f"Новая заявка партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели.")

@@ -44,3 +44,6 @@
 .admin-editor h2{font-size:15px;margin:7px 0 12px}
 .admin-save{width:100%;padding:16px;border-radius:12px;font-weight:800;margin-top:15px}
 .admin-page button:disabled{opacity:.55;cursor:not-allowed}
+.auth-state{margin:32px 0;padding:25px 21px;border-radius:20px;border:1px solid #42553b;background:#1b251b;color:#f3f1ea}
+.auth-state h2{font-size:clamp(15px,4.5vw,20px);overflow-wrap:anywhere;margin:0 0 17px}
+.auth-state p{font-size:13px;line-height:1.7;color:#becdb8;margin:0 0 20px}

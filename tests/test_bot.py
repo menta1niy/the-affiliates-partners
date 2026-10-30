@@ -96,6 +96,20 @@ class BotRegistrationTests(unittest.TestCase):
             self.assertIsNone(con.execute("SELECT 1 FROM partners WHERE telegram_id=54321").fetchone())
         self.assertIn("уже привязан", self.sent[-1][1])
 
+    def test_admin_start_shows_web_app_without_contact(self):
+        admin_message = {"from": {"id": bot.ADMIN_ID},
+                         "chat": {"id": bot.ADMIN_ID, "type": "private"}, "text": "/start"}
+        with patch.object(bot, "APP_URL", "https://example.org/partners"):
+            bot.handle(admin_message)
+        self.assertIn("web_app", repr(self.sent[-1]))
+        self.assertIsNone(app.partner_for(bot.ADMIN_ID))
+        bot.handle({**admin_message, "contact": {"user_id": bot.ADMIN_ID, "phone_number": "+79991111111"}})
+        self.assertIsNone(app.partner_for(bot.ADMIN_ID))
+
+    def test_mismatched_private_chat_is_ignored(self):
+        bot.handle({**self.message(text="/start"), "chat": {"id": 999, "type": "private"}})
+        self.assertEqual(self.sent, [])
+
 
 if __name__ == "__main__":
     unittest.main()

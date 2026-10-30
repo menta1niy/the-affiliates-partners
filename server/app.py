@@ -6,6 +6,8 @@ import json
 import os
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
@@ -51,12 +53,17 @@ def db():
 def verify_init_data(data: str):
     if not TOKEN or not data or len(data) > 8192:
         return None
-    params = dict(parse_qsl(data, keep_blank_values=True))
+    pairs = parse_qsl(data, keep_blank_values=True, strict_parsing=True)
+    # Duplicate keys make the signed payload ambiguous between parsers.
+    if len(pairs) != len({key for key, _ in pairs}):
+        return None
+    params = dict(pairs)
     check = params.pop("hash", "")
     if not check or "auth_date" not in params or "user" not in params:
         return None
     try:
-        if abs(time.time() - int(params["auth_date"])) > 3600:
+        auth_date = int(params["auth_date"])
+        if auth_date > time.time() + 60 or time.time() - auth_date > 3600:
             return None
         secret = hmac.new(b"WebAppData", TOKEN.encode(), hashlib.sha256).digest()
         body = "\n".join(f"{key}={value}" for key, value in sorted(params.items()))
@@ -64,7 +71,7 @@ def verify_init_data(data: str):
         if not hmac.compare_digest(expected, check):
             return None
         user = json.loads(params["user"])
-        if not isinstance(user.get("id"), int):
+        if not isinstance(user, dict) or type(user.get("id")) is not int or user["id"] <= 0:
             return None
         return user
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
@@ -92,6 +99,26 @@ def admin_snapshot():
         offers = [dict(r) for r in conn.execute(
             "SELECT id,name,type,rate,goal,hold,description,status,updated_at FROM offers ORDER BY updated_at DESC")]
     return {"partners": partners, "offers": offers}
+
+
+def notify_partner_status(telegram_id, status):
+    """Best-effort Telegram notification; database changes never depend on delivery."""
+    if not TOKEN:
+        return
+    messages = {
+        "active": "Ваша заявка The Affiliates Partners одобрена. Откройте кабинет через бота.",
+        "rejected": "Ваша заявка The Affiliates Partners отклонена. Для повторной подачи отправьте /retry боту.",
+        "pending": "Статус вашей заявки The Affiliates Partners: на рассмотрении.",
+    }
+    payload = json.dumps({"chat_id": telegram_id, "text": messages[status]}).encode()
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload,
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            response.read()
+    except (urllib.error.URLError, TimeoutError, OSError):
+        print("Partner status notification failed", flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -134,12 +161,19 @@ class Handler(BaseHTTPRequestHandler):
         uid = user["id"]
         route = urlparse(self.path).path
         if route == "/api/auth/telegram":
-            with db() as conn:
-                conn.execute("""INSERT INTO partners(telegram_id, username, name, created_at)
-                    VALUES(?,?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET
-                    username=excluded.username, name=excluded.name""",
-                    (uid, str(user.get("username") or ""), str(user.get("first_name") or "Партнёр"), int(time.time())))
-            return self.respond(200, {"profile": partner_for(uid), "isAdmin": uid == ADMIN_ID})
+            if uid != ADMIN_ID:
+                with db() as conn:
+                    conn.execute("""INSERT INTO partners(telegram_id, username, name, created_at)
+                        VALUES(?,?,?,?) ON CONFLICT(telegram_id) DO UPDATE SET
+                        username=excluded.username, name=excluded.name""",
+                        (uid, str(user.get("username") or ""), str(user.get("first_name") or "Партнёр"), int(time.time())))
+            profile = partner_for(uid)
+            if uid == ADMIN_ID and profile is None:
+                # Owner identity comes from verified Telegram initData, not a synthetic DB user.
+                profile = {"telegram_id": uid, "username": str(user.get("username") or ""),
+                           "name": str(user.get("first_name") or "Администратор"),
+                           "phone": "", "status": "active"}
+            return self.respond(200, {"profile": profile, "isAdmin": uid == ADMIN_ID})
         if route.startswith("/api/admin/"):
             if uid != ADMIN_ID:
                 return self.respond(403, {"error": "Недостаточно прав"})
@@ -155,6 +189,8 @@ class Handler(BaseHTTPRequestHandler):
                 with db() as conn:
                     changed = conn.execute("UPDATE partners SET status=? WHERE telegram_id=?",
                                            (status, partner_id)).rowcount
+                if changed:
+                    notify_partner_status(partner_id, status)
                 return self.respond(200 if changed else 404, {"ok": bool(changed)})
             if route == "/api/admin/offers/save":
                 offer = body.get("offer")
