@@ -77,6 +77,25 @@ class BotRegistrationTests(unittest.TestCase):
             self.assertIsNone(con.execute("SELECT 1 FROM partners WHERE telegram_id=12345").fetchone())
         self.assertIn("собственный контакт", self.sent[-1][1])
 
+    def test_contact_binds_canonical_phone_and_username(self):
+        bot.handle(self.message(contact={"user_id": 12345, "phone_number": "8 (999) 000-00-00"}))
+        with app.db() as con:
+            profile = con.execute(
+                "SELECT telegram_id,username,phone,status FROM partners WHERE telegram_id=12345"
+            ).fetchone()
+        self.assertEqual(profile, (12345, "partner", "+79990000000", "pending"))
+        self.assertIn("привязан", self.sent[-2][1])
+
+    def test_phone_cannot_be_shared_between_accounts(self):
+        self.contact()
+        other = {"from": {"id": 54321, "username": "other", "first_name": "Другой"},
+                 "chat": {"id": 54321, "type": "private"},
+                 "contact": {"user_id": 54321, "phone_number": "79990000000"}}
+        bot.handle(other)
+        with app.db() as con:
+            self.assertIsNone(con.execute("SELECT 1 FROM partners WHERE telegram_id=54321").fetchone())
+        self.assertIn("уже привязан", self.sent[-1][1])
+
 
 if __name__ == "__main__":
     unittest.main()

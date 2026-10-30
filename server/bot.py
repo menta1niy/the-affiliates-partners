@@ -1,6 +1,7 @@
 """Telegram bot polling, dependency-free. Use only one bot instance."""
 import json
 import os
+import re
 import sqlite3
 import time
 import urllib.error
@@ -45,6 +46,18 @@ CONTACT_BUTTON = {"keyboard": [[{"text": "Поделиться контакто�
                   "resize_keyboard": True, "one_time_keyboard": True}
 
 
+def normalized_phone(raw):
+    """Accept Telegram contact numbers; store one canonical E.164-style value."""
+    if not isinstance(raw, str) or not re.fullmatch(r"[+\d\s()\-]{10,24}", raw):
+        return None
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 11 and digits[0] == "8":
+        digits = "7" + digits[1:]
+    if not 10 <= len(digits) <= 15:
+        return None
+    return "+" + digits
+
+
 def show_status(cid, status, has_phone):
     if status == "active":
         send(cid, "Ваш аккаунт партнёра активен. Откройте кабинет:", app_button())
@@ -71,9 +84,15 @@ def handle(message):
         # A forwarded contact must never verify a different Telegram user.
         if not isinstance(contact, dict) or type(contact.get("user_id")) is not int or contact["user_id"] != uid:
             return send(cid, "Подтвердите собственный контакт кнопкой Telegram.")
-        phone = contact.get("phone_number", "")
-        if not isinstance(phone, str) or not phone.strip():
+        phone = normalized_phone(contact.get("phone_number"))
+        if not phone:
             return send(cid, "Контакт не содержит номера телефона. Попробуйте ещё раз.")
+        with db() as con:
+            existing = con.execute(
+                "SELECT telegram_id FROM partners WHERE phone=? AND telegram_id<>?",
+                (phone, uid)).fetchone()
+        if existing:
+            return send(cid, "Этот номер уже привязан к другому Telegram-аккаунту. Обратитесь к администратору.")
         # A contact can update user details, but cannot change an approval decision.
         first_registration = not profile or (not profile[1] and profile[0] == "pending")
         with db() as con:
@@ -89,6 +108,8 @@ def handle(message):
                 print("Admin registration notification failed", flush=True)
         with db() as con:
             profile = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
+        send(cid, f"Номер {phone} привязан к вашему Telegram-аккаунту @{sender.get('username') or 'без username'}.",
+             {"remove_keyboard": True})
         show_status(cid, profile[0], bool(profile[1]))
         return
     command = (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0]
