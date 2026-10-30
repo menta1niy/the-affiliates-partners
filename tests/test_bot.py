@@ -70,6 +70,32 @@ class BotRegistrationTests(unittest.TestCase):
         self.assertIn("/retry", self.sent[-1][1])
         bot.handle(self.message(text="/retry"))
         self.assertEqual(self.status(), "pending")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
+        self.assertIn("Повторная заявка", next(text for cid, text, *_ in reversed(self.sent) if cid == bot.ADMIN_ID))
+        bot.handle(self.message(text="/retry"))
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
+
+    def test_retry_without_phone_notifies_only_after_contact(self):
+        with app.db() as con:
+            con.execute("INSERT INTO partners(telegram_id,username,name,created_at,status) VALUES(?,?,?,?,?)",
+                        (12345, "partner", "Партнёр", 123, "rejected"))
+        bot.handle(self.message(text="/retry"))
+        self.assertEqual(self.status(), "pending")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 0)
+        self.contact()
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+        self.contact()
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+
+    def test_admin_notification_failure_does_not_undo_registration(self):
+        original_send = bot.send
+        def failing_admin_send(cid, text, markup=None):
+            if cid == bot.ADMIN_ID:
+                raise TimeoutError("offline")
+            return original_send(cid, text, markup)
+        with patch.object(bot, "send", side_effect=failing_admin_send):
+            self.contact()
+        self.assertEqual(self.status(), "pending")
 
     def test_forwarded_contact_is_rejected(self):
         bot.handle(self.message(contact={"user_id": 9999, "phone_number": "+79990000000"}))

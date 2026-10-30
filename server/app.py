@@ -51,17 +51,17 @@ def db():
 
 
 def verify_init_data(data: str):
-    if not TOKEN or not data or len(data) > 8192:
-        return None
-    pairs = parse_qsl(data, keep_blank_values=True, strict_parsing=True)
-    # Duplicate keys make the signed payload ambiguous between parsers.
-    if len(pairs) != len({key for key, _ in pairs}):
-        return None
-    params = dict(pairs)
-    check = params.pop("hash", "")
-    if not check or "auth_date" not in params or "user" not in params:
+    if not TOKEN or not isinstance(data, str) or not data or len(data) > 8192:
         return None
     try:
+        pairs = parse_qsl(data, keep_blank_values=True, strict_parsing=True, max_num_fields=64)
+        # Duplicate keys make the signed payload ambiguous between parsers.
+        if len(pairs) != len({key for key, _ in pairs}):
+            return None
+        params = dict(pairs)
+        check = params.pop("hash", "")
+        if len(check) != 64 or "auth_date" not in params or "user" not in params:
+            return None
         auth_date = int(params["auth_date"])
         if auth_date > time.time() + 60 or time.time() - auth_date > 3600:
             return None
@@ -71,7 +71,7 @@ def verify_init_data(data: str):
         if not hmac.compare_digest(expected, check):
             return None
         user = json.loads(params["user"])
-        if not isinstance(user, dict) or type(user.get("id")) is not int or user["id"] <= 0:
+        if not isinstance(user, dict) or type(user.get("id")) is not int or not (0 < user["id"] <= 9223372036854775807):
             return None
         return user
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
@@ -138,8 +138,6 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         if route == "/api/health":
             return self.respond(200, {"ok": True})
-        if route == "/api/offers":
-            return self.respond(200, {"offers": approved_offers()})
         return self.respond(404, {"error": "Не найдено"})
 
     def do_POST(self):
@@ -151,7 +149,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(400, {"error": "Неверный размер запроса"})
         try:
             body = json.loads(self.rfile.read(size))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, UnicodeDecodeError):
             return self.respond(400, {"error": "Неверный JSON"})
         if not isinstance(body, dict):
             return self.respond(400, {"error": "Неверный запрос"})
@@ -160,6 +158,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(401, {"error": "Данные Telegram не прошли проверку"})
         uid = user["id"]
         route = urlparse(self.path).path
+        if route == "/api/offers":
+            profile = partner_for(uid)
+            if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
+                return self.respond(403, {"error": "Офферы доступны только одобренным партнёрам"})
+            return self.respond(200, {"offers": approved_offers()})
         if route == "/api/auth/telegram":
             if uid != ADMIN_ID:
                 with db() as conn:

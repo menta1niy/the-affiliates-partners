@@ -45,6 +45,10 @@ class SignedAuthTests(unittest.TestCase):
         self.assertIsNone(app.verify_init_data(signed_data(True)))
         self.assertIsNone(app.verify_init_data(signed_data(0)))
         self.assertIsNone(app.verify_init_data(signed_data(app.ADMIN_ID, auth_date=str(int(time.time()) + 120))))
+        self.assertIsNone(app.verify_init_data("malformed"))
+        self.assertIsNone(app.verify_init_data("hash=%ZZ&user=x&auth_date=1&broken"))
+        self.assertIsNone(app.verify_init_data({"user": {"id": app.ADMIN_ID}}))
+        self.assertIsNone(app.verify_init_data(signed_data(2**63)))
 
     def test_admin_endpoint_requires_signed_admin_identity(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
@@ -65,6 +69,7 @@ class SignedAuthTests(unittest.TestCase):
                 return error.code, json.load(error)
 
         self.assertEqual(post("")[0], 401)
+        self.assertEqual(post({"user": {"id": app.ADMIN_ID}})[0], 401)
         self.assertEqual(post(signed_data(12345))[0], 403)
         status, payload = post(signed_data(app.ADMIN_ID))
         self.assertEqual(status, 200)
@@ -110,6 +115,30 @@ class SignedAuthTests(unittest.TestCase):
     def test_notification_failure_never_raises(self):
         with patch("app.urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
             app.notify_partner_status(12345, "active")
+
+    def test_offers_require_signed_approved_partner(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_port}/api/offers"
+        def request(data):
+            req = urllib.request.Request(url, json.dumps({"initData": data}).encode(),
+                                         {"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=3) as response:
+                    return response.status
+            except urllib.error.HTTPError as error:
+                return error.code
+        self.assertEqual(request(""), 401)
+        self.assertEqual(request(signed_data(314159)), 403)
+        with app.db() as conn:
+            conn.execute("INSERT INTO partners VALUES(?,?,?,?,?,?)",
+                         (314159, "partner", "Partner", "+79990000000", "active", 1))
+        self.assertEqual(request(signed_data(314159)), 200)
+        self.assertEqual(request(signed_data(app.ADMIN_ID)), 200)
 
 
 if __name__ == "__main__":

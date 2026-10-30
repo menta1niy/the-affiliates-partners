@@ -11,12 +11,11 @@ import urllib.request
 from config import load_local_env
 
 load_local_env()
-from app import db
+from app import ADMIN_ID, db
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 APP_URL = os.environ.get("MINI_APP_URL", "")
 API = f"https://api.telegram.org/bot{TOKEN}/"
-ADMIN_ID = 758398804
 
 
 def api(method, payload):
@@ -56,6 +55,15 @@ def normalized_phone(raw):
     if not 10 <= len(digits) <= 15:
         return None
     return "+" + digits
+
+
+def notify_admin(uid, repeated=False):
+    """Delivery is best-effort; registration is already committed to the shared DB."""
+    kind = "Повторная заявка" if repeated else "Новая заявка"
+    try:
+        send(ADMIN_ID, f"{kind} партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели.")
+    except (urllib.error.URLError, RuntimeError, TimeoutError, OSError):
+        print("Admin registration notification failed", flush=True)
 
 
 def show_status(cid, status, has_phone):
@@ -109,10 +117,7 @@ def handle(message):
         if existing:
             return send(cid, "Этот номер уже привязан к другому Telegram-аккаунту. Обратитесь к администратору.")
         if first_registration:
-            try:
-                send(ADMIN_ID, f"Новая заявка партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели.")
-            except (urllib.error.URLError, RuntimeError, TimeoutError):
-                print("Admin registration notification failed", flush=True)
+            notify_admin(uid)
         with db() as con:
             profile = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
         send(cid, f"Номер {phone} привязан к вашему Telegram-аккаунту @{sender.get('username') or 'без username'}.",
@@ -122,8 +127,10 @@ def handle(message):
     command = (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0]
     if command == "/retry" and profile and profile[0] == "rejected":
         with db() as con:
-            con.execute("UPDATE partners SET status='pending' WHERE telegram_id=? AND status='rejected'", (uid,))
+            changed = con.execute("UPDATE partners SET status='pending' WHERE telegram_id=? AND status='rejected'", (uid,)).rowcount
         if profile[1]:
+            if changed:
+                notify_admin(uid, repeated=True)
             send(cid, "Повторная заявка отправлена на рассмотрение.", {"remove_keyboard": True})
         else:
             send(cid, "Для повторной заявки подтвердите собственный контакт.", CONTACT_BUTTON)
