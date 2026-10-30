@@ -3,5 +3,5 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base:'/partners/',
   plugins:[react()],
-  server:{port:5178,proxy:{'/partners/api':{target:'http://127.0.0.1:8788',rewrite:p=>p.replace(/^\/partners/,'')}}}
+  server:{port:5178,proxy:{'/partners/api':{target:process.env.PARTNERS_API_TARGET||'http://127.0.0.1:8788',rewrite:p=>p.replace(/^\/partners/,'')}}}
 });

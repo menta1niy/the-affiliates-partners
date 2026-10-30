@@ -14,11 +14,12 @@ from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
 from crm_feed import normalize_feed, apply_feed, finalize_snapshot
 from crm_snapshot import begin as snapshot_begin, batch as snapshot_batch, finalize as snapshot_finalize
+from crm_identity import schema as identity_schema, owner_assign, attest
 
 load_local_env()
 
 ROOT = Path(__file__).resolve().parent
-DB = ROOT / "partners.sqlite3"
+DB = Path(os.environ.get("PARTNERS_DB_PATH") or ROOT / "partners.sqlite3").resolve()
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 ALLOWED = os.environ.get("ALLOWED_ORIGIN", "")
 ADMIN_ID = 758398804  # Verify signed Telegram user ID, never the mutable username.
@@ -54,6 +55,7 @@ def db():
         conn.execute("""CREATE TABLE IF NOT EXISTS crm_offer_source (
             offer_id TEXT PRIMARY KEY, source_active INTEGER NOT NULL,
             last_seen INTEGER NOT NULL)""")
+        identity_schema(conn)
         # Older installations may have tables without fields added later.
         # SQLite supports additive NOT NULL columns only with a constant default.
         missing_columns = {
@@ -129,22 +131,32 @@ def approved_offers():
     with db() as conn:
         conn.row_factory = sqlite3.Row
         return [dict(row) for row in conn.execute(
-            "SELECT id,name,type,rate,goal,hold,description,status FROM offers WHERE status='approved' ORDER BY updated_at DESC")]
+            """SELECT o.id,o.name,o.type,o.rate,o.goal,o.hold,o.description,o.status
+            FROM offers o LEFT JOIN crm_offer_source s ON s.offer_id=o.id
+            WHERE o.status='approved'
+              AND (o.id NOT LIKE 'crm-%' OR s.source_active=1)
+            ORDER BY o.updated_at DESC""")]
 
 
 def admin_snapshot():
     with db() as conn:
         conn.row_factory = sqlite3.Row
         partners = [dict(r) for r in conn.execute(
-            "SELECT telegram_id,username,name,phone,status,created_at FROM partners ORDER BY created_at DESC")]
+            """SELECT p.telegram_id,p.username,p.name,p.phone,p.status,p.created_at,
+               m.blogger_id AS crm_blogger_id,m.verified AS crm_verified
+               FROM partners p LEFT JOIN crm_partner_links m ON m.telegram_id=p.telegram_id
+               ORDER BY p.created_at DESC""")]
         offers = [dict(r) for r in conn.execute(
-            "SELECT id,name,type,rate,goal,hold,description,status,updated_at FROM offers ORDER BY updated_at DESC")]
+            """SELECT o.id,o.name,o.type,o.rate,o.goal,o.hold,o.description,
+               o.status,o.updated_at,s.source_active
+               FROM offers o LEFT JOIN crm_offer_source s ON s.offer_id=o.id
+               ORDER BY o.updated_at DESC""")]
     return {"partners": partners, "offers": offers}
 
 
 def notify_partner_status(telegram_id, status):
     """Best-effort Telegram notification; database changes never depend on delivery."""
-    if not TOKEN:
+    if not TOKEN or os.environ.get("TELEGRAM_NOTIFICATIONS_ENABLED") == "0":
         return
     messages = {
         "active": "Ваша заявка The Affiliates Partners одобрена. Откройте кабинет через бота.",
@@ -195,7 +207,8 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self.respond(400, {"error": "Неверный запрос"})
         route = urlparse(self.path).path
-        if route == "/api/internal/crm/offers":
+        if route in ("/api/internal/crm/offers", "/api/internal/crm/identity",
+                     "/api/internal/crm/identity/requests"):
             token = os.environ.get("CRM_FEED_TOKEN", "")
             workspace = os.environ.get("CRM_WORKSPACE_ID", "")
             if len(token) < 32 or not workspace:
@@ -203,6 +216,23 @@ class Handler(BaseHTTPRequestHandler):
             presented = self.headers.get("X-CRM-Feed-Token", "")
             if not hmac.compare_digest(token, presented):
                 return self.respond(403, {"error": "CRM feed not authorized"})
+            if route == "/api/internal/crm/identity/requests":
+                if body != {"workspace_id": workspace}:
+                    return self.respond(400, {"error": "Invalid identity lookup"})
+                with db() as conn:
+                    ids = [row[0] for row in conn.execute(
+                        "SELECT blogger_id FROM crm_partner_links WHERE workspace_id=? ORDER BY blogger_id",
+                        (workspace,))]
+                return self.respond(200, {"blogger_ids": ids})
+            if route == "/api/internal/crm/identity":
+                if body.get("workspace_id") != workspace or set(body) != {"workspace_id", "blogger_ids"}:
+                    return self.respond(400, {"error": "Invalid CRM identity attestation"})
+                try:
+                    with db() as conn:
+                        verified = attest(conn, workspace, body["blogger_ids"], int(time.time()))
+                except ValueError as error:
+                    return self.respond(400, {"error": str(error)})
+                return self.respond(200, {"ok": True, "verified": verified})
             if body.get("mode") in {"begin", "batch", "commit"}:
                 if body.get("workspace_id") != workspace or not isinstance(body.get("run_id"), str):
                     return self.respond(400, {"error": "Invalid snapshot identity"})
@@ -251,7 +281,7 @@ class Handler(BaseHTTPRequestHandler):
             if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
                 return self.respond(403, {"error": "Офферы доступны только одобренным партнёрам"})
             return self.respond(200, {"offers": approved_offers()})
-        if route == "/api/auth/telegram":
+        if route in ("/api/auth/telegram", "/api/me"):
             if uid != ADMIN_ID:
                 with db() as conn:
                     conn.execute("""INSERT INTO partners(telegram_id, username, name, created_at)
@@ -259,17 +289,34 @@ class Handler(BaseHTTPRequestHandler):
                         username=excluded.username, name=excluded.name""",
                         (uid, str(user.get("username") or ""), str(user.get("first_name") or "Партнёр"), int(time.time())))
             profile = partner_for(uid)
-            if uid == ADMIN_ID and profile is None:
-                # Owner identity comes from verified Telegram initData, not a synthetic DB user.
+            if uid == ADMIN_ID:
+                # The verified Telegram identity is authoritative, even if a
+                # historical row exists with a stale pending/rejected status.
                 profile = {"telegram_id": uid, "username": str(user.get("username") or ""),
                            "name": str(user.get("first_name") or "Администратор"),
-                           "phone": "", "status": "active"}
+                           "phone": profile["phone"] if profile else "", "status": "active"}
+            elif profile:
+                with db() as conn:
+                    link = conn.execute("SELECT verified FROM crm_partner_links WHERE telegram_id=?", (uid,)).fetchone()
+                profile["crmLinked"] = bool(link and link[0]) and profile["status"] == "active"
             return self.respond(200, {"profile": profile, "isAdmin": uid == ADMIN_ID})
         if route.startswith("/api/admin/"):
             if uid != ADMIN_ID:
                 return self.respond(403, {"error": "Недостаточно прав"})
             if route == "/api/admin/snapshot":
                 return self.respond(200, admin_snapshot())
+            if route == "/api/admin/partners/crm-link":
+                partner_id = body.get("telegram_id")
+                blogger_id = body.get("blogger_id")
+                workspace = os.environ.get("CRM_WORKSPACE_ID", "")
+                if type(partner_id) is not int or partner_id == ADMIN_ID or not workspace:
+                    return self.respond(400, {"error": "CRM mapping is not configured or partner invalid"})
+                try:
+                    with db() as conn:
+                        mapped = owner_assign(conn, partner_id, workspace, blogger_id)
+                except (ValueError, sqlite3.IntegrityError) as error:
+                    return self.respond(400, {"error": str(error)})
+                return self.respond(200, {"ok": True, "blogger_id": mapped, "verified": False})
             if route == "/api/admin/partners/status":
                 status = body.get("status")
                 partner_id = body.get("telegram_id")

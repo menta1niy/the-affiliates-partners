@@ -120,6 +120,11 @@ class CRMFeedTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 urllib.request.urlopen(req, timeout=4)
         self.assertEqual(raised.exception.code, 409)
+        # Even if an old database contains an inconsistent approved status,
+        # the partner catalog must not leak a CRM-deactivated offer.
+        with app.db() as conn:
+            conn.execute("UPDATE offers SET status='approved' WHERE id=?", ("crm-"+offer_id,))
+        self.assertEqual(app.approved_offers(), [])
 
     def test_staged_http_snapshot_over_previous_limit(self):
         import hashlib

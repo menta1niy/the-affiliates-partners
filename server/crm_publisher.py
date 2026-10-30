@@ -17,6 +17,16 @@ from uuid import UUID, uuid4
 from crm_feed import normalize_feed
 
 
+class NoCredentialRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward the CRM service key to a redirected host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def safe_urlopen(request, timeout):
+    return urllib.request.build_opener(NoCredentialRedirect()).open(request, timeout=timeout)
+
+
 def sanitized_offers(records, workspace_id):
     """Project only known CRM Offer columns, never its economics."""
     result = []
@@ -103,7 +113,7 @@ def publish(endpoint, token, workspace_id, offers):
 def send_with_retry(request, attempts=3):
     for number in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with safe_urlopen(request, timeout=15) as response:
                 if response.status != 200:
                     raise RuntimeError("CRM feed unexpected response")
                 return json.load(response)
@@ -116,9 +126,48 @@ def send_with_retry(request, attempts=3):
         time.sleep(min(2 ** number, 4))
 
 
+def verify_partner_links(endpoint, token, database_url, workspace_id):
+    """Attest owner-selected CRM blogger UUIDs using actual scoped CRM rows."""
+    parsed = urlparse(endpoint)
+    if (len(token) < 32 or parsed.scheme != "https" or not parsed.netloc
+            or parsed.username or parsed.password
+            or not parsed.path.endswith("/api/internal/crm/offers")):
+        raise ValueError("Identity bridge requires HTTPS and a service credential")
+    root = endpoint.rsplit("/", 1)[0]
+
+    def call(url, body):
+        request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token}, method="POST")
+        return send_with_retry(request)
+
+    pending = call(root + "/identity/requests", {"workspace_id": str(workspace_id)})
+    requested = {str(UUID(x)) for x in pending["blogger_ids"]}
+    if len(requested) > 10000:
+        raise ValueError("Too many identity requests")
+    try:
+        from sqlalchemy import create_engine, text
+    except ImportError as error:
+        raise RuntimeError("CRM backend SQLAlchemy required") from error
+    engine = create_engine(database_url, pool_pre_ping=True)
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SET TRANSACTION READ ONLY"))
+            rows = connection.execute(text("""
+                SELECT id FROM bloggers WHERE workspace_id=:workspace AND archived_at IS NULL
+            """), {"workspace": str(workspace_id)}).all()
+            existing = [str(UUID(str(row[0]))) for row in rows if str(row[0]) in requested]
+    finally:
+        engine.dispose()
+    result = call(root + "/identity", {"workspace_id": str(workspace_id), "blogger_ids": existing})
+    if not result.get("ok"):
+        raise RuntimeError("CRM identity attestation failed")
+    return result.get("verified", 0)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Read-only CRM offers bridge (default: dry run)")
     parser.add_argument("--send", action="store_true", help="Explicitly POST to Partners")
+    parser.add_argument("--verify-links", action="store_true", help="Attest owner-approved CRM partner links")
     args = parser.parse_args(argv)
     workspace_id = UUID(os.environ["CRM_WORKSPACE_ID"])
     source = os.environ["CRM_READONLY_DATABASE_URL"]
@@ -131,7 +180,9 @@ def main(argv=None):
         return
     endpoint = os.environ["PARTNERS_CRM_FEED_URL"]
     sent = publish(endpoint, os.environ["CRM_FEED_TOKEN"], workspace_id, rows)
-    print(json.dumps({"mode": "sent", "offers": sent, "workspace_id": str(workspace_id)}))
+    verified = verify_partner_links(endpoint, os.environ["CRM_FEED_TOKEN"], source, workspace_id) if args.verify_links else None
+    print(json.dumps({"mode": "sent", "offers": sent, "workspace_id": str(workspace_id),
+                      "identity_links_verified": verified}))
 
 
 if __name__ == "__main__":

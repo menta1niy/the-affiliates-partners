@@ -86,6 +86,17 @@ class Stage2Workflows(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertEqual(self.post("/api/auth/telegram", uid)[1]["profile"]["status"], "pending")
 
+    def test_owner_me_ignores_stale_partner_row(self):
+        with app.db() as conn:
+            conn.execute("INSERT INTO partners(telegram_id,status,created_at) VALUES(?,'rejected',0)",
+                         (app.ADMIN_ID,))
+        status, result = self.post("/api/me", app.ADMIN_ID)
+        self.assertEqual(status, 200)
+        self.assertTrue(result["isAdmin"])
+        self.assertEqual(result["profile"]["status"], "active")
+        self.assertEqual(result["profile"]["telegram_id"], app.ADMIN_ID)
+        self.assertEqual(self.post("/api/admin/snapshot", app.ADMIN_ID)[0], 200)
+
     def test_partner_isolation_and_closed_financial_fields(self):
         first, second = 28491, 28492
         for uid in (first, second):

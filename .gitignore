@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.e2e-*.html
+.e2e-api.pid
 .env
 .env.*
 !.env.example

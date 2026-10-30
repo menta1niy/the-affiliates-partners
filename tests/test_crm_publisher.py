@@ -27,7 +27,7 @@ class PublisherTests(unittest.TestCase):
             crm_publisher.sanitized_offers([source], uuid4())
 
     def test_publisher_rejects_insecure_target_before_network(self):
-        with patch.object(crm_publisher.urllib.request, "urlopen") as opener:
+        with patch.object(crm_publisher, "safe_urlopen") as opener:
             with self.assertRaises(ValueError):
                 crm_publisher.publish("http://example.org/feed", "t"*40, uuid4(), [{}])
             with self.assertRaises(ValueError):
@@ -57,7 +57,7 @@ class PublisherTests(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, 503, "Unavailable", {}, None)
             return Response(json.dumps({"ok": True, "state": "pending"}).encode())
 
-        with patch.object(crm_publisher.urllib.request, "urlopen", side_effect=service), patch.object(
+        with patch.object(crm_publisher, "safe_urlopen", side_effect=service), patch.object(
             crm_publisher.time, "sleep"
         ):
             with self.assertRaises(urllib.error.HTTPError):

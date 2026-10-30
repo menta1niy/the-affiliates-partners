@@ -21,6 +21,14 @@
 .admin-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 18px}
 .admin-tabs button{padding:13px 6px;background:#283226;color:#cbd5c4;border-radius:12px;font-size:10px;font-weight:800}
 .admin-tabs button.active{background:#c8f03c;color:#151913}
+.admin-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(125px,.75fr);gap:8px;margin:0 0 16px}
+.admin-filters input,.admin-filters select{min-width:0;width:100%;background:#121a14;border:1px solid #44553f;color:#f3f1ea;border-radius:11px;padding:12px 10px;font-size:12px;outline:none}
+.admin-filters input:focus,.admin-filters select:focus{border-color:#c8f03c}
+.admin-crm-link{margin-top:12px;padding:12px;border-radius:12px;background:#172218;border:1px solid #3c4d38;display:grid;gap:9px}
+.admin-crm-link small{color:#b7c9af;font-size:11px}
+.admin-crm-link input{min-width:0;width:100%;padding:11px;border:1px solid #44553f;background:#111a13;color:#f3f1ea;border-radius:9px;font-size:12px}
+.admin-crm-link button{padding:11px;background:#394931;color:#f3f1ea;border-radius:9px;font-weight:750}
+@media(max-width:375px){.admin-filters{grid-template-columns:1fr}}
 .admin-card{background:#1b241c;border:1px solid #3e523c;border-radius:18px;padding:16px;margin-bottom:13px;overflow-wrap:anywhere}
 .admin-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .admin-card-top strong{font-size:14px}

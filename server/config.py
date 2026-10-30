@@ -14,5 +14,5 @@ def load_local_env():
         key, value = line.split('=', 1)
         key = key.strip()
         if key in {'TELEGRAM_BOT_TOKEN', 'MINI_APP_URL', 'ALLOWED_ORIGIN', 'SERVER_PORT',
-                   'CRM_FEED_TOKEN', 'CRM_WORKSPACE_ID'}:
+                   'CRM_FEED_TOKEN', 'CRM_WORKSPACE_ID', 'PARTNERS_DB_PATH'}:
             os.environ.setdefault(key, value.strip().strip('"').strip("'"))

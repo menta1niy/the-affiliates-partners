@@ -94,6 +94,44 @@ Tracking links and finance statistics remain disabled without a separate
 verified source. Receiver endpoint is not active in production until
 independently configured.
 
+### Explicit Telegram ↔ CRM identity association
+
+Partners stores a separate additive table `crm_partner_links`. An approved
+partner with a verified Telegram contact can be proposed for linking by the
+**signed Telegram owner** in the administrative UI, using the actual
+`Blogger.id` UUID from CRM (not its handle, mutable username or phone).
+That owner-approved association initially has `verified=0` and gives no
+CRM permissions. The service endpoint
+`POST /api/internal/crm/identity/requests` returns only the owner-selected
+Blogger UUIDs to the authenticated read-only bridge. The publisher can then
+query the existing CRM `bloggers` table for those UUIDs within the configured
+workspace, excluding archived bloggers. Only an authenticated
+`POST /api/internal/crm/identity` attestation marks matching associations
+as verified. Use `python server/crm_publisher.py --send --verify-links` after
+provisioning the read-only source credential and feed key. Repeating an
+unchanged mapping does not revoke verification; moving a mapping resets it.
+
+This two-sided confirmation verifies the CRM entity exists and that the
+Partners owner explicitly selected it. It does **not** independently establish
+that the same natural person owns both accounts; perform the actual identity
+check before manually selecting the UUID. No CRM staff or workspace
+membership role is imported, and neither a service attestation nor a linked
+partner grants The Affiliates Partners administrator rights. The partner's
+`/api/me` only returns a boolean `crmLinked`; no CRM UUIDs or workspace
+financial values are exposed to ordinary partners.
+
+### Isolated testing and deployment configuration
+
+`PARTNERS_DB_PATH` optionally fixes the shared Partners SQLite location for
+the bot and API. If omitted, both use `server/partners.sqlite3` under the
+Partners repository; ensure the **same** path and database permissions in
+both production services. Do not substitute the developer PC's local file for
+the VPS database. Test-only `TELEGRAM_NOTIFICATIONS_ENABLED=0` prevents
+network sends during isolated browser checks; do not enable it in production.
+The test fixture generator `tests/create_browser_fixtures.py` produces
+gitignored pages with synthetic signed initData and must never be treated as
+proof of a real Telegram session.
+
 1. Configure a service-to-service identity **inside the CRM authorization boundary**,
    scoped to one explicit workspace and read-only active offers. Do not reuse
    a browser cookie, owner password, CSRF token or bot token.
