@@ -1,0 +1,18 @@
+[Unit]
+Description=The Affiliates Partners Telegram Mini App API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/the-affiliates-partners
+ExecStart=/usr/bin/python3 /opt/the-affiliates-partners/server/app.py
+Environment=SERVER_PORT=8788
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
