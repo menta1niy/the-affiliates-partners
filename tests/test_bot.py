@@ -77,6 +77,50 @@ class BotRegistrationTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT count(*) FROM bot_outbox").fetchone()[0], 0)
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
 
+    def test_contact_and_outbox_rollback_together_on_queue_failure(self):
+        with patch.object(bot, "queue_admin_notification", side_effect=OSError("disk failure")):
+            with self.assertRaises(OSError):
+                self.contact()
+        with app.db() as con:
+            self.assertIsNone(con.execute("SELECT 1 FROM partners WHERE telegram_id=12345").fetchone())
+        self.contact()
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+
+    def test_crash_after_registration_commit_retains_exactly_one_alert(self):
+        with patch.object(bot, "flush_outbox", side_effect=RuntimeError("process interrupted")):
+            with self.assertRaises(RuntimeError):
+                self.contact()
+        self.assertEqual(self.status(), "pending")
+        with app.db() as con:
+            self.assertEqual(con.execute("SELECT count(*) FROM bot_outbox").fetchone()[0], 1)
+        self.contact()
+        bot.flush_outbox()
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+
+    def test_retry_and_outbox_rollback_together_on_queue_failure(self):
+        self.contact()
+        with app.db() as con:
+            con.execute("UPDATE partners SET status='rejected' WHERE telegram_id=12345")
+        with patch.object(bot, "queue_admin_notification", side_effect=OSError("disk failure")):
+            with self.assertRaises(OSError):
+                bot.handle(self.message(text="/retry"))
+        self.assertEqual(self.status(), "rejected")
+        bot.handle(self.message(text="/retry"))
+        self.assertEqual(self.status(), "pending")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
+
+    def test_retry_crash_after_commit_is_idempotent(self):
+        self.contact()
+        with app.db() as con:
+            con.execute("UPDATE partners SET status='rejected' WHERE telegram_id=12345")
+        with patch.object(bot, "flush_outbox", side_effect=RuntimeError("process interrupted")):
+            with self.assertRaises(RuntimeError):
+                bot.handle(self.message(text="/retry"))
+        bot.handle(self.message(text="/retry"))
+        bot.flush_outbox()
+        self.assertEqual(self.status(), "pending")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
+
     def test_active_user_remains_active_and_gets_web_app(self):
         self.contact()
         with app.db() as con:

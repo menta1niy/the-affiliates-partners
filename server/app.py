@@ -275,6 +275,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(401, {"error": "Данные Telegram не прошли проверку"})
         uid = user["id"]
         route = urlparse(self.path).path
+        if route == "/api/partner/data":
+            profile = partner_for(uid)
+            if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
+                return self.respond(403, {"error": "Partner approval required"})
+            linked = False
+            if uid != ADMIN_ID:
+                with db() as conn:
+                    row = conn.execute("SELECT verified FROM crm_partner_links WHERE telegram_id=?", (uid,)).fetchone()
+                    linked = bool(row and row[0])
+            # Do not synthesize tracking links or CRM amounts from offer metadata.
+            return self.respond(200, {
+                "crmLinked": linked,
+                "tracking": {"available": False, "reason": "tracking_source_not_connected"},
+                "conversions": {"available": False, "reason": "conversion_source_not_connected"},
+                "payments": {"available": False, "reason": "payment_source_not_connected"},
+            })
         if route == "/api/offers":
             profile = partner_for(uid)
             if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
@@ -375,6 +391,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(200 if changed else 404, {"ok": bool(changed)})
             return self.respond(404, {"error": "Не найдено"})
         if route.startswith("/api/links/"):
+            profile = partner_for(uid)
+            if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
+                return self.respond(403, {"error": "Partner approval required"})
+            offer_id = route[len("/api/links/"):]
+            if not any(offer["id"] == offer_id for offer in approved_offers()):
+                return self.respond(404, {"error": "Offer not published or source inactive"})
             return self.respond(503, {"error": "Выдача ссылок станет доступна после подключения CRM и трекинга"})
         return self.respond(404, {"error": "Не найдено"})
 

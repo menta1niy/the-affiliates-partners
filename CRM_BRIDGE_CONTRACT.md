@@ -157,6 +157,27 @@ financial values are exposed to ordinary partners.
 
 ### Isolated testing and deployment configuration
 
+### Partner API availability contract
+
+`POST /api/partner/data` requires signed Telegram initData and an approved,
+phone-verified partner (or the verified numeric owner). The response exposes
+`crmLinked` only as a boolean and explicit unavailable states for tracking,
+conversions and payments. The endpoint does not fabricate balances, tracking
+links, payouts, partner-specific CRM rows or agency financial fields. The
+`POST /api/links/{offer_id}` route now checks partner authorization and
+whether an offer is currently published and source-active **before**
+returning a tracking-service-unavailable error. A real CRM-linked UUID
+alone must never be treated as permission to see another partner's data.
+
+### Crash-safe bot onboarding
+
+First contact verification and repeat application now enqueue owner alerts
+inside the same SQLite transaction as the registration state change.
+Previously these were sequential commits, and an intervening crash could
+leave a pending application without a notification. Repeated Telegram
+updates do not re-enqueue after a committed transition. Telegram delivery
+remains at-least-once, not exactly-once.
+
 ### Production acceptance before authorized deployment
 
 On the VPS, **read only**, inspect the two actual units via

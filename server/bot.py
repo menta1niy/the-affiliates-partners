@@ -57,16 +57,21 @@ def normalized_phone(raw):
     return "+" + digits
 
 
-def notify_admin(uid, repeated=False):
-    """Persist an admin alert; delivery failure never discards the registration."""
+def queue_admin_notification(con, uid, repeated=False):
+    """Queue an alert within the transaction that changes registration state."""
     kind = "Повторная заявка" if repeated else "Новая заявка"
     message = f"{kind} партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели."
+    con.execute("""CREATE TABLE IF NOT EXISTS bot_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,
+        message TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+    con.execute("INSERT INTO bot_outbox(chat_id,message,created_at) VALUES(?,?,?)",
+                (ADMIN_ID, message, int(time.time())))
+
+
+def notify_admin(uid, repeated=False):
+    """Enqueue a standalone alert (registration handlers enqueue in their transaction)."""
     with db() as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS bot_outbox (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,
-            message TEXT NOT NULL, created_at INTEGER NOT NULL)""")
-        con.execute("INSERT INTO bot_outbox(chat_id,message,created_at) VALUES(?,?,?)",
-                    (ADMIN_ID, message, int(time.time())))
+        queue_admin_notification(con, uid, repeated)
     flush_outbox()
 
 
@@ -134,10 +139,12 @@ def handle(message):
                     username=excluded.username,name=excluded.name,phone=excluded.phone""",
                     (uid, sender.get("username") or "", sender.get("first_name") or "Партнёр", phone,
                      "pending", int(time.time())))
+                if first_registration:
+                    queue_admin_notification(con, uid)
         if existing:
             return send(cid, "Этот номер уже привязан к другому Telegram-аккаунту. Обратитесь к администратору.")
         if first_registration:
-            notify_admin(uid)
+            flush_outbox()
         with db() as con:
             profile = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
         send(cid, f"Номер {phone} привязан к вашему Telegram-аккаунту @{sender.get('username') or 'без username'}.",
@@ -151,8 +158,10 @@ def handle(message):
         with db() as con:
             changed = con.execute("""UPDATE partners SET status='pending'
                 WHERE telegram_id=? AND status='rejected' AND phone<>''""", (uid,)).rowcount
+            if changed:
+                queue_admin_notification(con, uid, repeated=True)
         if changed:
-            notify_admin(uid, repeated=True)
+            flush_outbox()
             send(cid, "Повторная заявка отправлена на рассмотрение.", {"remove_keyboard": True})
         else:
             with db() as con:

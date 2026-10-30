@@ -61,3 +61,16 @@
 .admin-modal{padding-top:max(12px,env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px),var(--tg-safe-area-inset-bottom,0px))}
 .admin-editor{max-height:calc(100dvh - max(12px,env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px)) - max(12px,env(safe-area-inset-bottom,0px),var(--tg-safe-area-inset-bottom,0px)))}
 @media (pointer:coarse) and (max-width:767px){.bottom-nav.admin-nav{width:min(calc(100% - 32px - max(env(safe-area-inset-left,0px),var(--tg-safe-area-inset-left,0px)) - max(env(safe-area-inset-right,0px),var(--tg-safe-area-inset-right,0px))),420px)}}
+
+/* Readable CRM identifiers and predictable touch targets on narrow screens. */
+.admin-page{min-width:0}.admin-page input,.admin-page textarea,.admin-page select{font-size:16px}
+.admin-crm-link label{font-size:11px;color:#d2dec9;font-weight:700}
+.admin-crm-link input{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;letter-spacing:0}
+.admin-crm-link button{min-height:44px;overflow-wrap:anywhere}
+.admin-card-top strong,.admin-card-top span{overflow-wrap:anywhere;min-width:0}
+.admin-card-top span{text-align:right;max-width:45%}
+.admin-actions button{min-height:44px}
+.admin-modal{overscroll-behavior:contain}.admin-editor{overscroll-behavior:contain;scrollbar-gutter:stable}
+.admin-page [aria-busy="true"]{cursor:progress}
+.admin-page button:focus-visible,.admin-page select:focus-visible,.admin-page textarea:focus-visible{outline:2px solid #c8f03c;outline-offset:2px}
+@media(max-width:360px){.admin-actions button{min-width:0;flex-basis:100%}.admin-tabs button{font-size:9px}.admin-card{padding:13px}}
