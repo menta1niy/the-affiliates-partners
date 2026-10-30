@@ -3,3 +3,4 @@
 /* Respect Telegram fullscreen, device cutouts and gesture indicator. */
 .shell{min-height:100dvh;padding-top:var(--tg-content-safe-area-inset-top,0px);padding-left:var(--tg-safe-area-inset-left,0px);padding-right:var(--tg-safe-area-inset-right,0px);padding-bottom:calc(110px + var(--tg-safe-area-inset-bottom,0px))}
 .bottom-nav{bottom:calc(12px + var(--tg-safe-area-inset-bottom,0px));width:min(calc(100% - 44px - var(--tg-safe-area-inset-left,0px) - var(--tg-safe-area-inset-right,0px)),350px)}
+.fullscreen-toggle{margin-left:auto;display:flex;align-items:center;gap:6px;padding:9px 10px;border:1px solid #c8f03c66;border-radius:9px;background:#242b1d;color:#c8f03c;font-size:9px;font-weight:800;letter-spacing:.02em;white-space:nowrap}.top{padding-top:var(--tg-content-safe-area-inset-top,0px);height:calc(68px + var(--tg-content-safe-area-inset-top,0px))}.shell{padding-top:0}@media(max-width:360px){.fullscreen-toggle span{display:none}}
