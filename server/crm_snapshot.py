@@ -34,6 +34,14 @@ def begin(conn, workspace, run_id, expected, now=None):
         if existing[0] != workspace or existing[2] != expected or existing[1] == 'expired':
             raise ValueError("Snapshot ID conflict or expired")
         return existing[1]
+    # A run must not be allowed to start while another unfinished run exists:
+    # an older, slow feed could otherwise publish a stale catalog afterwards.
+    pending = conn.execute(
+        "SELECT 1 FROM crm_sync_runs WHERE workspace_id=? AND state='pending' LIMIT 1",
+        (workspace,)
+    ).fetchone()
+    if pending:
+        raise ValueError("Another snapshot is in progress")
     # New runs are serialized by a monotonic server-side creation order.
     conn.execute("INSERT INTO crm_sync_runs(run_id,workspace_id,state,expected,created_at) "
                  "VALUES(?,?,'pending',?,?)", (run_id,workspace,expected,now))
@@ -47,6 +55,9 @@ def batch(conn, workspace, run_id, prepared, now=None):
                        (run_id, workspace)).fetchone()
     if not row or row[0] != 'pending' or now-row[1] > TTL:
         raise ValueError("Snapshot is absent, completed or expired")
+    expected = conn.execute(
+        "SELECT expected FROM crm_sync_runs WHERE run_id=?", (run_id,)
+    ).fetchone()[0]
     for offer_id, name, category, goal, active in prepared:
         data = json.dumps([offer_id,name,category,goal,active],ensure_ascii=False)
         current = conn.execute("SELECT payload FROM crm_sync_items WHERE run_id=? AND offer_id=?",
@@ -55,7 +66,10 @@ def batch(conn, workspace, run_id, prepared, now=None):
             raise ValueError("Conflicting replay of offer")
         conn.execute("INSERT OR IGNORE INTO crm_sync_items(run_id,offer_id,payload) VALUES(?,?,?)",
                      (run_id,offer_id,data))
-    return conn.execute("SELECT count(*) FROM crm_sync_items WHERE run_id=?", (run_id,)).fetchone()[0]
+    received = conn.execute("SELECT count(*) FROM crm_sync_items WHERE run_id=?", (run_id,)).fetchone()[0]
+    if received > expected:
+        raise ValueError("Too many offers for snapshot")
+    return received
 
 
 def finalize(conn, workspace, run_id, digest, now=None):

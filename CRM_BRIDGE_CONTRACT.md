@@ -122,6 +122,30 @@ financial values are exposed to ordinary partners.
 
 ### Isolated testing and deployment configuration
 
+### Production acceptance before authorized deployment
+
+On the VPS, **read only**, inspect the two actual units via
+`systemctl cat the-affiliates-partners-api.service the-affiliates-partners-bot.service`
+and check the effective `WorkingDirectory`, service user, `ExecStart`
+and any environment file references. Avoid printing `systemctl show -p Environment`
+or raw environment files because they may expose secrets.
+Run `python3 server/preflight.py` with each service's private environment
+loaded by an authorized administrator. It reports only presence flags,
+the resolved SQLite path, table existence and read-only integrity.
+Both processes must report the **same absolute server SQLite path**,
+not the developer PC path. The bot must have been registered with the
+rotated BotFather token; the API must validate initData against that same
+token, never the old compromised token.
+
+Inspect the actual Git branch, deploy timer and current release marker
+without changing them. The current deployment script only accepts
+`main`; this feature branch requires an authorized review/merge before
+the timer can deliver it. After authorized deployment, verify the
+`/partners/` bundle, `/partners/api/health` proxy and a real owner
+Telegram session; public HTTP 200 alone does not establish auth or
+database consistency. Production credentials are not needed for
+local isolated tests and must never be copied into this repository.
+
 `PARTNERS_DB_PATH` optionally fixes the shared Partners SQLite location for
 the bot and API. If omitted, both use `server/partners.sqlite3` under the
 Partners repository; ensure the **same** path and database permissions in

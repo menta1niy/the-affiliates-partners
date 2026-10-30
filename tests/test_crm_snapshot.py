@@ -50,10 +50,15 @@ class SnapshotTests(unittest.TestCase):
             older,newer=str(uuid4()),str(uuid4())
             a,b=self.rows(1),self.rows(1)
             begin(conn,workspace,older,1,1000)
-            begin(conn,workspace,newer,1,1000)
-            self.commit(conn,workspace,newer,b,1000)
-            with self.assertRaisesRegex(ValueError,"Stale"):
-                self.commit(conn,workspace,older,a,1000)
+            with self.assertRaisesRegex(ValueError,"in progress"):
+                begin(conn,workspace,newer,1,1000)
+            # An unfinished source cannot outlive its lease or update catalog.
+            begin(conn,workspace,newer,1,1000+3601)
+            with self.assertRaisesRegex(ValueError,"expired"):
+                self.commit(conn,workspace,older,a,1000+3601)
+            self.commit(conn,workspace,newer,b,1000+3601)
+            with self.assertRaisesRegex(ValueError,"expired"):
+                finalize(conn,workspace,older,"bad",1000)
             self.assertEqual(conn.execute("SELECT count(*) FROM offers").fetchone()[0],1)
 
     def test_expiration_does_not_change_existing_offers(self):
