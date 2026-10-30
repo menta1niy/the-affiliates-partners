@@ -62,10 +62,24 @@ workspace and receiver authentication, run
 
 The receiver validates workspace, secret and DTO; duplicate source UUIDs
 upsert the same draft/approved local record rather than making duplicate offers.
-This is an **upsert-only** feed: it does not assume missing offers are deleted;
-upstream `is_active=false` pauses a known offer. Tracking links and finance
-statistics remain disabled without a separate verified source. Receiver
-endpoint is not active in production until independently configured.
+The publisher also reads archived source rows as inactive and sends a complete
+snapshot manifest (`mode: "finalize"`, `offer_ids: [UUID...]`) **only after all
+offer batches are acknowledged**. The receiving API pauses CRM offers omitted
+from that complete manifest. It does not delete records. The publisher retries
+transient HTTP 408/429/5xx and transport failures; reruns upsert the same UUID
+without duplicates. To avoid unsafe oversized manifests, the current version
+deliberately refuses snapshots over **300 offers**. A larger data set requires
+a paginated/versioned snapshot protocol before synchronization is enabled.
+
+An upstream inactive or absent offer cannot be republished through the admin
+API (`409`). Upstream reactivation never restores a previous published status
+automatically: an administrator must approve it again. Existing moderation of
+active offers is otherwise preserved. No batch processing or finalization
+removes historical local offers, and local non-CRM offers are left untouched.
+
+Tracking links and finance statistics remain disabled without a separate
+verified source. Receiver endpoint is not active in production until
+independently configured.
 
 1. Configure a service-to-service identity **inside the CRM authorization boundary**,
    scoped to one explicit workspace and read-only active offers. Do not reuse

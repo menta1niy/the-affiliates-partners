@@ -8,6 +8,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 from uuid import UUID
@@ -24,7 +26,7 @@ def sanitized_offers(records, workspace_id):
             "name": str(row["name"]),
             "offer_type": str(row["offer_type"]),
             "target_action": str(row["target_action"]),
-            "is_active": bool(row["is_active"]),
+            "is_active": bool(row["is_active"]) and row.get("archived_at") is None,
         })
     return result
 
@@ -39,9 +41,9 @@ def load_crm_offers(database_url, workspace_id):
         with engine.connect() as connection:
             connection.execute(text("SET TRANSACTION READ ONLY"))
             rows = connection.execute(text("""
-                SELECT id, workspace_id, name, offer_type, target_action, is_active
+                SELECT id, workspace_id, name, offer_type, target_action, is_active, archived_at
                 FROM offers
-                WHERE workspace_id = :workspace AND archived_at IS NULL
+                WHERE workspace_id = :workspace
                 ORDER BY id
             """), {"workspace": str(workspace_id)}).mappings().all()
             return sanitized_offers(rows, workspace_id)
@@ -55,6 +57,8 @@ def publish(endpoint, token, workspace_id, offers):
         raise ValueError("Publisher requires an HTTPS endpoint without embedded credentials")
     if len(token) < 32:
         raise ValueError("Configured CRM feed token is missing or too short")
+    if len(offers) > 300:
+        raise ValueError("Snapshot exceeds current atomic finalization limit (300)")
     total = 0
     batches = []
     pending = []
@@ -78,12 +82,38 @@ def publish(endpoint, token, workspace_id, offers):
             endpoint, data=json.dumps(batch).encode("utf-8"), method="POST",
             headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token},
         )
-        with urllib.request.urlopen(req, timeout=15) as response:
-            result = json.load(response)
-            if response.status != 200 or not result.get("ok") or result.get("imported") != len(batch["offers"]):
-                raise RuntimeError("CRM feed did not acknowledge the entire batch")
+        result = send_with_retry(req)
+        if not result.get("ok") or result.get("imported") != len(batch["offers"]):
+            raise RuntimeError("CRM feed did not acknowledge the entire batch")
         total += len(batch["offers"])
+    # Only acknowledge a complete source read after every batch succeeded.
+    # This is a separate request so a transient failure never hides stale items.
+    manifest = {"mode": "finalize", "workspace_id": str(workspace_id),
+                "offer_ids": [item["id"] for item in offers]}
+    req = urllib.request.Request(
+        endpoint, data=json.dumps(manifest).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token},
+    )
+    result = send_with_retry(req)
+    if not result.get("ok"):
+        raise RuntimeError("CRM snapshot finalization failed")
     return total
+
+
+def send_with_retry(request, attempts=3):
+    for number in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                if response.status != 200:
+                    raise RuntimeError("CRM feed unexpected response")
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504) or number == attempts - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError):
+            if number == attempts - 1:
+                raise
+        time.sleep(min(2 ** number, 4))
 
 
 def main(argv=None):

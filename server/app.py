@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
-from crm_feed import normalize_feed, apply_feed
+from crm_feed import normalize_feed, apply_feed, finalize_snapshot
 
 load_local_env()
 
@@ -50,6 +50,9 @@ def db():
             description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
             updated_at INTEGER NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS crm_offer_source (
+            offer_id TEXT PRIMARY KEY, source_active INTEGER NOT NULL,
+            last_seen INTEGER NOT NULL)""")
         # Older installations may have tables without fields added later.
         # SQLite supports additive NOT NULL columns only with a constant default.
         missing_columns = {
@@ -199,6 +202,15 @@ class Handler(BaseHTTPRequestHandler):
             presented = self.headers.get("X-CRM-Feed-Token", "")
             if not hmac.compare_digest(token, presented):
                 return self.respond(403, {"error": "CRM feed not authorized"})
+            if body.get("mode") == "finalize":
+                if set(body) != {"mode", "workspace_id", "offer_ids"} or body["workspace_id"] != workspace:
+                    return self.respond(400, {"error": "Invalid CRM manifest"})
+                try:
+                    with db() as conn:
+                        paused = finalize_snapshot(conn, workspace, body["offer_ids"], int(time.time()))
+                except ValueError as error:
+                    return self.respond(400, {"error": str(error)})
+                return self.respond(200, {"ok": True, "stale": paused})
             try:
                 prepared = normalize_feed(body, workspace)
             except ValueError as error:
@@ -266,6 +278,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not (0 <= offer["rate"] <= 100000000 and 0 <= offer["hold"] <= 365):
                     return self.respond(400, {"error": "Значение вне диапазона"})
                 with db() as conn:
+                    if offer["status"] == "approved" and offer["id"].startswith("crm-"):
+                        active = conn.execute("SELECT source_active FROM crm_offer_source WHERE offer_id=?",
+                                              (offer["id"],)).fetchone()
+                        if not active or not active[0]:
+                            return self.respond(409, {"error": "CRM offer is inactive or missing"})
                     conn.execute("""INSERT INTO offers(id,name,type,rate,goal,hold,description,status,updated_at)
                         VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
                         name=excluded.name,type=excluded.type,rate=excluded.rate,
@@ -280,6 +297,11 @@ class Handler(BaseHTTPRequestHandler):
                 if status not in OFFER_STATES or not isinstance(offer_id, str):
                     return self.respond(400, {"error": "Неверные параметры"})
                 with db() as conn:
+                    if status == "approved" and offer_id.startswith("crm-"):
+                        active = conn.execute("SELECT source_active FROM crm_offer_source WHERE offer_id=?",
+                                              (offer_id,)).fetchone()
+                        if not active or not active[0]:
+                            return self.respond(409, {"error": "CRM offer is inactive or missing"})
                     changed = conn.execute("UPDATE offers SET status=?,updated_at=? WHERE id=?",
                                            (status, int(time.time()), offer_id)).rowcount
                 return self.respond(200 if changed else 404, {"ok": bool(changed)})
