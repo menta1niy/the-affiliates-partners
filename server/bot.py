@@ -126,14 +126,18 @@ def handle(message):
         return
     command = (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0]
     if command == "/retry" and profile and profile[0] == "rejected":
+        if not profile[1]:
+            return send(cid, "Для повторной заявки подтвердите собственный контакт, затем отправьте /retry.", CONTACT_BUTTON)
         with db() as con:
-            changed = con.execute("UPDATE partners SET status='pending' WHERE telegram_id=? AND status='rejected'", (uid,)).rowcount
-        if profile[1]:
-            if changed:
-                notify_admin(uid, repeated=True)
+            changed = con.execute("""UPDATE partners SET status='pending'
+                WHERE telegram_id=? AND status='rejected' AND phone<>''""", (uid,)).rowcount
+        if changed:
+            notify_admin(uid, repeated=True)
             send(cid, "Повторная заявка отправлена на рассмотрение.", {"remove_keyboard": True})
         else:
-            send(cid, "Для повторной заявки подтвердите собственный контакт.", CONTACT_BUTTON)
+            with db() as con:
+                current = con.execute("SELECT status,phone FROM partners WHERE telegram_id=?", (uid,)).fetchone()
+            show_status(cid, current[0] if current else None, bool(current and current[1]))
     elif command in ("/start", "/retry"):
         show_status(cid, profile[0] if profile else None, bool(profile and profile[1]))
 

@@ -75,17 +75,31 @@ class BotRegistrationTests(unittest.TestCase):
         bot.handle(self.message(text="/retry"))
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
 
-    def test_retry_without_phone_notifies_only_after_contact(self):
+    def test_retry_without_phone_requires_verified_contact_and_second_retry(self):
         with app.db() as con:
             con.execute("INSERT INTO partners(telegram_id,username,name,created_at,status) VALUES(?,?,?,?,?)",
                         (12345, "partner", "Партнёр", 123, "rejected"))
         bot.handle(self.message(text="/retry"))
-        self.assertEqual(self.status(), "pending")
+        self.assertEqual(self.status(), "rejected")
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 0)
         self.contact()
+        self.assertEqual(self.status(), "rejected")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 0)
+        bot.handle(self.message(text="/retry"))
+        self.assertEqual(self.status(), "pending")
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
         self.contact()
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+
+    def test_duplicate_retry_is_idempotent(self):
+        self.contact()
+        with app.db() as con:
+            con.execute("UPDATE partners SET status='rejected' WHERE telegram_id=12345")
+        retry = self.message(text="/retry")
+        bot.handle(retry)
+        bot.handle(retry)
+        self.assertEqual(self.status(), "pending")
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 2)
 
     def test_admin_notification_failure_does_not_undo_registration(self):
         original_send = bot.send
