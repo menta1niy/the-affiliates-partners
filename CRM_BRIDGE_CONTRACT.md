@@ -38,6 +38,35 @@ claim a rate/hold value unless those become available through a separate
 authorized source. Deactivated upstream offers become paused. The CRM-side
 publisher and verified production credentials have **not** yet been installed.
 
+### Standalone read-only publisher (implemented, opt-in)
+
+`server/crm_publisher.py` reads the actual CRM PostgreSQL `offers` table
+through SQLAlchemy with `SET TRANSACTION READ ONLY` and a required workspace
+filter. It requires a **dedicated least-privilege PostgreSQL account** restricted
+to SELECT on the relevant offer fields. The DBA must provision it; do not reuse
+application write credentials. No changes are required to CRM tables,
+calculation code or deployment.
+
+Set these private environment values **only on the authorized bridge host**:
+
+- `CRM_READONLY_DATABASE_URL` — readonly PostgreSQL connection string
+- `CRM_WORKSPACE_ID` — explicitly approved CRM workspace UUID, same on receiver
+- `CRM_FEED_TOKEN` — new independent 32+ character service secret, same on receiver
+- `PARTNERS_CRM_FEED_URL` — `https://theaffiliates.ru/partners/api/internal/crm/offers`
+
+Use the CRM backend's existing pinned SQLAlchemy/PostgreSQL driver environment
+to run `python server/crm_publisher.py` for a **dry run** (prints count and
+field names, no offer data). After verifying the read-only account,
+workspace and receiver authentication, run
+`python server/crm_publisher.py --send` to submit batches of 100.
+
+The receiver validates workspace, secret and DTO; duplicate source UUIDs
+upsert the same draft/approved local record rather than making duplicate offers.
+This is an **upsert-only** feed: it does not assume missing offers are deleted;
+upstream `is_active=false` pauses a known offer. Tracking links and finance
+statistics remain disabled without a separate verified source. Receiver
+endpoint is not active in production until independently configured.
+
 1. Configure a service-to-service identity **inside the CRM authorization boundary**,
    scoped to one explicit workspace and read-only active offers. Do not reuse
    a browser cookie, owner password, CSRF token or bot token.
