@@ -79,6 +79,13 @@ class Stage2Workflows(unittest.TestCase):
         self.assertEqual(self.post("/api/admin/offers/status", app.ADMIN_ID, id="test-offer", status="paused")[0], 200)
         self.assertEqual(self.post("/api/offers", partner)[1]["offers"], [])
 
+    def test_approval_requires_verified_contact(self):
+        uid = 28491
+        self.post("/api/auth/telegram", uid)
+        code, body = self.post("/api/admin/partners/status", app.ADMIN_ID, telegram_id=uid, status="active")
+        self.assertEqual(code, 400)
+        self.assertEqual(self.post("/api/auth/telegram", uid)[1]["profile"]["status"], "pending")
+
 
 if __name__ == "__main__":
     unittest.main()

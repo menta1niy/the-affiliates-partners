@@ -190,6 +190,10 @@ class Handler(BaseHTTPRequestHandler):
                 if partner_id == ADMIN_ID:
                     return self.respond(400, {"error": "Нельзя менять собственную роль"})
                 with db() as conn:
+                    if status == "active":
+                        row = conn.execute("SELECT phone FROM partners WHERE telegram_id=?", (partner_id,)).fetchone()
+                        if row and not row[0]:
+                            return self.respond(400, {"error": "Сначала требуется подтверждение телефона"})
                     changed = conn.execute("UPDATE partners SET status=? WHERE telegram_id=?",
                                            (status, partner_id)).rowcount
                 if changed:
