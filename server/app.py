@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
+from crm_feed import normalize_feed, apply_feed
 
 load_local_env()
 
@@ -34,19 +35,55 @@ class ClosingConnection(sqlite3.Connection):
 
 def db():
     conn = sqlite3.connect(DB, factory=ClosingConnection, timeout=5)
-    conn.execute("""CREATE TABLE IF NOT EXISTS partners (
-        telegram_id INTEGER PRIMARY KEY, username TEXT NOT NULL DEFAULT '',
-        name TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL
-    )""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS offers (
-        id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
-        rate INTEGER NOT NULL, goal TEXT NOT NULL, hold INTEGER NOT NULL,
-        description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
-        updated_at INTEGER NOT NULL
-    )""")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.commit()
+    try:
+        conn.execute("PRAGMA busy_timeout=5000")
+        # Serialize schema inspection and ALTER TABLE across concurrent requests.
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("""CREATE TABLE IF NOT EXISTS partners (
+            telegram_id INTEGER PRIMARY KEY, username TEXT NOT NULL DEFAULT '',
+            name TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS offers (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL,
+            rate INTEGER NOT NULL, goal TEXT NOT NULL, hold INTEGER NOT NULL,
+            description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
+            updated_at INTEGER NOT NULL
+        )""")
+        # Older installations may have tables without fields added later.
+        # SQLite supports additive NOT NULL columns only with a constant default.
+        missing_columns = {
+            "partners": {
+                "username": "TEXT NOT NULL DEFAULT ''",
+                "name": "TEXT NOT NULL DEFAULT ''",
+                "phone": "TEXT NOT NULL DEFAULT ''",
+                "status": "TEXT NOT NULL DEFAULT 'pending'",
+                "created_at": "INTEGER NOT NULL DEFAULT 0",
+            },
+            "offers": {
+                "name": "TEXT NOT NULL DEFAULT ''",
+                "type": "TEXT NOT NULL DEFAULT ''",
+                "rate": "INTEGER NOT NULL DEFAULT 0",
+                "goal": "TEXT NOT NULL DEFAULT ''",
+                "hold": "INTEGER NOT NULL DEFAULT 0",
+                "description": "TEXT NOT NULL DEFAULT ''",
+                "status": "TEXT NOT NULL DEFAULT 'draft'",
+                "updated_at": "INTEGER NOT NULL DEFAULT 0",
+            },
+        }
+        for table, definitions in missing_columns.items():
+            existing = {column[1] for column in conn.execute(f"PRAGMA table_info({table})")}
+            for name, definition in definitions.items():
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+        # A nonunique index preserves legacy rows even if phones were duplicated.
+        conn.execute("""CREATE INDEX IF NOT EXISTS idx_partners_phone
+            ON partners(phone) WHERE phone <> ''""")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise
     return conn
 
 
@@ -153,6 +190,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(400, {"error": "Неверный JSON"})
         if not isinstance(body, dict):
             return self.respond(400, {"error": "Неверный запрос"})
+        route = urlparse(self.path).path
+        if route == "/api/internal/crm/offers":
+            token = os.environ.get("CRM_FEED_TOKEN", "")
+            workspace = os.environ.get("CRM_WORKSPACE_ID", "")
+            if len(token) < 32 or not workspace:
+                return self.respond(503, {"error": "CRM feed is not configured"})
+            presented = self.headers.get("X-CRM-Feed-Token", "")
+            if not hmac.compare_digest(token, presented):
+                return self.respond(403, {"error": "CRM feed not authorized"})
+            try:
+                prepared = normalize_feed(body, workspace)
+            except ValueError as error:
+                return self.respond(400, {"error": str(error)})
+            with db() as conn:
+                count = apply_feed(conn, prepared, int(time.time()))
+            return self.respond(200, {"ok": True, "imported": count, "reviewRequired": True})
         user = verify_init_data(body.get("initData", ""))
         if not user:
             return self.respond(401, {"error": "Данные Telegram не прошли проверку"})

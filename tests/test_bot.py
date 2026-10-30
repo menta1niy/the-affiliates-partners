@@ -50,6 +50,33 @@ class BotRegistrationTests(unittest.TestCase):
         self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
         self.assertIn("рассмотрении", self.sent[-1][1])
 
+    def test_polling_cursor_only_advances_after_success(self):
+        update = {"update_id": 42, "message": self.message(text="/start")}
+        with patch.object(bot, "handle", side_effect=RuntimeError("temporary")):
+            with self.assertRaises(RuntimeError):
+                bot.process_update(update, None)
+        with app.db() as con:
+            self.assertIsNone(con.execute(
+                "SELECT name FROM sqlite_master WHERE name='bot_cursor'").fetchone())
+        self.assertEqual(bot.process_update(update, None), 43)
+        with app.db() as con:
+            self.assertEqual(con.execute(
+                "SELECT next_update_id FROM bot_cursor WHERE name='polling'").fetchone()[0], 43)
+        before = len(self.sent)
+        self.assertEqual(bot.process_update(update, 43), 43)
+        self.assertEqual(len(self.sent), before)
+
+    def test_failed_admin_alert_is_durable_and_retried(self):
+        original = bot.send
+        with patch.object(bot, "send", side_effect=TimeoutError("telegram unavailable")):
+            bot.notify_admin(12345)
+        with app.db() as con:
+            self.assertEqual(con.execute("SELECT count(*) FROM bot_outbox").fetchone()[0], 1)
+        bot.flush_outbox()
+        with app.db() as con:
+            self.assertEqual(con.execute("SELECT count(*) FROM bot_outbox").fetchone()[0], 0)
+        self.assertEqual(sum(cid == bot.ADMIN_ID for cid, *_ in self.sent), 1)
+
     def test_active_user_remains_active_and_gets_web_app(self):
         self.contact()
         with app.db() as con:

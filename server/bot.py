@@ -58,12 +58,32 @@ def normalized_phone(raw):
 
 
 def notify_admin(uid, repeated=False):
-    """Delivery is best-effort; registration is already committed to the shared DB."""
+    """Persist an admin alert; delivery failure never discards the registration."""
     kind = "Повторная заявка" if repeated else "Новая заявка"
-    try:
-        send(ADMIN_ID, f"{kind} партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели.")
-    except (urllib.error.URLError, RuntimeError, TimeoutError, OSError):
-        print("Admin registration notification failed", flush=True)
+    message = f"{kind} партнёра: Telegram ID {uid}. Проверьте заявку в админ-панели."
+    with db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS bot_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,
+            message TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        con.execute("INSERT INTO bot_outbox(chat_id,message,created_at) VALUES(?,?,?)",
+                    (ADMIN_ID, message, int(time.time())))
+    flush_outbox()
+
+
+def flush_outbox():
+    with db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS bot_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL,
+            message TEXT NOT NULL, created_at INTEGER NOT NULL)""")
+        pending = con.execute("SELECT id,chat_id,message FROM bot_outbox ORDER BY id LIMIT 20").fetchall()
+    for event_id, chat_id, message in pending:
+        try:
+            send(chat_id, message)
+        except (urllib.error.URLError, RuntimeError, TimeoutError, OSError):
+            print("Admin registration notification deferred", flush=True)
+            return
+        with db() as con:
+            con.execute("DELETE FROM bot_outbox WHERE id=?", (event_id,))
 
 
 def show_status(cid, status, has_phone):
@@ -142,24 +162,36 @@ def handle(message):
         show_status(cid, profile[0] if profile else None, bool(profile and profile[1]))
 
 
+def process_update(update, offset):
+    next_offset = update["update_id"] + 1
+    if offset is not None and next_offset <= offset:
+        return offset
+    if "message" in update:
+        handle(update["message"])
+    with db() as con:
+        con.execute("CREATE TABLE IF NOT EXISTS bot_cursor (name TEXT PRIMARY KEY, next_update_id INTEGER NOT NULL)")
+        con.execute("INSERT INTO bot_cursor(name,next_update_id) VALUES('polling',?) "
+                    "ON CONFLICT(name) DO UPDATE SET next_update_id=excluded.next_update_id",
+                    (next_offset,))
+    return next_offset
+
+
 def main():
     if not TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required")
-    db().close()
-    offset = None
+    with db() as con:
+        con.execute("CREATE TABLE IF NOT EXISTS bot_cursor (name TEXT PRIMARY KEY, next_update_id INTEGER NOT NULL)")
+        cursor = con.execute("SELECT next_update_id FROM bot_cursor WHERE name='polling'").fetchone()
+    offset = cursor[0] if cursor else None
     print("Bot polling started. Do not run another process using this token.", flush=True)
     while True:
         try:
+            flush_outbox()
             data = {"timeout": 30, "allowed_updates": ["message"]}
             if offset is not None:
                 data["offset"] = offset
             for update in api("getUpdates", data):
-                offset = update["update_id"] + 1
-                if "message" in update:
-                    try:
-                        handle(update["message"])
-                    except (urllib.error.URLError, RuntimeError, sqlite3.Error) as err:
-                        print("Message handling failed:", type(err).__name__, flush=True)
+                offset = process_update(update, offset)
         except (urllib.error.URLError, RuntimeError, TimeoutError) as err:
             print("Polling retry:", type(err).__name__, flush=True)
             time.sleep(3)

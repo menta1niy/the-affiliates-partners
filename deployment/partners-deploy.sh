@@ -8,6 +8,12 @@ LOCK=/run/lock/the-affiliates-partners-deploy.lock
 exec 9>"$LOCK"
 flock -n 9 || exit 0
 cd "$ROOT"
+umask 077
+BRANCH=$(git symbolic-ref --quiet --short HEAD || true)
+if [ "$BRANCH" != "main" ]; then
+  echo "Refusing automatic deploy from branch: ${BRANCH:-detached}" >&2
+  exit 1
+fi
 
 git fetch --quiet origin main
 REMOTE=$(git rev-parse FETCH_HEAD)
@@ -53,6 +59,20 @@ if [ "$SERVICE_CHANGED" = true ]; then
   systemctl daemon-reload
   API_CHANGED=true
   BOT_CHANGED=true
+fi
+if [ "$API_CHANGED" = true ] || [ "$BOT_CHANGED" = true ]; then
+  if [ -f "$ROOT/server/partners.sqlite3" ]; then
+    mkdir -p "$ROOT/.database-backups"
+    python3 - "$REMOTE" <<'PY'
+import sqlite3, sys
+from pathlib import Path
+root = Path("/opt/the-affiliates-partners")
+source = root / "server/partners.sqlite3"
+destination = root / ".database-backups" / ("before-" + sys.argv[1][:12] + ".sqlite3")
+with sqlite3.connect(source) as original, sqlite3.connect(destination) as backup:
+    original.backup(backup)
+PY
+  fi
 fi
 if [ "$API_CHANGED" = true ]; then
   systemctl restart the-affiliates-partners-api.service
