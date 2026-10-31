@@ -17,6 +17,10 @@ def _schema(conn):
         action TEXT NOT NULL, note TEXT NOT NULL,
         created_at BIGINT NOT NULL)""")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS participant_task_report_outbox (
+        report_id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at BIGINT NOT NULL,
+        delivered_at BIGINT, attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at BIGINT NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '')""")
 
 
 def _assignment(conn, telegram_id, offer_id):
@@ -65,5 +69,11 @@ def report_action(telegram_id, owner_id, offer_id, action, note):
         created_at = int(time.time())
         conn.execute("INSERT INTO participant_task_reports(report_id,telegram_id,crm_lead_id,offer_id,action,note,created_at) "
                      "VALUES(?,?,?,?,?,?,?)", (report_id,telegram_id,assigned["crm_lead_id"],offer_id,action,note.strip(),created_at))
+        event = {"event_id": "participant-task:" + report_id, "type": "participant.task.reported",
+                 "report_id": report_id, "crm_lead_id": assigned["crm_lead_id"],
+                 "telegram_id": telegram_id, "offer_id": offer_id, "action": action,
+                 "note": note.strip(), "created_at": created_at}
+        conn.execute("INSERT INTO participant_task_report_outbox(report_id,payload,created_at) VALUES(?,?,?)",
+                     (report_id,json.dumps(event,ensure_ascii=False,sort_keys=True),created_at))
         return {"report_id": report_id, "offer_id": offer_id, "action": action,
                 "created_at": created_at, "status": "reported"}
