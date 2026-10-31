@@ -1,5 +1,6 @@
 """Durable, transactional partner identities, invitations and moderation."""
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -30,8 +31,28 @@ def database_path():
     return Path(os.environ.get("PARTNERS_DB_PATH") or ROOT / "data" / "partners.sqlite3")
 
 
+def postgres_url():
+    """Opt-in only; SQLite remains the default and production is untouched."""
+    return os.environ.get("PARTNERS_DATABASE_URL", "").strip()
+
+
 @contextmanager
 def transaction():
+    if postgres_url():
+        from database.postgres import connect
+        connection = connect(postgres_url())
+        try:
+            # SQLite BEGIN IMMEDIATE serializes writers. Preserve that
+            # invariant for first-source capture and internal ID allocation.
+            connection.execute("SELECT pg_advisory_xact_lock(601721408157)")
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        return
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(path), timeout=15, isolation_level=None)
@@ -52,6 +73,9 @@ def transaction():
 
 
 def initialize():
+    if postgres_url():
+        from database.postgres import initialize as init_postgres
+        return init_postgres(postgres_url())
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(str(path), timeout=15)) as conn:
@@ -98,6 +122,12 @@ def initialize():
         CREATE TABLE IF NOT EXISTS internal_id_sequence (
           singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS crm_events (event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL,
+          event_type TEXT NOT NULL, received_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS crm_lead_bindings (crm_lead_id TEXT PRIMARY KEY,
+          telegram_id INTEGER NOT NULL UNIQUE REFERENCES users(id), bound_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS crm_assigned_offers (crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
+          offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id));
         CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
         CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);
         CREATE INDEX IF NOT EXISTS ix_audit_created ON audit(id DESC);
@@ -567,3 +597,75 @@ def audit_events(actor, owner_id):
         else:
             rows = conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT 200").fetchall()
         return [{key: row[key] for key in ("id", "actor_id", "action", "target_id", "details", "created_at")} for row in rows]
+
+
+def receive_crm_event(event):
+    """Apply authenticated CRM delivery once; never infer Telegram identity from lead ID."""
+    if not isinstance(event, dict) or not isinstance(event.get("event_id"), str) or not 1 <= len(event["event_id"]) <= 128:
+        raise Problem(400, "Некорректный идентификатор события CRM")
+    kind = event.get("type")
+    if kind not in ("lead.bound", "offers.assigned"):
+        raise Problem(400, "Неизвестное событие CRM")
+    crm_id = event.get("crm_lead_id")
+    if not isinstance(crm_id, str) or not 1 <= len(crm_id) <= 128:
+        raise Problem(400, "Некорректный CRM ID")
+    if kind == "lead.bound":
+        telegram_id = event.get("telegram_id")
+        if type(telegram_id) is not int or telegram_id <= 0:
+            raise Problem(400, "Требуется подтверждённая привязка Telegram ID")
+    else:
+        offers = event.get("offers")
+        if not isinstance(offers, list) or len(offers) > 200:
+            raise Problem(400, "Некорректный список офферов")
+        ids = set()
+        for offer in offers:
+            if not isinstance(offer, dict) or not isinstance(offer.get("id"), (str, int)) or isinstance(offer.get("id"), bool):
+                raise Problem(400, "Некорректный оффер CRM")
+            key = str(offer["id"])
+            if not key or len(key) > 128 or key in ids:
+                raise Problem(400, "Повторяющийся CRM offer ID")
+            ids.add(key)
+    canonical = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(canonical.encode("utf-8")) > 65536:
+        raise Problem(400, "Событие CRM слишком велико")
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    initialize()
+    with transaction() as conn:
+        previous = conn.execute("SELECT event_hash FROM crm_events WHERE event_id=?", (event["event_id"],)).fetchone()
+        if previous:
+            if previous["event_hash"] != digest:
+                raise Problem(409, "CRM event ID уже использован с другим содержимым")
+            return {"changed": False}
+        if kind == "lead.bound":
+            participant = get_user(conn, telegram_id)
+            if participant is None or participant["consent_at"] is None:
+                raise Problem(409, "Участник Telegram не зарегистрирован")
+            current = conn.execute("SELECT crm_lead_id,telegram_id FROM crm_lead_bindings WHERE crm_lead_id=? OR telegram_id=?",
+                                   (crm_id, telegram_id)).fetchall()
+            if current and any(r["crm_lead_id"] != crm_id or r["telegram_id"] != telegram_id for r in current):
+                raise Problem(409, "CRM ID уже закреплён за другим участником")
+            conn.execute("INSERT OR IGNORE INTO crm_lead_bindings(crm_lead_id,telegram_id,bound_at) VALUES(?,?,?)",
+                         (crm_id, telegram_id, int(time.time())))
+        else:
+            binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
+            if not binding:
+                raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
+            conn.execute("DELETE FROM crm_assigned_offers WHERE crm_lead_id=?", (crm_id,))
+            for offer in offers:
+                conn.execute("INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)",
+                             (crm_id, str(offer["id"]), json.dumps(offer, ensure_ascii=False, sort_keys=True)))
+        conn.execute("INSERT INTO crm_events(event_id,event_hash,event_type,received_at) VALUES(?,?,?,?)",
+                     (event["event_id"], digest, kind, int(time.time())))
+        return {"changed": True}
+
+
+def list_assigned_offers(telegram_id, owner_id):
+    initialize()
+    with transaction() as conn:
+        user = get_user(conn, telegram_id)
+        if not user or user["status"] != "active" or user["consent_at"] is None:
+            return []
+        rows = conn.execute("SELECT o.payload FROM crm_assigned_offers o "
+                            "JOIN crm_lead_bindings b ON b.crm_lead_id=o.crm_lead_id "
+                            "WHERE b.telegram_id=? ORDER BY o.offer_id", (telegram_id,)).fetchall()
+        return [json.loads(row["payload"]) for row in rows]
