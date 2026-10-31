@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 
 
-MAX_BODY = 64 * 1024
+MAX_BODY = 256 * 1024
 MAX_SKEW = 300
 
 

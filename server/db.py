@@ -881,7 +881,7 @@ def receive_crm_event(event):
             except (InvalidOperation, ValueError):
                 raise Problem(400, "Некорректная сумма выплаты CRM") from None
     canonical = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    if len(canonical.encode("utf-8")) > 65536:
+    if len(canonical.encode("utf-8")) > 256 * 1024:
         raise Problem(400, "Событие CRM слишком велико")
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     initialize()
