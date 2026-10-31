@@ -37,6 +37,27 @@ def process_env(pid):
     return values
 
 
+def effective_env(pid, cwd):
+    """Match config.load_local_env: process settings take precedence over .env.local.
+
+    Python's os.environ updates do not reliably appear in /proc/PID/environ on
+    Linux. Both services load the local file after process startup.
+    """
+    values = process_env(pid)
+    local_env = cwd / ".env.local"
+    if not local_env.is_file():
+        return values
+    for raw in local_env.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in KEYS:
+            values.setdefault(key, value.strip().strip('"').strip("'").encode())
+    return values
+
+
 def inspect():
     units, environments, database_locations = {}, {}, {}
     for service in SERVICES:
@@ -45,8 +66,8 @@ def inspect():
         if pid <= 0:
             units[service] = {"state": info.get("ActiveState"), "running": False}
             continue
-        env = process_env(pid)
         cwd = Path(info.get("WorkingDirectory") or "/")
+        env = effective_env(pid, cwd)
         default_db = cwd / "server" / "partners.sqlite3"
         location = Path(os.fsdecode(env.get("PARTNERS_DB_PATH", b"")) or default_db).resolve()
         metadata = location.stat() if location.is_file() else None

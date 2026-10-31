@@ -204,7 +204,15 @@ def main():
             for update in api("getUpdates", data):
                 offset = process_update(update, offset)
         except (urllib.error.URLError, RuntimeError, TimeoutError) as err:
-            print("Polling retry:", type(err).__name__, flush=True)
+            # Distinguish network failures from Telegram HTTP errors without
+            # logging request URLs (they contain the secret bot token).
+            if isinstance(err, urllib.error.HTTPError):
+                detail = f"HTTP {err.code}"
+            elif isinstance(err, urllib.error.URLError):
+                detail = f"network {type(err.reason).__name__}"
+            else:
+                detail = type(err).__name__
+            print("Polling retry:", detail, flush=True)
             time.sleep(3)
 
 
