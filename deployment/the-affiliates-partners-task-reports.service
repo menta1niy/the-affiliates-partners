@@ -1,0 +1,12 @@
+[Unit]
+Description=Deliver unverified Partners task reports to CRM
+After=network-online.target the-affiliates-partners-api.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/the-affiliates-partners
+ExecStart=/usr/bin/flock -n /run/lock/the-affiliates-partners-task-reports.lock /usr/bin/python3 -m server.task_report_delivery
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

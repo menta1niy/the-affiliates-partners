@@ -37,12 +37,15 @@ class SchemaMigrationFocused(unittest.TestCase):
                     conn.execute("INSERT INTO participant_task_reports(report_id,telegram_id,crm_lead_id,offer_id,action,note,created_at) "
                                  "VALUES(?,?,?,?,?,?,?)", ("synthetic-report", candidate["id"], "synthetic-lead",
                                                     "synthetic-offer", "opened", "test", 100))
+                    conn.execute("INSERT INTO participant_task_report_outbox(report_id,payload,created_at) VALUES(?,?,?)",
+                                 ("synthetic-report", '{"type":"participant.task.reported"}', 100))
                     conn.commit()
 
             with closing(sqlite3.connect(path)) as source:
                 expected = {table: source.execute("SELECT COUNT(*) FROM " + table).fetchone()[0]
                             for table in TABLES}
                 for table in ("crm_registration_outbox", "crm_bloggers", "participant_task_reports",
+                              "participant_task_report_outbox",
                               "users", "invitations", "audit", "notifications_outbox"):
                     self.assertGreater(expected[table], 0, table + " requires a nonempty source fixture")
                 owner_seq = source.execute("SELECT internal_id FROM users WHERE id=900001").fetchone()[0]

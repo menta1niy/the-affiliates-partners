@@ -163,6 +163,8 @@ install -m 0644 deployment/the-affiliates-partners-notifications.service /etc/sy
 install -m 0644 deployment/the-affiliates-partners-notifications.timer /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-crm-registration.service /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-crm-registration.timer /etc/systemd/system/
+install -m 0644 deployment/the-affiliates-partners-task-reports.service /etc/systemd/system/
+install -m 0644 deployment/the-affiliates-partners-task-reports.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl restart the-affiliates-partners-api.service
 
@@ -204,8 +206,10 @@ except (AssertionError, integration.BridgeError):
 PY
 then
   systemctl enable --now the-affiliates-partners-crm-registration.timer
+  systemctl enable --now the-affiliates-partners-task-reports.timer
 else
   systemctl disable --now the-affiliates-partners-crm-registration.timer 2>/dev/null || true
+  systemctl disable --now the-affiliates-partners-task-reports.timer 2>/dev/null || true
   echo "CRM registration dispatcher disabled until approved configuration" >&2
 fi
 printf '%s\n' "$REMOTE" > "${PUBLIC}.deployed.next"
