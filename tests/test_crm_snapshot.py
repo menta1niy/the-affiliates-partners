@@ -69,3 +69,23 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 batch(conn,workspace,run,self.rows(1),1000+3601)
             self.assertEqual(conn.execute("SELECT count(*) FROM offers").fetchone()[0],0)
+
+    def test_source_absence_hides_offer_without_erasing_moderation(self):
+        workspace=str(uuid4())
+        offer=self.rows(1)[0]
+        with app.db() as conn:
+            run=str(uuid4())
+            begin(conn,workspace,run,1,1000)
+            self.commit(conn,workspace,run,[offer],1000)
+            conn.execute("UPDATE offers SET status='approved' WHERE id=?", (offer[0],))
+            self.assertEqual(conn.execute("SELECT count(*) FROM offers o JOIN crm_offer_source s ON o.id=s.offer_id WHERE o.status='approved' AND s.source_active=1").fetchone()[0],1)
+            gone=str(uuid4())
+            begin(conn,workspace,gone,0,1001)
+            self.assertEqual(self.commit(conn,workspace,gone,[],1001),1)
+            self.assertEqual(conn.execute("SELECT status FROM offers WHERE id=?",(offer[0],)).fetchone()[0],"approved")
+            self.assertEqual(conn.execute("SELECT count(*) FROM offers o JOIN crm_offer_source s ON o.id=s.offer_id WHERE o.status='approved' AND s.source_active=1").fetchone()[0],0)
+            returned=str(uuid4())
+            begin(conn,workspace,returned,1,1002)
+            self.commit(conn,workspace,returned,[offer],1002)
+            self.assertEqual(conn.execute("SELECT status FROM offers WHERE id=?",(offer[0],)).fetchone()[0],"approved")
+            self.assertEqual(conn.execute("SELECT count(*) FROM offers o JOIN crm_offer_source s ON o.id=s.offer_id WHERE o.status='approved' AND s.source_active=1").fetchone()[0],1)

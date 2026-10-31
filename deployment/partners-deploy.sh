@@ -47,10 +47,22 @@ if [ "$API_CHANGED" = true ] || [ "$BOT_CHANGED" = true ]; then
   # default repository path if PARTNERS_DB_PATH is configured.
   python3 - "$REMOTE" "$ROOT/.database-backups" <<'PY'
 import sys
+import importlib.util
 from pathlib import Path
 from sqlite3 import connect
-sys.path.insert(0, str(Path.cwd() / "server"))
-from app import DB
+path = Path.cwd() / "deployment/inspect_runtime.py"
+spec = importlib.util.spec_from_file_location("partners_inspector", path)
+inspector = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(inspector)
+runtime = inspector.inspect()
+comparison = runtime.get("comparisons", {})
+if not comparison.get("same_db_file") or not comparison.get("same_telegram_token"):
+    raise SystemExit("Refusing deployment: running API/bot DB or Telegram token mismatch")
+api = runtime["the-affiliates-partners-api.service"]
+bot = runtime["the-affiliates-partners-bot.service"]
+if api["state"] != "active" or bot["state"] != "active":
+    raise SystemExit("Refusing deployment: both Partners services must be active")
+DB = Path(api["db_path"])
 if not DB.is_file():
     raise SystemExit("Refusing to restart: configured Partners database is missing")
 destination = Path(sys.argv[2]) / ("before-" + sys.argv[1][:12] + ".sqlite3")

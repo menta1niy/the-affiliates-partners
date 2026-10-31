@@ -106,7 +106,6 @@ def finalize(conn, workspace, run_id, digest, now=None):
     existing = conn.execute("SELECT offer_id FROM crm_offer_source").fetchall()
     stale = [id for (id,) in existing if id not in present]
     for offer_id in stale:
-        conn.execute("UPDATE offers SET status='paused',updated_at=? WHERE id=?", (now,offer_id))
         conn.execute("UPDATE crm_offer_source SET source_active=0 WHERE offer_id=?", (offer_id,))
     conn.execute("UPDATE crm_sync_runs SET state='complete',finished_at=?,digest=? WHERE run_id=?",
                  (now,digest,run_id))

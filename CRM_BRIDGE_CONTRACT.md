@@ -202,6 +202,52 @@ remains at-least-once, not exactly-once.
 
 ### Production acceptance before authorized deployment
 
+**Actual VPS process comparison (read-only):** after authorized access to
+the running Beget host, execute
+`python3 deployment/inspect_runtime.py` from the Partners checkout under
+an operator account allowed to inspect the two systemd service processes.
+Unlike `server/preflight.py` (which examines the current shell's environment),
+this compares the **running** API and bot processes using
+`systemctl show`, their individual `/proc/<pid>/environ` entries, and the
+device/inode of their SQLite databases. It reports whether their Telegram
+tokens match, but prints **no token, feed key, or raw environment dump**.
+Require `same_db_file=true`, `same_telegram_token=true`, both units
+`active`, and matching Mini App URL configuration before treating the
+identity chain as deployed. Missing permissions cause an error, not a
+fabricated healthy result. A local dry-run/test cannot establish the same
+facts on the VPS.
+
+**Moderation/source independence:** a committed complete CRM snapshot now
+switches `crm_offer_source.source_active` for missing or archived offers
+without rewriting their owner moderation status. Visibility requires both
+`status=approved` and `source_active=1`; a returning source offer retains
+the previous owner decision. No incomplete snapshot changes visibility.
+Keep `CRM_ALLOW_LEGACY_FEED` unset in production: its old partial-batch
+compatibility mode cannot guarantee full-snapshot source-state semantics.
+
+**Controlled rollback after deployment failure:** check the deployed Git
+commit marker, existing SQLite backup integrity and old web-release path
+first. Stop both Partners services before any database restore. Restore
+the prior *Partners-only* server commit and systemd unit files after
+reviewing any additive schema changes; verify the API and bot using
+`server/preflight.py` and `deployment/inspect_runtime.py`. If database
+restoration is necessary, use the previously verified SQLite backup
+through an operator-controlled offline procedure while both processes are
+stopped. Never overwrite a live WAL-mode SQLite file, nor reset the
+unrelated main CRM repository. The deploy script automatically rolls back
+only the Mini App symlink; server code and SQLite restoration are
+intentionally manual to prevent data loss.
+
+The unattended release script now uses the running systemd processes'
+resolved SQLite file identity for its pre-release backup, rather than
+trusting an environment variable inherited by the deploy runner. It
+aborts before switching the Mini App if the API and bot do not both
+report an active state, a single physical SQLite file and a matching
+configured Telegram token. Authorized root/systemd inspection
+permissions are therefore a deployment prerequisite. An initial install
+without running services requires a separately reviewed bootstrap path,
+not bypassing these checks with a guessed default SQLite path.
+
 On the VPS, **read only**, inspect the two actual units via
 `systemctl cat the-affiliates-partners-api.service the-affiliates-partners-bot.service`
 and check the effective `WorkingDirectory`, service user, `ExecStart`

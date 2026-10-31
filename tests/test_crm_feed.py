@@ -107,14 +107,15 @@ class CRMFeedTests(unittest.TestCase):
                              ("crm-"+old_id, "crm-"+kept_id))
             self.assertEqual(self.submit({"mode": "finalize", "workspace_id": workspace,
                 "offer_ids": [kept_id]}, "x"*40)[0], 200)
-            # Replays must not silently re-approve a previously paused offer.
+            # Legacy single-batch mode is disabled in production; a returning
+            # source preserves the owner's independent moderation decision.
             self.assertEqual(self.submit({"workspace_id": workspace,
                 "offers": [offer(old_id)]}, "x"*40)[0], 200)
             self.assertEqual(self.submit({"mode": "finalize", "workspace_id": "different",
                 "offer_ids": []}, "x"*40)[0], 400)
         with app.db() as conn:
             statuses = dict(conn.execute("SELECT id,status FROM offers"))
-        self.assertEqual(statuses["crm-"+old_id], "paused")
+        self.assertEqual(statuses["crm-"+old_id], "approved")
         self.assertEqual(statuses["crm-"+kept_id], "approved")
 
     def test_inactive_upstream_cannot_be_published_by_admin(self):

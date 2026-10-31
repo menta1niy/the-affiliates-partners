@@ -58,9 +58,9 @@ def apply_feed(conn, prepared, now):
         current = conn.execute("SELECT status FROM offers WHERE id=?", (offer_id,)).fetchone()
         # Moderation remains a local decision; upstream reactivation must never
         # auto-approve an offer. Explicitly inactive CRM records stay hidden.
-        status = ("draft" if active else "paused") if current is None else (
-            current[0] if active else "paused"
-        )
+        # Source availability lives in crm_offer_source; do not overwrite
+        # the owner's moderation decision on inactivity.
+        status = "draft" if current is None else current[0]
         # Rate and hold cannot be inferred from CRM's source schema.
         # Zero is an internal 'not provided' sentinel; UI displays 'not specified'.
         conn.execute("""INSERT INTO offers(id,name,type,rate,goal,hold,description,status,updated_at)
@@ -97,7 +97,5 @@ def finalize_snapshot(conn, workspace_id, offer_ids, now):
     rows = conn.execute("SELECT id FROM offers WHERE id LIKE 'crm-%'").fetchall()
     stale = [row[0] for row in rows if row[0][4:] not in expected]
     for local_id in stale:
-        conn.execute("UPDATE offers SET status='paused',updated_at=? WHERE id=? AND status<>'paused'",
-                     (now, local_id))
         conn.execute("UPDATE crm_offer_source SET source_active=0 WHERE offer_id=?", (local_id,))
     return len(stale)
