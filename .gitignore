@@ -11,3 +11,4 @@ server/__pycache__/
 *.pyc
 deployment/*.zip
 deployment/keys/
+.database-backups/
