@@ -61,8 +61,8 @@ class ApiTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
 
-    def call(self, path, payload):
-        req = Request(self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+    def call(self, path, payload, headers=None):
+        req = Request(self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", **(headers or {})})
         try:
             with urlopen(req, timeout=3) as response:
                 return response.status, json.load(response)
@@ -81,19 +81,28 @@ class ApiTests(unittest.TestCase):
         with patch("server.api.bot_token", return_value=TOKEN):
             self.assertEqual(self.call("/api/session", {"initData": "not-signed"})[0], 401)
 
+    def test_webhook_requires_secret(self):
+        update = {"update_id": 10, "message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/start"}}
+        with patch("server.api.webhook_secret", return_value="secret-header"), patch.object(bot, "app_url", return_value="https://example.org/partners/"):
+            self.assertEqual(self.call("/api/telegram/webhook", update)[0], 403)
+            status, body = self.call("/api/telegram/webhook", update, {"X-Telegram-Bot-Api-Secret-Token": "secret-header"})
+            self.assertEqual(status, 200)
+            self.assertEqual(body["method"], "sendMessage")
+            self.assertEqual(body["chat_id"], 42)
+            self.assertIn("web_app", body["reply_markup"]["inline_keyboard"][0][0])
+
 
 class BotTests(unittest.TestCase):
     def test_private_start_sends_app_button(self):
-        with patch.object(bot, "telegram") as request, patch.object(bot, "app_url", return_value="https://example.org/partners/"):
-            bot.process({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/start"}})
-        self.assertEqual(request.call_args.args[0], "sendMessage")
-        self.assertEqual(request.call_args.args[1]["chat_id"], 42)
-        self.assertIn("web_app", request.call_args.args[1]["reply_markup"]["inline_keyboard"][0][0])
+        with patch.object(bot, "app_url", return_value="https://example.org/partners/"):
+            response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/start"}})
+        self.assertEqual(response["method"], "sendMessage")
+        self.assertEqual(response["chat_id"], 42)
+        self.assertIn("web_app", response["reply_markup"]["inline_keyboard"][0][0])
 
     def test_ignore_group_messages(self):
-        with patch.object(bot, "telegram") as request:
-            bot.process({"message": {"from": {"id": 42}, "chat": {"id": -4, "type": "group"}, "text": "/start"}})
-        request.assert_not_called()
+        response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": -4, "type": "group"}, "text": "/start"}})
+        self.assertIsNone(response)
 
 
 if __name__ == "__main__":

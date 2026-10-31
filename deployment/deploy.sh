@@ -65,7 +65,6 @@ find "$RELEASE" -type d -exec chmod 0755 {} +
 find "$RELEASE" -type f -exec chmod 0644 {} +
 
 install -m 0644 deployment/the-affiliates-partners-api.service /etc/systemd/system/
-install -m 0644 deployment/the-affiliates-partners-bot.service /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-deploy.service /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-deploy.timer /etc/systemd/system/
 systemctl daemon-reload
@@ -88,8 +87,10 @@ fi
 # The new static release is immutable. Switch the symlink only after API readiness.
 ln -s "$RELEASE" "${PUBLIC}.next"
 mv -Tf "${PUBLIC}.next" "$PUBLIC"
-systemctl restart the-affiliates-partners-bot.service
-systemctl is-active --quiet the-affiliates-partners-bot.service
+# v2 uses Telegram webhooks, not a competing getUpdates process.
+systemctl disable --now the-affiliates-partners-bot.service 2>/dev/null || true
+rm -f /etc/systemd/system/the-affiliates-partners-bot.service
+systemctl daemon-reload
 printf '%s\n' "$REMOTE" > "${PUBLIC}.deployed.next"
 mv -f "${PUBLIC}.deployed.next" "${PUBLIC}.deployed"
 echo "Partners fresh release: $REMOTE"

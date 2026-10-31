@@ -1,11 +1,13 @@
 """A deliberately small API; static frontend is served separately by nginx."""
+import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 from server.auth import verify_init_data
-from server.settings import admin_id, bot_token
+from server.bot import response_for
+from server.settings import admin_id, bot_token, webhook_secret
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -25,17 +27,27 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(404, {"error": "Маршрут не найден"})
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/api/session":
+        route = urlsplit(self.path).path
+        if route not in {"/api/session", "/api/telegram/webhook"}:
             return self.send_json(404, {"error": "Маршрут не найден"})
+        if route == "/api/telegram/webhook":
+            secret = webhook_secret()
+            header = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if not secret or not hmac.compare_digest(secret, header):
+                return self.send_json(403, {"error": "Недостаточно прав"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= size <= 12000:
+            if not 1 <= size <= 24000:
                 return self.send_json(400, {"error": "Неверный размер запроса"})
             body = json.loads(self.rfile.read(size))
             if not isinstance(body, dict):
                 return self.send_json(400, {"error": "Неверный запрос"})
         except (ValueError, UnicodeError):
             return self.send_json(400, {"error": "Неверный JSON"})
+        if route == "/api/telegram/webhook":
+            if type(body.get("update_id")) is not int:
+                return self.send_json(400, {"error": "Неверное обновление Telegram"})
+            return self.send_json(200, response_for(body) or {"ok": True})
         token = bot_token()
         if not token:
             return self.send_json(503, {"error": "Telegram не настроен на сервере"})

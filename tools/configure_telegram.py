@@ -3,7 +3,7 @@ import argparse
 import json
 import urllib.request
 
-from server.settings import app_url, bot_token
+from server.settings import app_url, bot_token, webhook_secret
 
 
 def call(method, body):
@@ -35,6 +35,7 @@ def main():
         {"command": "help", "description": "Помощь по боту"},
     ]
     print("Bot menu target:", url)
+    print("Webhook target:", url.rstrip("/") + "/api/telegram/webhook")
     print("Commands:", ", ".join(command["command"] for command in cmds))
     if not args.apply:
         print("DRY RUN. Pass --apply to change BotFather menu and commands.")
@@ -45,7 +46,16 @@ def main():
     call("setChatMenuButton", {
         "menu_button": {"type": "web_app", "text": "Кабинет", "web_app": {"url": url}}
     })
-    print("Bot commands and Mini App menu updated.")
+    call("setWebhook", {
+        "url": url.rstrip("/") + "/api/telegram/webhook",
+        "secret_token": webhook_secret(),
+        "allowed_updates": ["message"],
+        "drop_pending_updates": True,
+    })
+    info = call("getWebhookInfo", {})
+    if info.get("url") != url.rstrip("/") + "/api/telegram/webhook":
+        raise RuntimeError("Telegram did not confirm the webhook URL")
+    print("Bot commands, menu and HTTPS webhook updated.")
 
 
 if __name__ == "__main__":

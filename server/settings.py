@@ -1,4 +1,6 @@
 """Read only the minimal private settings needed by the new application."""
+import hashlib
+import hmac
 import os
 from pathlib import Path
 
@@ -29,6 +31,14 @@ def admin_id():
 
 def bot_token():
     return os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+
+def webhook_secret():
+    """Derive an independent webhook header secret from the existing bot token."""
+    token = bot_token()
+    if not token:
+        return ""
+    return hmac.new(token.encode("utf-8"), b"the-affiliates-partners-v2-inbound-webhook", hashlib.sha256).hexdigest()
 
 
 def app_url():
