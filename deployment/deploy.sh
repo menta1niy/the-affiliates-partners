@@ -32,6 +32,9 @@ PREVIOUS_RELEASE="$(readlink "$PUBLIC" 2>/dev/null || true)"
 committed=false
 restore_on_failure() {
   result=$?
+  if [ -n "${PROBE_PID:-}" ]; then
+    kill "$PROBE_PID" 2>/dev/null || true
+  fi
   if [ "$result" -ne 0 ] && [ "$committed" != true ]; then
     echo "Partners deployment failed; restoring previous application source and static release" >&2
     if [ -n "$PREVIOUS_RELEASE" ]; then
@@ -82,7 +85,6 @@ test -s web/admin/admin.js
 # Check the new API on a separate port before restarting the production API.
 SERVER_PORT=8799 python3 -m server.api >/dev/null 2>&1 &
 PROBE_PID=$!
-trap 'kill "$PROBE_PID" 2>/dev/null || true' EXIT
 API_READY=false
 for attempt in 1 2 3 4 5 6 7 8; do
   if curl --fail --silent --max-time 2 http://127.0.0.1:8799/api/health >/dev/null; then
@@ -97,7 +99,7 @@ if [ "$API_READY" != true ]; then
 fi
 kill "$PROBE_PID" 2>/dev/null || true
 wait "$PROBE_PID" 2>/dev/null || true
-trap - EXIT
+PROBE_PID=""
 
 install -d -m 0755 "$RELEASES"
 RELEASE="$RELEASES/${REMOTE:0:12}"
