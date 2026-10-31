@@ -33,13 +33,13 @@ class PostgreSQLOperationalAcceptance(unittest.TestCase):
         role_name = "partners_access_test_" + suffix
         admin_url = make_conninfo(url, dbname="postgres")
         restore_url = make_conninfo(url, dbname=restored_name)
-        with psycopg.connect(admin_url, autocommit=True) as admin:
+        with psycopg.connect(admin_url, autocommit=True, connect_timeout=5, options="-cstatement_timeout=30000 -clock_timeout=5000") as admin:
             if not admin.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user").fetchone()[0]:
                 self.skipTest("isolated cluster superuser required to create disposable role")
             try:
                 admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0 ENCODING 'UTF8'").format(sql.Identifier(restored_name)))
                 admin.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role_name)))
-                with psycopg.connect(url, autocommit=True) as source:
+                with psycopg.connect(url, autocommit=True, connect_timeout=5, options="-cstatement_timeout=15000 -clock_timeout=5000") as source:
                     self.assertEqual(source.execute("SHOW server_encoding").fetchone()[0], "UTF8")
                     source.execute("CREATE TABLE IF NOT EXISTS public.crm_privilege_probe (id integer)")
                     source.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC")
@@ -48,7 +48,7 @@ class PostgreSQLOperationalAcceptance(unittest.TestCase):
                     source.execute(sql.SQL("GRANT USAGE ON SCHEMA partners TO {}").format(sql.Identifier(role_name)))
                     source.execute(sql.SQL("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA partners TO {}").format(sql.Identifier(role_name)))
                     source.execute(sql.SQL("GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA partners TO {}").format(sql.Identifier(role_name)))
-                    with psycopg.connect(make_conninfo(url, user=role_name, options="-csearch_path=partners")) as limited:
+                    with psycopg.connect(make_conninfo(url, user=role_name, options="-csearch_path=partners -cstatement_timeout=15000 -clock_timeout=5000"), connect_timeout=5) as limited:
                         self.assertGreaterEqual(limited.execute("SELECT count(*) FROM users").fetchone()[0], 1)
                         with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                             limited.execute("SELECT * FROM public.crm_privilege_probe")
@@ -58,10 +58,10 @@ class PostgreSQLOperationalAcceptance(unittest.TestCase):
                         limited.rollback()
                 with tempfile.TemporaryDirectory() as folder:
                     archive = os.path.join(folder, "synthetic-partners.dump")
-                    subprocess.run([pg_dump, "--format=custom", "--schema=partners", "--no-owner", "--no-acl", "--file", archive, url], check=True, capture_output=True)
-                    subprocess.run([pg_restore, "--list", archive], check=True, capture_output=True)
-                    subprocess.run([pg_restore, "--exit-on-error", "--no-owner", "--no-acl", "--dbname", restore_url, archive], check=True, capture_output=True)
-                with psycopg.connect(url) as original, psycopg.connect(restore_url) as restored:
+                    subprocess.run([pg_dump, "--format=custom", "--schema=partners", "--no-owner", "--no-acl", "--file", archive, url], check=True, capture_output=True, timeout=25, env={**os.environ, "PGCONNECT_TIMEOUT": "5"})
+                    subprocess.run([pg_restore, "--list", archive], check=True, capture_output=True, timeout=10)
+                    subprocess.run([pg_restore, "--exit-on-error", "--no-owner", "--no-acl", "--dbname", restore_url, archive], check=True, capture_output=True, timeout=25, env={**os.environ, "PGCONNECT_TIMEOUT": "5"})
+                with psycopg.connect(url, connect_timeout=5) as original, psycopg.connect(restore_url, connect_timeout=5) as restored:
                     tables = [r[0] for r in original.execute("SELECT tablename FROM pg_tables WHERE schemaname='partners'")]
                     self.assertGreaterEqual(len(tables), 10)
                     for table in tables:
@@ -69,11 +69,20 @@ class PostgreSQLOperationalAcceptance(unittest.TestCase):
                         self.assertEqual(original.execute(statement).fetchone()[0], restored.execute(statement).fetchone()[0], table)
                     self.assertEqual(restored.execute("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='crm_privilege_probe'").fetchone()[0], 0)
             finally:
-                with psycopg.connect(url, autocommit=True) as source:
-                    source.execute("DROP TABLE IF EXISTS public.crm_privilege_probe")
-                    source.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role_name)))
-                admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(restored_name)))
-                admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role_name)))
+                try:
+                    with psycopg.connect(url, autocommit=True, connect_timeout=5, options="-cstatement_timeout=15000 -clock_timeout=5000") as source:
+                        source.execute("DROP TABLE IF EXISTS public.crm_privilege_probe")
+                        source.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role_name)))
+                finally:
+                    # On Windows, DROP DATABASE can wait on CheckpointDone even with
+                    # no connections to the target. Bound the wait and identify the
+                    # disposable DB for manual cleanup if the checkpoint stalls.
+                    try:
+                        admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(restored_name)))
+                    except psycopg.errors.QueryCanceled as exc:
+                        raise RuntimeError("Timed out waiting for PostgreSQL checkpoint during disposable database cleanup: " + restored_name) from exc
+                    finally:
+                        admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role_name)))
 
 
 if __name__ == "__main__":
