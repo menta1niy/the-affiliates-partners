@@ -354,6 +354,10 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
         user = get_user(conn, actor)
         if not user or user["status"] != "active":
             raise Problem(403, "Профиль не подтверждён")
+        # Admins are tenant-scoped even when issuing a new invitation. The
+        # assignee controls the eventual lead agency, so checking only the
+        # issuer would permit an invisible cross-agency invitation.
+        agency = admin_agency(user)
         if kind == "agency":
             if not isinstance(candidate_label, str) or len(candidate_label) > 120:
                 raise Problem(400, "Неверная метка приглашения")
@@ -368,6 +372,8 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
                     raise Problem(400, "Ответственный не найден")
                 if user["role"] == "staff" and assignee != actor:
                     raise Problem(403, "Недостаточно прав")
+                if agency is not None and target["agency_id"] != agency:
+                    raise Problem(403, "Ответственный другого агентства")
             else:
                 assignee = actor
         else:

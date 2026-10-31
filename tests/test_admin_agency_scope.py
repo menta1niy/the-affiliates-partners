@@ -63,3 +63,23 @@ class AdminAgencyScopeTests(unittest.TestCase):
         for path, payload in [('/api/admin/dashboard', {}), ('/api/admin/audit', {}),
                               ('/api/admin/assign', {'user_id': self.lead_a, 'manager_id': self.staff_a})]:
             self.assertEqual(self.as_user(path, self.admin, **payload)[0], 403)
+
+    def test_agency_invitation_cannot_cross_assignee_tenant(self):
+        with db.transaction() as conn:
+            before = conn.execute("SELECT count(*) FROM invitations").fetchone()[0]
+            audits = conn.execute("SELECT count(*) FROM audit").fetchone()[0]
+        status, _ = self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_b)
+        self.assertEqual(status, 403)
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM invitations").fetchone()[0], before)
+            self.assertEqual(conn.execute("SELECT count(*) FROM audit").fetchone()[0], audits)
+        status, own = self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_a)
+        self.assertEqual(status, 200)
+        self.assertEqual(own['assignee_id'], self.staff_a)
+        status, global_invite = self.as_user('/api/admin/invitations', OWNER, assignee_id=self.staff_b)
+        self.assertEqual(status, 200)
+        self.assertEqual(global_invite['assignee_id'], self.staff_b)
+        with db.transaction() as conn:
+            conn.execute('UPDATE users SET agency_id=NULL WHERE id=?', (self.admin,))
+        self.assertEqual(self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_a)[0], 403)
+        self.assertEqual(self.as_user('/api/invitations/referral', self.admin)[0], 403)
