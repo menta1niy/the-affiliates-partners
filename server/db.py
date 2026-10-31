@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from urllib.parse import urlsplit
 from contextlib import closing, contextmanager
 from pathlib import Path
 
@@ -764,6 +765,48 @@ def scoped_audit_rows(conn, staff, limit):
     return conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
+def sanitize_published_instruction(value):
+    """Only released participant-safe plain text and HTTPS attachments."""
+    if not isinstance(value, dict) or set(value) != {"text", "images", "links"}:
+        raise Problem(400, "Invalid published instruction fields")
+
+    def plain(text, limit):
+        if not isinstance(text, str) or len(text) > limit or any(ord(c) < 32 and c not in '\n\t\r' for c in text):
+            raise Problem(400, "Invalid published instruction text")
+        if re.search(r"<\s*/?\s*[a-z][^>]*>", text, re.I):
+            raise Problem(400, "HTML is not permitted in published instructions")
+        return text
+
+    def https(url):
+        if not isinstance(url, str) or len(url) > 2048 or any(c.isspace() for c in url):
+            raise Problem(400, "Invalid published instruction URL")
+        try:
+            parsed = urlsplit(url)
+            valid = (parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username
+                     and not parsed.password and parsed.port in (None, 443)
+                     and not parsed.fragment and not parsed.hostname.endswith("."))
+        except ValueError:
+            valid = False
+        if not valid:
+            raise Problem(400, "Published instruction requires HTTPS URL")
+        return url
+
+    if not isinstance(value["images"], list) or len(value["images"]) > 10:
+        raise Problem(400, "Invalid published images")
+    if not isinstance(value["links"], list) or len(value["links"]) > 20:
+        raise Problem(400, "Invalid published links")
+    images, links = [], []
+    for item in value["images"]:
+        if not isinstance(item, dict) or set(item) != {"url", "alt"}:
+            raise Problem(400, "Invalid published image fields")
+        images.append({"url": https(item["url"]), "alt": plain(item["alt"], 200)})
+    for item in value["links"]:
+        if not isinstance(item, dict) or set(item) != {"url", "label"}:
+            raise Problem(400, "Invalid published link fields")
+        links.append({"url": https(item["url"]), "label": plain(item["label"], 200)})
+    return {"text": plain(value["text"], 10000), "images": images, "links": links}
+
+
 def receive_crm_event(event):
     """Apply authenticated CRM delivery once; never infer Telegram identity from lead ID."""
     if not isinstance(event, dict) or not isinstance(event.get("event_id"), str) or not 1 <= len(event["event_id"]) <= 128:
@@ -805,6 +848,8 @@ def receive_crm_event(event):
             public["id"] = key
             if "name" not in public and isinstance(offer.get("title"), str):
                 public["name"] = offer["title"]
+            if "published_instruction" in offer:
+                public["published_instruction"] = sanitize_published_instruction(offer["published_instruction"])
             safe_offers.append(public)
     elif kind == "participant.state":
         applications, payouts = event.get("applications"), event.get("lead_payouts")
