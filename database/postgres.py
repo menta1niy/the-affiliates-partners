@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS crm_bloggers (
   blogger_uuid TEXT PRIMARY KEY, channel TEXT NOT NULL,
   issuer_id BIGINT NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS participant_task_reports (
+  report_id TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL,
+  crm_lead_id TEXT NOT NULL, offer_id TEXT NOT NULL,
+  action TEXT NOT NULL, note TEXT NOT NULL, created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
 CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);

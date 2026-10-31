@@ -7,6 +7,10 @@ from server import db
 
 
 def _schema(conn):
+    # PostgreSQL schema is prepared by the explicit database initializer.
+    # Avoid repeat DDL on each participant request.
+    if db.postgres_url():
+        return
     conn.execute("""CREATE TABLE IF NOT EXISTS participant_task_reports (
         report_id TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL,
         crm_lead_id TEXT NOT NULL, offer_id TEXT NOT NULL,
