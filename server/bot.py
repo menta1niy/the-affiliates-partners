@@ -111,7 +111,9 @@ def handle(message):
     if type(uid) is not int or uid <= 0 or message["chat"].get("type") != "private" or cid != uid:
         return
     if uid == ADMIN_ID:
-        if (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0] == "/start" or message.get("contact") is not None:
+        words = (message.get("text") or "").split(maxsplit=1)
+        command = words[0].split("@", 1)[0] if words else ""
+        if command == "/start" or message.get("contact") is not None:
             send(cid, "Администратор The Affiliates Partners. Откройте кабинет:", app_button())
         return
     with db() as con:

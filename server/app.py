@@ -299,7 +299,10 @@ class Handler(BaseHTTPRequestHandler):
             link_state = "unlinked"
             if uid != ADMIN_ID:
                 with db() as conn:
-                    row = conn.execute("SELECT verified FROM crm_partner_links WHERE telegram_id=?", (uid,)).fetchone()
+                    row = conn.execute(
+                        "SELECT verified FROM crm_partner_links WHERE telegram_id=? AND workspace_id=?",
+                        (uid, os.environ.get("CRM_WORKSPACE_ID", "")),
+                    ).fetchone()
                     linked = bool(row and row[0])
                     link_state = "verified" if linked else "pending" if row else "unlinked"
             # Do not synthesize tracking links or CRM amounts from offer metadata.
@@ -331,8 +334,11 @@ class Handler(BaseHTTPRequestHandler):
                            "phone": profile["phone"] if profile else "", "status": "active"}
             elif profile:
                 with db() as conn:
-                    link = conn.execute("SELECT verified FROM crm_partner_links WHERE telegram_id=?", (uid,)).fetchone()
-                profile["crmLinked"] = bool(link and link[0]) and profile["status"] == "active"
+                    link = conn.execute(
+                        "SELECT verified FROM crm_partner_links WHERE telegram_id=? AND workspace_id=?",
+                        (uid, os.environ.get("CRM_WORKSPACE_ID", "")),
+                    ).fetchone()
+                profile["crmLinked"] = bool(link and link[0]) and profile["status"] == "active" and bool(profile["phone"])
             return self.respond(200, {"profile": profile, "isAdmin": uid == ADMIN_ID})
         if route.startswith("/api/admin/"):
             if uid != ADMIN_ID:

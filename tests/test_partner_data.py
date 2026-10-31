@@ -47,6 +47,10 @@ class PartnerDataTests(unittest.TestCase):
 
     def test_pending_rejected_and_approved_partner_data(self):
         uid = 28491
+        workspace = str(uuid4())
+        workspace_patch = patch.dict("os.environ", {"CRM_WORKSPACE_ID": workspace})
+        workspace_patch.start()
+        self.addCleanup(workspace_patch.stop)
         self.post("/api/me", uid)
         self.assertEqual(self.post("/api/partner/data", uid)[0], 403)
         self.assertEqual(self.post("/api/links/not-an-offer", uid)[0], 403)
@@ -64,7 +68,7 @@ class PartnerDataTests(unittest.TestCase):
             conn.execute("""INSERT INTO crm_partner_links(
                 telegram_id,workspace_id,blogger_id,verified,confirmed_at,mapping_version,check_version)
                 VALUES(?,?,?,?,?,?,?)""",
-                (uid,str(uuid4()),str(uuid4()),0,0,str(uuid4()),""))
+                (uid,workspace,str(uuid4()),0,0,str(uuid4()),""))
         self.assertEqual(self.post("/api/partner/data",uid)[1]["crmLinkStatus"],"pending")
         with app.db() as conn:
             conn.execute("UPDATE crm_partner_links SET verified=1 WHERE telegram_id=?",(uid,))
@@ -72,6 +76,9 @@ class PartnerDataTests(unittest.TestCase):
         self.assertEqual(response["crmLinkStatus"],"verified")
         self.assertTrue(response["crmLinked"])
         self.assertFalse(response["tracking"]["available"])
+        with patch.dict("os.environ", {"CRM_WORKSPACE_ID": str(uuid4())}):
+            self.assertEqual(self.post("/api/partner/data",uid)[1]["crmLinkStatus"], "unlinked")
+            self.assertFalse(self.post("/api/me",uid)[1]["profile"]["crmLinked"])
         with app.db() as conn:
             conn.execute("DELETE FROM crm_partner_links WHERE telegram_id=?",(uid,))
         self.assertEqual(self.post("/api/partner/data",uid)[1]["crmLinkStatus"],"unlinked")
