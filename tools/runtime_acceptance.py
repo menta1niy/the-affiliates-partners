@@ -94,7 +94,9 @@ def run():
             code, result = as_user("/api/session", owner)
             assert require(code, result, 200, "owner login")["role"] == "owner"
             first = agency()
-            code, result = as_user("/api/register", alice, invite_code=first, consent=True)
+            code, result = request(base, "/api/register", {
+                "initData": signed(alice, token, start_param=first), "consent": True,
+            })
             assert require(code, result, 200, "agency registration")["user"]["status"] == "pending"
             code, result = as_user("/api/admin/dashboard", alice)
             require(code, result, 403, "lead denied admin")
@@ -127,7 +129,9 @@ def run():
             require(code, result, 409, "conflicting attribution")
             code, result = as_user("/api/register", bob, consent=True)
             assert require(code, result, 200, "server retained first /start")["user"]["source"] == "agency"
-            code, result = as_user("/api/register", carol, invite_code=referral, consent=True)
+            code, result = request(base, "/api/register", {
+                "initData": signed(carol, token, start_param=referral), "consent": True,
+            })
             assert require(code, result, 200, "referred registration")["user"]["referrer_id"] == alice
             # A direct ?startapp= link carries source in signed initData, not a
             # trusted arbitrary frontend parameter. No /start webhook required.

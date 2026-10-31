@@ -78,6 +78,9 @@
     show("connect",false);show("account",true);
     const unregistered = ["invited","unregistered","new","not_registered"].includes(state.key);
     show("register-panel",unregistered);
+    const verifiedInvite = Boolean(session.source_info?.inviter_id);
+    show("register-form",unregistered && verifiedInvite);
+    text("registration-instructions",verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
     text("status-description",state.description);
@@ -112,16 +115,11 @@
     event.preventDefault();error("");
     const button=$("register-submit");button.disabled=true;
     try {
-      const code=$("invite-code").value.trim();
-      await api("/register",{...(code?{invite_code:code}:{}),consent:$("consent").checked});
+      await api("/register",{consent:$("consent").checked});
       text("registration-message","Заявка отправлена.");
       await refresh();
     } catch(e) {
       text("registration-message",e.message);
-      if(e.message.includes("Источник приглашения уже закреплён")) {
-        $("invite-code").value="";
-        text("registration-message", "Первый источник уже закреплён ботом. Поле очищено. Отправьте заявку повторно, чтобы использовать сохранённый источник.");
-      }
     } finally {button.disabled=false;}
   });
   $("copy-referral").addEventListener("click",async () => {
@@ -136,8 +134,5 @@
   });
   $("refresh").addEventListener("click",refresh);
   try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#111310");} catch {}
-  const initParams=new URLSearchParams(initData());
-  const start = initParams.get("start_param") || new URLSearchParams(location.search).get("tgWebAppStartParam") || new URLSearchParams(location.search).get("startapp") || tg?.initDataUnsafe?.start_param || "";
-  if (/^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(start)) $("invite-code").value=start;
   refresh();
 })();

@@ -56,6 +56,8 @@ class HttpHarness(unittest.TestCase):
         self.stack.enter_context(patch("server.api.bot_token", return_value=TOKEN))
         self.stack.enter_context(patch("server.api.admin_id", return_value=OWNER))
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self._update_lock = threading.Lock()
+        self._next_update_id = 100000
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         # Collect unclosed SQLite connections before Windows removes the temp DB.
@@ -97,6 +99,12 @@ class HttpHarness(unittest.TestCase):
         return invite
 
     def register(self, uid, code):
+        # A free-form client code is not authentication of referral source.
+        # Model the real Telegram /start webhook before the signed Mini App POST.
+        with self._update_lock:
+            self._next_update_id += 1
+            update_id = self._next_update_id
+        self.assertEqual(self.webhook_start(update_id, uid, code)[0], 200)
         return self.as_user("/api/register", uid, invite_code=code, consent=True)
 
     def test_owner_dashboard_and_audit_are_server_authorized(self):

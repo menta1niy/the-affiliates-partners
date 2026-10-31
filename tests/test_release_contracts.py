@@ -50,6 +50,38 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(self.register(BOB, first)[0], 400)
         self.assertEqual(self.register(BOB, second)[0], 200)
 
+    def test_unattested_client_code_does_not_assign_source(self):
+        invite = self.owner_invite()
+        status, before = self.as_user('/api/session', ALICE)
+        self.assertEqual(status, 200)
+        self.assertNotIn('source_info', before)
+        status, ignored = self.as_user('/api/register', ALICE, invite_code=invite, consent=True)
+        self.assertEqual(status, 400, ignored)
+        self.assertEqual(self.as_user('/api/session', ALICE)[1]['status'], 'invited')
+        with sqlite3.connect(self.db_path) as connection:
+            self.assertIsNone(connection.execute('SELECT code FROM pending_starts WHERE telegram_id=?', (ALICE,)).fetchone())
+        self.assertEqual(self.webhook_start(94001, ALICE, invite)[0], 200)
+        status, attested = self.as_user('/api/session', ALICE)
+        self.assertEqual(status, 200)
+        self.assertEqual(attested['source_info']['inviter_id'], OWNER)
+        status, registered = self.as_user('/api/register', ALICE, consent=True)
+        self.assertEqual(status, 200, registered)
+        self.assertEqual(registered['user']['source'], 'agency')
+
+    def test_expired_one_use_source_can_be_replaced_by_verified_start(self):
+        first, replacement = self.owner_invite(), self.owner_invite()
+        self.assertEqual(self.webhook_start(94011, ALICE, first)[0], 200)
+        self.assertEqual(self.register(BOB, first)[0], 200)
+        self.assertEqual(self.webhook_start(94012, ALICE, replacement)[0], 200)
+        status, session = self.as_user('/api/session', ALICE)
+        self.assertEqual(status, 200)
+        self.assertEqual(session['source_info']['inviter_id'], OWNER)
+        status, registered = self.as_user('/api/register', ALICE, consent=True)
+        self.assertEqual(status, 200, registered)
+        with sqlite3.connect(self.db_path) as connection:
+            self.assertIsNone(connection.execute('SELECT code FROM pending_starts WHERE telegram_id=?', (ALICE,)).fetchone())
+            self.assertEqual(connection.execute('SELECT active FROM invitations WHERE code=?', (replacement,)).fetchone()[0], 0)
+
     def test_signed_start_param_first_source_without_webhook(self):
         """Signed direct Mini App launch must capture immutable first valid source."""
         self.assertEqual(self.register(ALICE, self.owner_invite())[0], 200)

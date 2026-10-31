@@ -82,7 +82,10 @@ class Handler(BaseHTTPRequestHandler):
             owner = admin_id()
             if route == "/api/session":
                 profile = db.session(user, owner)
+                pending_source = profile.pop("pending_source_info", None)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
+                if pending_source:
+                    result["source_info"] = pending_source
             elif route == "/api/register":
                 if body.get("consent") is not True:
                     return self.send_json(400, {"error": "Необходимо согласие"})

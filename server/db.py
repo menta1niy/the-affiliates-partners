@@ -144,11 +144,25 @@ def session(identity, owner_id):
         row = get_user(conn, identity["id"])
         if row is None:
             capture_signed_start(conn, identity)
+            pending = conn.execute(
+                "SELECT i.kind,i.issuer_id FROM pending_starts p "
+                "JOIN invitations i ON i.code=p.code "
+                "JOIN users issuer ON issuer.id=i.issuer_id "
+                "WHERE p.telegram_id=? AND i.active=1 AND issuer.status='active'",
+                (identity["id"],),
+            ).fetchone()
         if row is not None:
             conn.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?",
                          (identity["first_name"], identity["last_name"], identity["username"], identity["id"]))
             row = get_user(conn, identity["id"])
-        return public_user(row) if row else {**identity, "role": "lead", "status": "invited", "agency_id": None, "referrer_id": None, "manager_id": None}
+        return public_user(row) if row else {
+            **identity, "role": "lead", "status": "invited", "agency_id": None,
+            "referrer_id": None, "manager_id": None,
+            "pending_source_info": ({
+                "description": "Приглашение от агентства" if pending["kind"] == "agency" else "Реферальное приглашение",
+                "inviter_id": pending["issuer_id"],
+            } if pending else None),
+        }
 
 
 def register(identity, owner_id, invitation_code):
@@ -162,7 +176,11 @@ def register(identity, owner_id, invitation_code):
         pending = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         if pending and invitation_code and invitation_code != pending["code"]:
             raise Problem(409, "Источник приглашения уже закреплён")
-        code = pending["code"] if pending else invitation_code
+        # A client-supplied code is only a consistency check. Source must first
+        # be attested by Telegram /start or HMAC-signed Mini App start_param.
+        if not pending:
+            raise Problem(400, "Откройте ссылку приглашения через Telegram")
+        code = pending["code"]
         if not isinstance(code, str) or not CODE_PATTERN.fullmatch(code):
             raise Problem(400, "Требуется действительное приглашение")
         invite = conn.execute("SELECT * FROM invitations WHERE code=? AND active=1", (code,)).fetchone()
@@ -245,6 +263,18 @@ def capture_signed_start(conn, identity):
 def capture_pending_source(conn, sender_id, code):
     if get_user(conn, sender_id) is not None:
         return
+    # A one-time agency code may expire after it was captured but before the
+    # candidate registers. In that case allow a new *verified* first valid code.
+    previous = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (sender_id,)).fetchone()
+    if previous:
+        eligible = conn.execute(
+            "SELECT 1 FROM invitations i JOIN users u ON u.id=i.issuer_id "
+            "WHERE i.code=? AND i.active=1 AND u.status='active'",
+            (previous["code"],),
+        ).fetchone()
+        if eligible:
+            return
+        conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (sender_id,))
     invitation = conn.execute(
         "SELECT i.kind,i.issuer_id,u.status FROM invitations i "
         "JOIN users u ON u.id=i.issuer_id WHERE i.code=? AND i.active=1",
