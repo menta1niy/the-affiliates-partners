@@ -7,6 +7,7 @@ import time
 from urllib.parse import parse_qsl
 
 MAX_AGE = 86400
+START_CODE_PATTERN = re.compile(r"^(?:ag|ref)_[A-Za-z0-9_-]{8,48}$")
 
 
 def verify_init_data(data, token, now=None):
@@ -37,11 +38,15 @@ def verify_init_data(data, token, now=None):
             return None
         if not 0 < user["id"] <= 9223372036854775807:
             return None
-        return {
+        normalized = {
             "id": user["id"],
             "first_name": str(user.get("first_name") or "Партнёр")[:120],
             "last_name": str(user.get("last_name") or "")[:120],
             "username": str(user.get("username") or "")[:120],
         }
+        start_param = fields.get("start_param")
+        if isinstance(start_param, str) and START_CODE_PATTERN.fullmatch(start_param):
+            normalized["start_param"] = start_param
+        return normalized
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return None

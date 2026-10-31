@@ -84,10 +84,10 @@
     $("status-pill").dataset.status=state.key;
     text("profile-name",[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username);
     text("profile-id",user.id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
-    const source = session.source_info || session.attribution || session.invitation || (user.referrer_id ? {inviter_id:user.referrer_id,description:"Реферальное приглашение"} : user.agency_id ? {inviter_id:user.agency_id,description:"Приглашение от агентства"} : {});
+    const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение",inviter_id:user.referrer_id} : user.source==="agency" ? {description:"Приглашение от агентства",inviter_id:user.agency_id} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
-    text("source-details",typeof source === "object" ? [source.description,source.inviter_id ? "ID: " + source.inviter_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
+    text("source-details",typeof source === "object" ? [source.description,source.inviter_id ? "Пригласивший ID: " + source.inviter_id : "",user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     renderOffers(session,state.key);
     if (["approved","active"].includes(state.key)) loadReferral(); else show("referral-panel",false);
@@ -112,10 +112,17 @@
     event.preventDefault();error("");
     const button=$("register-submit");button.disabled=true;
     try {
-      await api("/register",{invite_code:$("invite-code").value.trim(),consent:$("consent").checked});
+      const code=$("invite-code").value.trim();
+      await api("/register",{...(code?{invite_code:code}:{}),consent:$("consent").checked});
       text("registration-message","Заявка отправлена.");
       await refresh();
-    } catch(e) {text("registration-message",e.message);} finally {button.disabled=false;}
+    } catch(e) {
+      text("registration-message",e.message);
+      if(e.message.includes("Источник приглашения уже закреплён")) {
+        $("invite-code").value="";
+        text("registration-message", "Первый источник уже закреплён ботом. Поле очищено. Отправьте заявку повторно, чтобы использовать сохранённый источник.");
+      }
+    } finally {button.disabled=false;}
   });
   $("copy-referral").addEventListener("click",async () => {
     const link=$("referral-link").value;
@@ -129,7 +136,8 @@
   });
   $("refresh").addEventListener("click",refresh);
   try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#111310");} catch {}
-  const start = tg?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("startapp") || "";
-  if (/^[a-zA-Z0-9_-]{1,128}$/.test(start)) $("invite-code").value=start;
+  const initParams=new URLSearchParams(initData());
+  const start = initParams.get("start_param") || new URLSearchParams(location.search).get("tgWebAppStartParam") || new URLSearchParams(location.search).get("startapp") || tg?.initDataUnsafe?.start_param || "";
+  if (/^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(start)) $("invite-code").value=start;
   refresh();
 })();

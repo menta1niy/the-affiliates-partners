@@ -31,7 +31,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         route = urlsplit(self.path).path
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/admin/invitations",
-                  "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit",
+                  "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
@@ -110,6 +110,9 @@ class Handler(BaseHTTPRequestHandler):
                     body.get("role"), body.get("clear_manager") is True,
                 )
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
+            elif route == "/api/admin/attribution":
+                result = db.correct_attribution(user["id"], owner, body.get("user_id"), body.get("source"),
+                                                body.get("referrer_id"), body.get("agency_id"), body.get("reason", ""))
             else:
                 result = {"events": db.audit_events(user["id"], owner)}
             return self.send_json(200, result)

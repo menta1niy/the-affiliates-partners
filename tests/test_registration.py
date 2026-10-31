@@ -33,11 +33,13 @@ BOB = 721002
 CAROL = 721003
 
 
-def init_data(uid, *, username=None, age=0):
+def init_data(uid, *, username=None, age=0, start_param=None):
     fields = {
         "auth_date": str(int(time.time()) - age),
         "user": json.dumps({"id": uid, "first_name": "Test", "username": username or f"test{uid}"}, separators=(",", ":")),
     }
+    if start_param is not None:
+        fields["start_param"] = start_param
     secret = hmac.new(b"WebAppData", TOKEN.encode(), hashlib.sha256).digest()
     check = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
     fields["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()

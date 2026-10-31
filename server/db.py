@@ -142,6 +142,8 @@ def session(identity, owner_id):
     with transaction() as conn:
         ensure_owner(conn, owner_id)
         row = get_user(conn, identity["id"])
+        if row is None:
+            capture_signed_start(conn, identity)
         if row is not None:
             conn.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?",
                          (identity["first_name"], identity["last_name"], identity["username"], identity["id"]))
@@ -156,6 +158,7 @@ def register(identity, owner_id, invitation_code):
         existing = get_user(conn, identity["id"])
         if existing:
             return public_user(existing)
+        capture_signed_start(conn, identity)
         pending = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         if pending and invitation_code and invitation_code != pending["code"]:
             raise Problem(409, "Источник приглашения уже закреплён")
@@ -232,6 +235,28 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
         return {"code": code, "invite_code": code, "assignee_id": assignee}
 
 
+def capture_signed_start(conn, identity):
+    """Store the first eligible HMAC-verified Mini App start_param."""
+    code = identity.get("start_param")
+    if isinstance(code, str) and CODE_PATTERN.fullmatch(code):
+        capture_pending_source(conn, identity["id"], code)
+
+
+def capture_pending_source(conn, sender_id, code):
+    if get_user(conn, sender_id) is not None:
+        return
+    invitation = conn.execute(
+        "SELECT i.kind,i.issuer_id,u.status FROM invitations i "
+        "JOIN users u ON u.id=i.issuer_id WHERE i.code=? AND i.active=1",
+        (code,),
+    ).fetchone()
+    if invitation and invitation["status"] == "active" and (
+        invitation["kind"] != "referral" or invitation["issuer_id"] != sender_id
+    ):
+        conn.execute("INSERT OR IGNORE INTO pending_starts(telegram_id,code,updated_at) VALUES(?,?,?)",
+                     (sender_id, code, int(time.time())))
+
+
 def record_start(update_id, sender_id, code):
     initialize()
     with transaction() as conn:
@@ -239,18 +264,7 @@ def record_start(update_id, sender_id, code):
         if inserted.rowcount == 0:
             return False
         if isinstance(code, str) and CODE_PATTERN.fullmatch(code):
-            # An invalid first /start must not capture the user's attribution
-            # and prevent their first actual valid invitation from working.
-            invitation = conn.execute(
-                "SELECT i.kind,i.issuer_id,u.status FROM invitations i "
-                "JOIN users u ON u.id=i.issuer_id WHERE i.code=? AND i.active=1",
-                (code,),
-            ).fetchone()
-            if invitation and invitation["status"] == "active" and (
-                invitation["kind"] != "referral" or invitation["issuer_id"] != sender_id
-            ):
-                conn.execute("INSERT OR IGNORE INTO pending_starts(telegram_id,code,updated_at) VALUES(?,?,?)",
-                             (sender_id, code, int(time.time())))
+            capture_pending_source(conn, sender_id, code)
         return True
 
 
@@ -267,6 +281,8 @@ def permitted_target(conn, staff, target):
         raise Problem(404, "Пользователь не найден")
     if staff["role"] == "staff" and target["manager_id"] != staff["id"]:
         raise Problem(403, "Пользователь не закреплён за вами")
+    if staff["role"] == "staff" and target["role"] not in ("lead", "referrer"):
+        raise Problem(403, "Недостаточно прав")
     if staff["role"] == "admin" and target["role"] in ("owner", "admin"):
         raise Problem(403, "Недостаточно прав")
 
@@ -296,6 +312,8 @@ def decision(actor, owner_id, target_id, choice, reason=""):
         permitted_target(conn, staff, target)
         if target["role"] == "owner":
             raise Problem(403, "Владельца нельзя модерировать")
+        if staff["role"] == "staff" and target["status"] == "blocked":
+            raise Problem(403, "Снять блокировку может администратор")
         status = choice
         if target["status"] != status or target["decision_reason"] != reason:
             conn.execute("UPDATE users SET status=?,decision_reason=?,updated_at=? WHERE id=?", (status, reason, int(time.time()), target_id))
@@ -316,6 +334,8 @@ def assign(actor, owner_id, target_id, manager_id=None, role=None, clear_manager
         permitted_target(conn, staff, target)
         if target_id == owner_id or target["role"] == "owner":
             raise Problem(403, "Владельца нельзя изменить")
+        if target["status"] != "active" and role in ("staff", "admin"):
+            raise Problem(409, "Сначала подтвердите пользователя")
         if role is not None and (role not in ("lead", "referrer", "staff", "admin") or (role == "admin" and staff["role"] != "owner")):
             raise Problem(403, "Недопустимая роль")
         if clear_manager and manager_id is not None:
@@ -344,6 +364,58 @@ def assign(actor, owner_id, target_id, manager_id=None, role=None, clear_manager
                      (new_role, selected_manager, int(time.time()), target_id))
         audit(conn, actor, "assign", target_id, "role=" + new_role + ";manager=" + str(manager_id))
         return public_user(get_user(conn, target_id))
+
+
+def correct_attribution(actor, owner_id, target_id, source, referrer_id=None, agency_id=None, reason=""):
+    """Exceptional owner-only correction; ordinary registration remains immutable."""
+    if source not in ("agency", "referral") or not isinstance(reason, str) or not reason.strip() or len(reason) > 500:
+        raise Problem(400, "Укажите источник и причину исправления")
+    if type(target_id) is not int or target_id <= 0:
+        raise Problem(400, "Неверный пользователь")
+    initialize()
+    with transaction() as conn:
+        ensure_owner(conn, owner_id)
+        operator = get_user(conn, actor)
+        if actor != owner_id or not operator or operator["role"] != "owner" or operator["status"] != "active":
+            raise Problem(403, "Исправление источника доступно только владельцу")
+        target = get_user(conn, target_id)
+        if not target or target["role"] == "owner" or target["consent_at"] is None or target["source"] not in ("agency", "referral"):
+            raise Problem(404, "Зарегистрированный участник не найден")
+        if source == "referral":
+            if agency_id is not None or type(referrer_id) is not int or referrer_id <= 0 or referrer_id == target_id:
+                raise Problem(400, "Неверный реферер")
+            referrer = get_user(conn, referrer_id)
+            if not referrer or referrer["status"] != "active" or referrer["role"] not in ("referrer", "staff", "admin", "owner"):
+                raise Problem(400, "Реферер должен быть активным участником с правом приглашать")
+            # Referral attribution inherits the referrer's agency. It may not
+            # independently carry a client-selected agency or create cycles.
+            chain = {target_id}
+            cursor = referrer
+            while cursor is not None:
+                if cursor["id"] in chain:
+                    raise Problem(409, "Циклическая реферальная связь")
+                chain.add(cursor["id"])
+                cursor = get_user(conn, cursor["referrer_id"]) if cursor["referrer_id"] else None
+            resolved_agency = referrer["agency_id"]
+            if resolved_agency is None and referrer["role"] in ("owner", "admin", "staff"):
+                resolved_agency = referrer_id
+            resolved_referrer = referrer_id
+        else:
+            if referrer_id is not None or type(agency_id) is not int or agency_id <= 0 or agency_id == target_id:
+                raise Problem(400, "Неверное агентство")
+            agency = get_user(conn, agency_id)
+            if not agency or agency["status"] != "active" or agency["role"] not in ("owner", "admin", "staff"):
+                raise Problem(400, "Ответственный агентства не найден")
+            resolved_agency, resolved_referrer = agency_id, None
+        previous = (target["source"], target["agency_id"], target["referrer_id"])
+        current = (source, resolved_agency, resolved_referrer)
+        if previous == current:
+            return {"user": public_user(target), "changed": False}
+        conn.execute("UPDATE users SET source=?,agency_id=?,referrer_id=?,updated_at=? WHERE id=?",
+                     (source, resolved_agency, resolved_referrer, int(time.time()), target_id))
+        audit(conn, actor, "attribution_correction", target_id,
+              f"old={previous};new={current};reason={reason.strip()}")
+        return {"user": public_user(get_user(conn, target_id)), "changed": True}
 
 
 def audit_events(actor, owner_id):

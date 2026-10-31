@@ -22,7 +22,7 @@
   function show(id,value){$(id).hidden=!value;}
   function error(message){$("admin-error").textContent=message;show("admin-error",!!message);}
   function notice(message){$("admin-notice").textContent=message;show("admin-notice",!!message);}
-  function number(value){return Number.isFinite(Number(value))?new Intl.NumberFormat("ru-RU").format(Number(value)):"—";}
+  function number(value){return value!==null && value!==undefined && Number.isFinite(Number(value))?new Intl.NumberFormat("ru-RU").format(Number(value)):"—";}
   function personName(user){return [user.first_name,user.last_name].filter(Boolean).join(" ") || user.name || (user.username ? "@"+user.username : "Без имени");}
   function roleOf(user){return user.role || "lead";}
   function statusOf(user){return user.status || "pending";}
@@ -49,16 +49,41 @@
   }
   async function assign(user) {
     const id=Number(user.id || user.user_id);
-    const role=window.prompt("Роль: admin, staff, referrer, lead",roleOf(user));
+    const role=window.prompt("Роль: admin, staff, referrer, lead (пусто — сохранить текущую)", "");
     if (role===null) return;
     const normalized=role.trim().toLowerCase();
-    if (!["admin","staff","referrer","lead"].includes(normalized)){error("Недопустимая роль.");return;}
-    const input=window.prompt("Telegram ID менеджера (пусто — без менеджера)",String(user.manager_id || ""));
+    if (normalized && !["admin","staff","referrer","lead"].includes(normalized)){error("Недопустимая роль.");return;}
+    if (normalized==="admin" && state.role!=="owner"){error("Назначение администратора доступно только владельцу.");return;}
+    const input=window.prompt("Менеджер: пусто — сохранить текущего; ID — назначить; CLEAR — снять назначение", "");
     if(input===null)return;
     const managerId=input.trim();
-    if(managerId && !/^[0-9]+$/.test(managerId)){error("Telegram ID должен содержать только цифры.");return;}
-    await api("/admin/assign",{user_id:id,role:normalized,...(managerId?{manager_id:Number(managerId)}:{clear_manager:true})});
+    if(managerId && managerId!=="CLEAR" && !/^[0-9]+$/.test(managerId)){error("Введите Telegram ID либо CLEAR.");return;}
+    const update={user_id:id,...(normalized?{role:normalized}:{}),...(managerId==="CLEAR"?{clear_manager:true}:managerId?{manager_id:Number(managerId)}:{})};
+    if(Object.keys(update).length===1){notice("Назначение оставлено без изменений.");return;}
+    await api("/admin/assign",update);
     notice("Назначение обновлено для "+personName(user));await loadDashboard();
+  }
+  async function correctSource(user) {
+    const userId=Number(user.id || user.user_id);
+    if (!Number.isSafeInteger(userId) || userId <= 0 || !["agency","referral"].includes(user.source)) {
+      error("Исправить источник можно только у зарегистрированного участника.");
+      return;
+    }
+    const source=window.prompt("Источник: agency или referral",user.source || "agency");
+    if(source===null)return;
+    const normalized=source.trim().toLowerCase();
+    if(!["agency","referral"].includes(normalized)){error("Источник должен быть agency или referral.");return;}
+    const field=normalized==="agency"?"agency_id":"referrer_id";
+    const sourceId=window.prompt("Telegram ID "+(normalized==="agency"?"агентства":"реферера")+" (обязателен)",String(user[field] || ""));
+    if(sourceId===null)return;
+    if(!/^[1-9][0-9]*$/.test(sourceId.trim()) || !Number.isSafeInteger(Number(sourceId)) || Number(sourceId)===userId){error("Укажите корректный Telegram ID другого участника.");return;}
+    const reason=window.prompt("Причина исправления источника (обязательна, фиксируется в журнале):");
+    if(reason===null)return;
+    if(!reason.trim() || reason.trim().length>500){error("Причина должна содержать от 1 до 500 символов.");return;}
+    if(!window.confirm("Исправить источник для Telegram ID "+userId+"?"))return;
+    const result=await api("/admin/attribution",{user_id:userId,source:normalized,[field]:Number(sourceId),reason:reason.trim()});
+    notice(result.changed===false?"Источник уже соответствует указанным данным.":"Источник обновлён для "+personName(user));
+    await loadDashboard();
   }
   function renderTable(container,users,mode) {
     container.replaceChildren();
@@ -70,12 +95,15 @@
     const body=make("tbody");
     users.forEach(user=>{
       const row=make("tr");
-      row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",user.source==="referral"?"Реферал · "+(user.referrer_id||"—"):user.source==="agency"?"Агентство":"—"),make("td",user.manager_id || "—"));
+      const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
+      const ids=[user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Пригласил: "+user.referrer_id:""].filter(Boolean);
+      row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
       const actions=make("td");const group=make("div",undefined,"actions");
       if(statusOf(user)==="pending" || mode==="pending"){
         group.append(action("Одобрить",()=>decide(user,"approve")),action("Отклонить",()=>decide(user,"reject")));
       }
-      group.append(action("Роль / менеджер",()=>assign(user)));
+      if(state.role!=="staff" && roleOf(user)!=="owner")group.append(action("Роль / менеджер",()=>assign(user)));
+      if(state.role==="owner" && roleOf(user)!=="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
       if(statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
       actions.append(group);row.append(actions);body.append(row);
     });
@@ -105,7 +133,7 @@
         make("td",invite.kind==="agency"?"Агентство":"Реферал"),
         make("td",invite.code || "—"),
         make("td",invite.assignee_id || invite.issuer_id || "—"),
-        make("td",invite.active?"Ожидает":"Использовано/закрыто")
+        make("td",invite.active?"Действует":"Неактивно")
       );
       body.append(row);
     });
@@ -166,6 +194,7 @@
     try {
       const session=await api("/session");
       const role=session.role || session.user?.role;
+      state.role=role;
       const status=session.status || session.user?.status;
       if(!["owner","admin","staff"].includes(role) || (status && !["active","approved"].includes(status))){
         show("no-access",true);return;
