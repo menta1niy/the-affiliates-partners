@@ -74,9 +74,13 @@ PY
 fi
 
 mkdir -p "${TARGET}.releases"
+# DB backups stay private under umask 077. Built frontend files, however,
+# must be traversable and readable by the non-root Nginx worker.
+chmod 0755 "${TARGET}.releases"
 RELEASE="${TARGET}.releases/${REMOTE:0:12}"
 mkdir -p "$RELEASE"
 cp -a dist/. "$RELEASE/"
+chmod -R a+rX "$RELEASE"
 PREVIOUS_RELEASE=""
 if [ -L "$TARGET" ]; then
   PREVIOUS_RELEASE=$(readlink "$TARGET")
