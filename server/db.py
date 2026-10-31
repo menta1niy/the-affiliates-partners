@@ -36,9 +36,21 @@ def database_path():
     return Path(os.environ.get("PARTNERS_DB_PATH") or ROOT / "data" / "partners.sqlite3")
 
 
+def _env_bool(name):
+    value = os.environ.get(name, "").strip().lower()
+    if value not in ("", "true", "false"):
+        raise RuntimeError(f"{name} must be true or false")
+    return value == "true"
+
+
 def postgres_url():
-    """Opt-in only; SQLite remains the default and production is untouched."""
-    return os.environ.get("PARTNERS_DATABASE_URL", "").strip()
+    """Refuse accidental SQLite fallback following an explicit PG cutover."""
+    url = os.environ.get("PARTNERS_DATABASE_URL", "").strip()
+    required = _env_bool("PARTNERS_REQUIRE_POSTGRES")
+    ready = _env_bool("PARTNERS_PG_SCHEMA_READY")
+    if not url and (required or ready):
+        raise RuntimeError("PARTNERS_DATABASE_URL is required when PostgreSQL mode is enabled")
+    return url
 
 
 @contextmanager
@@ -82,10 +94,7 @@ def initialize():
         global _PG_INITIALIZED_URL
         from database.postgres import initialize as init_postgres, validate_ready
         url = postgres_url()
-        schema_mode = os.environ.get("PARTNERS_PG_SCHEMA_READY", "").strip().lower()
-        if schema_mode not in ("", "false", "true"):
-            raise RuntimeError("PARTNERS_PG_SCHEMA_READY must be true or false")
-        schema_ready = schema_mode == "true"
+        schema_ready = _env_bool("PARTNERS_PG_SCHEMA_READY")
         cache_key = (url, schema_ready)
         if cache_key != _PG_INITIALIZED_URL:
             with _PG_INIT_LOCK:
