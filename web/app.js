@@ -87,10 +87,10 @@
     $("status-pill").dataset.status=state.key;
     text("profile-name",[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username);
     text("profile-id",user.id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
-    const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение",inviter_id:user.referrer_id} : user.source==="agency" ? {description:"Приглашение от агентства",inviter_id:user.agency_id} : {});
+    const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
-    text("source-details",typeof source === "object" ? [source.description,source.inviter_id ? "Пригласивший ID: " + source.inviter_id : "",user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
+    text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     renderOffers(session,state.key);
     if (["approved","active"].includes(state.key)) loadReferral(); else show("referral-panel",false);
@@ -108,6 +108,8 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
+      show("account",false);show("register-panel",false);show("referral-panel",false);
+      show("connect",true);
       error(e.message);text("hero-status","Не удалось проверить вход");
     } finally {button.disabled=false;}
   }

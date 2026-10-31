@@ -115,7 +115,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
             elif route == "/api/admin/attribution":
                 result = db.correct_attribution(user["id"], owner, body.get("user_id"), body.get("source"),
-                                                body.get("referrer_id"), body.get("agency_id"), body.get("reason", ""))
+                                                body.get("referrer_id"), body.get("agency_id"), body.get("reason", ""),
+                                                body.get("introduced_by_id"))
             else:
                 result = {"events": db.audit_events(user["id"], owner)}
             return self.send_json(200, result)

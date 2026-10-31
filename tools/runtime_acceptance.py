@@ -167,9 +167,9 @@ def run():
             assert require(code, result, 200, "source correction idempotent")["changed"] is False
             code, result = as_user("/api/admin/dashboard", owner)
             assert len(require(code, result, 200, "owner pending queue")["pending"]) == 3
-            code, result = as_user("/api/admin/decision", owner, user_id=bob, decision="reject")
+            code, result = as_user("/api/admin/decision", owner, user_id=bob, decision="reject", reason="Synthetic validation")
             require(code, result, 200, "admin rejection")
-            code, result = as_user("/api/admin/decision", owner, user_id=carol, decision="block")
+            code, result = as_user("/api/admin/decision", owner, user_id=carol, decision="block", reason="Synthetic validation")
             require(code, result, 200, "admin blocking")
             code, result = as_user("/api/invitations/referral", carol)
             require(code, result, 403, "blocked lead denied referral")

@@ -2,7 +2,7 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
-  const state = {users:[],pending:[],invites:[],tab:"pending",role:""};
+  const state = {users:[],pending:[],invites:[],tab:"pending",role:"",actorId:null};
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   function initData() {
@@ -40,9 +40,11 @@
       reason=window.prompt(decision==="block"?"Причина блокировки:":"Причина отклонения:");
       if (reason===null) return;
       reason=reason.trim();
-      if (!reason) {error("Укажите причину решения.");return;}
+      if (!reason || reason.length>500) {error("Укажите причину решения от 1 до 500 символов.");return;}
     }
     if (decision==="block" && !window.confirm("Заблокировать пользователя "+id+"?")) return;
+    if (decision==="approve" && statusOf(user)==="blocked" && !window.confirm("Разблокировать пользователя "+id+" и восстановить активный статус?")) return;
+    if (decision==="approve" && statusOf(user)==="rejected" && !window.confirm("Повторно одобрить отклонённую заявку пользователя "+id+"?")) return;
     await api("/admin/decision",{user_id:id,decision,...(reason?{reason}:{})});
     notice("Решение сохранено для "+personName(user));
     await loadDashboard();
@@ -57,7 +59,7 @@
     const input=window.prompt("Менеджер: пусто — сохранить текущего; ID — назначить; CLEAR — снять назначение", "");
     if(input===null)return;
     const managerId=input.trim();
-    if(managerId && managerId!=="CLEAR" && !/^[0-9]+$/.test(managerId)){error("Введите Telegram ID либо CLEAR.");return;}
+    if(managerId && managerId!=="CLEAR" && (!/^[1-9][0-9]*$/.test(managerId) || !Number.isSafeInteger(Number(managerId)) || Number(managerId)===id)){error("Введите корректный Telegram ID другого пользователя либо CLEAR.");return;}
     const update={user_id:id,...(normalized?{role:normalized}:{}),...(managerId==="CLEAR"?{clear_manager:true}:managerId?{manager_id:Number(managerId)}:{})};
     if(Object.keys(update).length===1){notice("Назначение оставлено без изменений.");return;}
     await api("/admin/assign",update);
@@ -77,11 +79,19 @@
     const sourceId=window.prompt("Telegram ID "+(normalized==="agency"?"агентства":"реферера")+" (обязателен)",String(user[field] || ""));
     if(sourceId===null)return;
     if(!/^[1-9][0-9]*$/.test(sourceId.trim()) || !Number.isSafeInteger(Number(sourceId)) || Number(sourceId)===userId){error("Укажите корректный Telegram ID другого участника.");return;}
+    let introducedById;
+    if(normalized==="agency"){
+      const introduced=window.prompt("Фактически пригласивший: Telegram ID (необязательно; пусто — сохранить предложенный ID)",String(user.introduced_by_id || sourceId.trim()));
+      if(introduced===null)return;
+      const value=introduced.trim() || String(user.introduced_by_id || sourceId.trim());
+      if(!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value)===userId){error("Укажите корректный Telegram ID фактически пригласившего.");return;}
+      introducedById=Number(value);
+    }
     const reason=window.prompt("Причина исправления источника (обязательна, фиксируется в журнале):");
     if(reason===null)return;
     if(!reason.trim() || reason.trim().length>500){error("Причина должна содержать от 1 до 500 символов.");return;}
     if(!window.confirm("Исправить источник для Telegram ID "+userId+"?"))return;
-    const result=await api("/admin/attribution",{user_id:userId,source:normalized,[field]:Number(sourceId),reason:reason.trim()});
+    const result=await api("/admin/attribution",{user_id:userId,source:normalized,[field]:Number(sourceId),...(normalized==="agency"?{introduced_by_id:introducedById}:{}),reason:reason.trim()});
     notice(result.changed===false?"Источник уже соответствует указанным данным.":"Источник обновлён для "+personName(user));
     await loadDashboard();
   }
@@ -96,15 +106,21 @@
     users.forEach(user=>{
       const row=make("tr");
       const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
-      const ids=[user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Пригласил: "+user.referrer_id:""].filter(Boolean);
+      const ids=[user.introduced_by_id?"Пригласил: "+user.introduced_by_id:"",user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Реферер: "+user.referrer_id:""].filter(Boolean);
       row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
       const actions=make("td");const group=make("div",undefined,"actions");
-      if(statusOf(user)==="pending" || mode==="pending"){
+      const targetRole=roleOf(user);
+      const permitted=targetRole!=="owner" &&
+        !(state.role==="admin" && targetRole==="admin") &&
+        (state.role!=="staff" || (Number(user.manager_id)===state.actorId && ["lead","referrer"].includes(targetRole)));
+      if(permitted && statusOf(user)==="pending"){
         group.append(action("Одобрить",()=>decide(user,"approve")),action("Отклонить",()=>decide(user,"reject")));
       }
-      if(state.role!=="staff" && roleOf(user)!=="owner")group.append(action("Роль / менеджер",()=>assign(user)));
-      if(state.role==="owner" && roleOf(user)!=="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
-      if(statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
+      if(permitted && statusOf(user)==="rejected" && (state.role==="owner" || state.role==="admin"))group.append(action("Одобрить",()=>decide(user,"approve")));
+      if(permitted && statusOf(user)==="blocked" && (state.role==="owner" || state.role==="admin"))group.append(action("Разблокировать",()=>decide(user,"approve")));
+      if(permitted && state.role!=="staff")group.append(action("Роль / менеджер",()=>assign(user)));
+      if(permitted && state.role==="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
+      if(permitted && statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
       actions.append(group);row.append(actions);body.append(row);
     });
     table.append(body);container.append(table);
@@ -113,7 +129,7 @@
     const query=$("user-query").value.trim().toLowerCase();
     const filter=$("user-filter").value;
     const users=state.users.filter(user=>{
-      const haystack=[user.id,user.user_id,user.first_name,user.last_name,user.username,user.name].join(" ").toLowerCase();
+      const haystack=[user.id,user.user_id,user.first_name,user.last_name,user.username,user.name,user.role,user.manager_id,user.agency_id,user.referrer_id,user.introduced_by_id,user.source].join(" ").toLowerCase();
       return (!filter || statusOf(user)===filter) && (!query || haystack.includes(query));
     });
     renderTable($("users-list"),users,"users");
@@ -123,7 +139,7 @@
     root.replaceChildren();
     if(!state.invites.length){root.append(make("p","Предварительных приглашений пока нет.","empty"));return;}
     const table=make("table"),head=make("thead"),headRow=make("tr");
-    ["Кандидат","Источник","Код","Ответственный","Состояние"].forEach(value=>headRow.append(make("th",value)));
+    ["Кандидат","Источник","Код","Ответственный","Состояние","Ссылка"].forEach(value=>headRow.append(make("th",value)));
     head.append(headRow);table.append(head);
     const body=make("tbody");
     state.invites.forEach(invite=>{
@@ -135,6 +151,16 @@
         make("td",invite.assignee_id || invite.issuer_id || "—"),
         make("td",invite.active?"Действует":"Неактивно")
       );
+      const cell=make("td");
+      if(invite.active && typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
+        const link="https://t.me/affiliates_partners_bot?start="+encodeURIComponent(invite.code);
+        cell.append(action("Копировать",async()=>{
+          if(!navigator.clipboard?.writeText)throw new Error("Копирование недоступно: выделите код приглашения в таблице.");
+          await navigator.clipboard.writeText(link);
+          notice("Ссылка приглашения скопирована.");
+        }));
+      }
+      row.append(cell);
       body.append(row);
     });
     table.append(body);root.append(table);
@@ -175,6 +201,7 @@
     e.preventDefault();error("");const submit=$("invite-submit");submit.disabled=true;
     try {
       const id=$("assignee").value.trim();
+      if(id && (!/^[1-9][0-9]*$/.test(id) || !Number.isSafeInteger(Number(id))))throw new Error("Укажите корректный Telegram ID ответственного.");
       const candidateLabel=$("candidate-label").value.trim();
       const data=await api("/admin/invitations",{...(id?{assignee_id:Number(id)}:{}),candidate_label:candidateLabel});
       const code=data.invite_code || data.code;
@@ -195,6 +222,7 @@
       const session=await api("/session");
       const role=session.role || session.user?.role;
       state.role=role;
+      state.actorId=Number(session.user?.id);
       const status=session.status || session.user?.status;
       if(!["owner","admin","staff"].includes(role) || (status && !["active","approved"].includes(status))){
         show("no-access",true);return;

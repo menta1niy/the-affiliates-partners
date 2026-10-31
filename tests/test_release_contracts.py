@@ -28,7 +28,7 @@ class ReleaseContracts(unittest.TestCase):
         self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=ALICE, decision='active')[0], 200)
         self.assertEqual(self.as_user('/api/admin/assign', OWNER, user_id=ALICE, role='referrer')[0], 200)
         self.assertEqual(self.as_user('/api/invitations/referral', ALICE)[0], 200)
-        self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=ALICE, decision='blocked')[0], 200)
+        self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=ALICE, decision='blocked', reason='Policy violation')[0], 200)
         self.assertEqual(self.as_user('/api/invitations/referral', ALICE)[0], 403)
 
     def test_atomic_decision_rollback_when_outbox_fails(self):
