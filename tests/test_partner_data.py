@@ -6,6 +6,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from uuid import uuid4
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -59,6 +60,21 @@ class PartnerDataTests(unittest.TestCase):
         self.assertEqual(result["payments"]["available"], False)
         self.assertFalse(result["crmLinked"])
         self.assertEqual(result["crmLinkStatus"], "unlinked")
+        with app.db() as conn:
+            conn.execute("""INSERT INTO crm_partner_links(
+                telegram_id,workspace_id,blogger_id,verified,confirmed_at,mapping_version,check_version)
+                VALUES(?,?,?,?,?,?,?)""",
+                (uid,str(uuid4()),str(uuid4()),0,0,str(uuid4()),""))
+        self.assertEqual(self.post("/api/partner/data",uid)[1]["crmLinkStatus"],"pending")
+        with app.db() as conn:
+            conn.execute("UPDATE crm_partner_links SET verified=1 WHERE telegram_id=?",(uid,))
+        response = self.post("/api/partner/data",uid)[1]
+        self.assertEqual(response["crmLinkStatus"],"verified")
+        self.assertTrue(response["crmLinked"])
+        self.assertFalse(response["tracking"]["available"])
+        with app.db() as conn:
+            conn.execute("DELETE FROM crm_partner_links WHERE telegram_id=?",(uid,))
+        self.assertEqual(self.post("/api/partner/data",uid)[1]["crmLinkStatus"],"unlinked")
         self.assertFalse({"agency_rate","agency_profit","blogger_accrual"} & set(str(result).split()))
         self.assertEqual(self.post("/api/links/not-an-offer", uid)[0], 404)
         with app.db() as conn:
