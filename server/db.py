@@ -333,7 +333,14 @@ def register(identity, owner_id, invitation_code):
                 "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
                 "Статус: ожидает рассмотрения.")
         source_type = {"referral": "referrer", "agency": "agency", "blogger": "blogger"}[invite["kind"]]
-        source_partner_id = invite["blogger_uuid"] if invite["kind"] == "blogger" else f"{source_type}:{issuer['id']}"
+        # A staff-assigned agency invitation is employee-sourced traffic,
+        # even when an owner generated the link on their behalf. Keep the
+        # local invitation type stable for older clients while differentiating
+        # the authoritative CRM acquisition channel.
+        if invite["kind"] == "agency" and assignee["role"] == "staff":
+            source_type = "worker"
+        source_partner_id = (invite["blogger_uuid"] if invite["kind"] == "blogger"
+                             else f"{source_type}:{assignee['id'] if source_type == 'worker' else issuer['id']}")
         payload = {"name": (identity["first_name"] + " " + identity["last_name"]).strip() or str(identity["id"]),
                    "telegram_user_id": identity["id"], "telegram_username": identity["username"] or None,
                    "source_type": source_type, "source_partner_id": source_partner_id,

@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -51,6 +52,25 @@ class OutboundRegistrationTests(unittest.TestCase):
                          "VALUES(24,124,'Bob','lead','pending',1,1)")
         with self.assertRaises(db.Problem):
             db.receive_crm_event({"event_id": "no-consent", "type": "lead.bound", "telegram_id": 24, "crm_lead_id": "crm-24"})
+
+    def test_staff_assigned_agency_invitation_is_worker_source(self):
+        owner, staff, participant = 900001, 900002, 900003
+        with db.transaction() as conn:
+            db.ensure_owner(conn, owner)
+            now = int(time.time())
+            conn.execute("INSERT INTO users(id,first_name,role,status,agency_id,registered_at,updated_at) "
+                         "VALUES(?, 'Staff', 'staff', 'active', ?, ?, ?)", (staff, owner, now, now))
+        invite = db.invite(owner, owner, "agency", assignee=staff)["code"]
+        db.record_start(owner, participant, invite)
+        db.register({"id": participant, "first_name": "Test", "last_name": "", "username": ""}, owner, None)
+        with db.transaction() as conn:
+            payload = json.loads(conn.execute("SELECT payload FROM crm_registration_outbox WHERE telegram_id=?",
+                                              (participant,)).fetchone()["payload"])
+            lead = db.get_user(conn, participant)
+        self.assertEqual(payload["source_type"], "worker")
+        self.assertEqual(payload["source_partner_id"], f"worker:{staff}")
+        self.assertEqual(lead["manager_id"], staff)
+        self.assertEqual(lead["agency_id"], owner)
 
 
 if __name__ == "__main__":
