@@ -35,6 +35,114 @@ class TwoServicePostgresHTTP(unittest.TestCase):
     owner_invite = registration.HttpHarness.owner_invite
     webhook_start = registration.HttpHarness.webhook_start
 
+    def test_agency_referrer_signed_http_registration_first_attribution(self):
+        """Two non-blogger sources traverse the real Partners -> CRM HTTP route."""
+        crm_root = os.environ.get("CRM_BACKEND_ROOT")
+        pg_url = os.environ.get("TEST_DATABASE_URL")
+        if not crm_root or not pg_url:
+            self.skipTest("CRM_BACKEND_ROOT and TEST_DATABASE_URL required")
+        assert "127.0.0.1:55439" in pg_url and "e2e" in pg_url
+        sys.path.insert(0, str(Path(crm_root)))
+        os.environ["DATABASE_URL"] = pg_url
+        os.environ["PARTNERS_CRM_SHARED_SECRET"] = SECRET
+        os.environ["PARTNERS_INTEGRATION_SECRET"] = SECRET
+        os.environ["APP_ENV"] = "test"
+        import time
+        from uuid import uuid4
+        from urllib.error import HTTPError
+        import uvicorn
+        from sqlalchemy import select
+        from app.main import app
+        from app.core.database import SessionLocal
+        from app.models.user import User
+        from app.models.workspace import Workspace
+        from app.models.enums import WorkspaceKind
+        from app.models.lead import Lead
+        from app.models.finance import Conversion, ConversionPayout
+        from server import crm_registration, db
+        from server.integration import signature
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(128)
+        crm_port = sock.getsockname()[1]
+        server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan="off"))
+        server.install_signal_handlers = lambda: None
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: thread.join(timeout=4))
+        self.addCleanup(lambda: setattr(server, "should_exit", True))
+        with SessionLocal() as session:
+            owner = User(email=f"e2e-source-{uuid4()}@example.test", nickname="Synthetic",
+                         password_hash="synthetic-not-login")
+            session.add(owner)
+            session.flush()
+            workspace = Workspace(name="Synthetic source attribution", kind=WorkspaceKind.TEAM,
+                                  created_by=owner.id)
+            session.add(workspace)
+            session.commit()
+            workspace_id = workspace.id
+        endpoint = f"http://127.0.0.1:{crm_port}/api/v1/workspaces/{workspace_id}/integrations/partners/leads"
+
+        def send_signed_http(payload, _endpoint):
+            raw = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                             separators=(",", ":")).encode()
+            timestamp = int(time.time())
+            request = Request(endpoint, raw, {"Content-Type": "application/json",
+                              "X-TA-Timestamp": str(timestamp),
+                              "X-TA-Signature": signature(raw, timestamp, SECRET)}, method="POST")
+            try:
+                with urlopen(request, timeout=8) as response:
+                    self.assertEqual(response.status, 200)
+                    return json.load(response)["id"]
+            except HTTPError as exc:
+                raise AssertionError(f"CRM registration {exc.code}: {exc.read()!r}") from exc
+
+        # Agency invitation is personal; an owner may issue a reusable
+        # referral link. Both must keep their actual issuer.
+        self.assertEqual(self.register(ALICE, self.owner_invite())[0], 200)
+        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=ALICE,
+                                      decision="approve")[0], 200)
+        status, referral = self.as_user("/api/invitations/referral", OWNER)
+        self.assertEqual(status, 200, referral)
+        self.assertEqual(self.register(registration.BOB, referral["code"])[0], 200)
+        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=registration.BOB,
+                                      decision="approve")[0], 200)
+        expected = {ALICE: ("agency", f"agency:{OWNER}"),
+                    registration.BOB: ("referrer", f"referrer:{OWNER}")}
+        with db.transaction() as conn:
+            for telegram_id, (source_type, partner_id) in expected.items():
+                row = conn.execute("SELECT payload FROM crm_registration_outbox WHERE telegram_id=?",
+                                   (telegram_id,)).fetchone()
+                self.assertIsNotNone(row)
+                payload = json.loads(row["payload"])
+                self.assertEqual((payload["source_type"], payload["source_partner_id"]),
+                                 (source_type, partner_id))
+        with SessionLocal() as session:
+            finance_before = (session.query(Conversion).count(), session.query(ConversionPayout).count())
+        with patch.object(crm_registration, "endpoint", return_value=endpoint):
+            outcome = crm_registration.dispatch_once(sender=send_signed_http)
+        self.assertEqual(outcome, {"claimed": 2, "delivered": 2, "failed": 0})
+        with SessionLocal() as session:
+            originals = {}
+            for telegram_id, (source_type, partner_id) in expected.items():
+                lead = session.scalar(select(Lead).where(Lead.workspace_id == workspace_id,
+                                                       Lead.telegram_user_id == telegram_id))
+                self.assertIsNotNone(lead)
+                self.assertEqual((lead.source_type, lead.source_partner_id), (source_type, partner_id))
+                self.assertIsNone(lead.blogger_id)
+                originals[telegram_id] = lead.id
+
+        # Later valid invitations cannot rewrite either source in CRM.
+        self.assertEqual(self.register(ALICE, referral["code"])[0], 200)
+        self.assertEqual(self.register(registration.BOB, self.owner_invite())[0], 200)
+        with SessionLocal() as session:
+            for telegram_id, (source_type, partner_id) in expected.items():
+                lead = session.get(Lead, originals[telegram_id])
+                self.assertEqual((lead.source_type, lead.source_partner_id), (source_type, partner_id))
+            self.assertEqual((session.query(Conversion).count(), session.query(ConversionPayout).count()),
+                             finance_before)
+
     def test_consent_registration_binding_offers_and_tasks(self):
         crm_root = os.environ.get("CRM_BACKEND_ROOT")
         pg_url = os.environ.get("TEST_DATABASE_URL")
