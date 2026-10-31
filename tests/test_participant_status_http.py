@@ -31,6 +31,19 @@ class ParticipantStatusHTTP(signed.CRMSyncHTTP):
         self.assertEqual(self.as_user('/api/status', identities.ALICE, paid=True,
                                       agency_rate='999999')[1], visible)
 
+        # Subsequent confirmed financial events must replace the participant's
+        # snapshot without exposing another user's data or internal rates.
+        changed = {**state, 'event_id': 'status:2', 'lead_payouts': [
+            {**state['lead_payouts'][0], 'status': 'paid', 'reversed': True}]}
+        self.assertEqual(self.event(changed), (200, {'changed': True}))
+        status, updated = self.as_user('/api/status', identities.ALICE)
+        self.assertEqual(status, 200)
+        self.assertEqual(updated['lead_payouts'][0]['status'], 'paid')
+        self.assertTrue(updated['lead_payouts'][0]['reversed'])
+        self.assertNotIn('agency_rate', str(updated))
+        self.assertEqual(self.as_user('/api/status', identities.BOB)[1],
+                         {'applications': [], 'lead_payouts': []})
+
 
 if __name__ == '__main__':
     unittest.main()
