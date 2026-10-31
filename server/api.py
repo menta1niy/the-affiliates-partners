@@ -11,6 +11,7 @@ from server.bot import response_for
 from server.settings import admin_id, bot_token, webhook_secret
 from server import db
 from server import integration
+from server import tasks
 
 
 def storage_error(exc):
@@ -48,7 +49,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_crm_event()
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations",
                   "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
-                  "/api/telegram/webhook", "/api/offers"}
+                  "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -152,6 +153,11 @@ class Handler(BaseHTTPRequestHandler):
                 if get_offers is None:
                     return self.send_json(503, {"error": "Офферы CRM пока недоступны"})
                 result = {"offers": get_offers(user["id"], owner)}
+            elif route == "/api/tasks":
+                result = tasks.list_tasks(user["id"], owner)
+            elif route == "/api/tasks/report":
+                result = tasks.report_action(user["id"], owner, body.get("offer_id"),
+                                             body.get("action"), body.get("note", ""))
             elif route == "/api/admin/decision":
                 if type(body.get("user_id")) is not int or body["user_id"] <= 0:
                     return self.send_json(400, {"error": "Некорректный пользователь"})

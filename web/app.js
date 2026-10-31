@@ -7,6 +7,7 @@
   let current = null;
   let referralRequest = 0;
   let offersRequest = 0;
+  const actions={opened:"Открыл предложение",started:"Приступил к заданию",submitted:"Отправил заявку"};
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -61,13 +62,26 @@
       offers.forEach(offer => {
         if (!offer || typeof offer !== "object") return;
         const item = document.createElement("article");item.className="offer-item";
-        const title = document.createElement("h3");title.textContent=String(offer.name || "Предложение без названия");
+        const title = document.createElement("h3");title.textContent=String(offer.name || offer.title || "Предложение без названия");
         const summary = document.createElement("p");summary.textContent=String(offer.instructions || "Инструкция CRM не указана.");
         item.append(title,summary);
         const details=[offer.advertiser ? "Рекламодатель: "+offer.advertiser : "",offer.type ? "Тип: "+offer.type : "",offer.target_action ? "Целевое действие: "+offer.target_action : ""].filter(Boolean);
         if(details.length){const info=document.createElement("p");info.className="muted";info.textContent=details.join(" · ");item.append(info);}
         if (typeof offer.referral_url === "string" && /^https:\/\//i.test(offer.referral_url)) {
           const link=document.createElement("a");link.className="btn ghost";link.textContent="Перейти к предложению ↗";link.href=offer.referral_url;link.target="_blank";link.rel="noopener noreferrer";item.append(link);
+        }
+        if(offer.id !== undefined && offer.id !== null){
+          const form=document.createElement("form");form.className="task-report";
+          const selection=document.createElement("select");selection.setAttribute("aria-label","Действие по заданию");
+          Object.entries(actions).forEach(([value,label])=>{const option=document.createElement("option");option.value=value;option.textContent=label;selection.append(option);});
+          const note=document.createElement("input");note.placeholder="Комментарий (необязательно)";note.maxLength=1000;note.setAttribute("aria-label","Комментарий к действию");
+          const submit=document.createElement("button");submit.className="btn primary";submit.type="submit";submit.textContent="Сообщить о действии";
+          const feedback=document.createElement("p");feedback.className="muted";feedback.setAttribute("role","status");
+          form.append(selection,note,submit,feedback);
+          form.addEventListener("submit",async event=>{event.preventDefault();submit.disabled=true;feedback.textContent="Отправляем отчёт…";
+            try{await api("/tasks/report",{offer_id:String(offer.id),action:selection.value,note:note.value});feedback.textContent="Отчёт принят. Подтверждение результата ожидается от CRM.";note.value="";await loadTasks();}
+            catch(e){feedback.textContent="Не удалось отправить отчёт: "+e.message;}finally{submit.disabled=false;}});
+          item.append(form);
         }
         list.append(item);
       });
@@ -85,6 +99,24 @@
     } catch(e) {
       if(request===offersRequest)offerMessage("Не удалось получить предложения из CRM: "+e.message+". Обновите данные для повторной попытки.");
     }
+  }
+  function renderHistory(history){
+    const container=$("task-history");container.replaceChildren();
+    if(!history.length){const p=document.createElement("p");p.className="muted";p.textContent="Отправленных отчётов пока нет.";container.append(p);return;}
+    history.forEach(record=>{const item=document.createElement("div");item.className="history-entry";
+      const heading=document.createElement("strong");heading.textContent=actions[record.action]||"Действие участника";
+      const info=document.createElement("p");info.className="muted";info.textContent="Задание: "+record.offer_id+" · "+new Date(record.created_at*1000).toLocaleString("ru-RU")+" · Отчёт отправлен";
+      item.append(heading,info);if(record.note){const note=document.createElement("p");note.textContent=record.note;item.append(note);}container.append(item);
+    });
+  }
+  async function loadTasks(){
+    const request=++offersRequest;
+    offerMessage("Загружаем задания из CRM…");
+    $("task-history").textContent="Загружаем историю…";
+    try{const result=await api("/tasks");if(request!==offersRequest)return;
+      if(!Array.isArray(result.tasks)||!Array.isArray(result.history))throw new Error("Неполный ответ сервера");
+      renderOffers(result.tasks);renderHistory(result.history);
+    }catch(e){if(request===offersRequest){offerMessage("Не удалось загрузить задания: "+e.message);$("task-history").textContent="История временно недоступна.";}}
   }
   function render(session) {
     current = session;
@@ -109,8 +141,8 @@
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
-    if (["approved","active"].includes(state.key))loadOffers();
-    else {++offersRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");}
+    if (["approved","active"].includes(state.key))loadTasks();
+    else {++offersRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   async function refresh() {
