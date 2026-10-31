@@ -7,7 +7,9 @@
   let current = null;
   let referralRequest = 0;
   let offersRequest = 0;
+  let crmStatusRequest = 0;
   const actions={opened:"Открыл предложение",started:"Приступил к заданию",submitted:"Отправил заявку"};
+  const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Получено",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -118,6 +120,33 @@
       renderOffers(result.tasks);renderHistory(result.history);
     }catch(e){if(request===offersRequest){offerMessage("Не удалось загрузить задания: "+e.message);$("task-history").textContent="История временно недоступна.";}}
   }
+  function renderCrmStatus(result){
+    const container=$("crm-state");container.replaceChildren();
+    const applications=result.applications,payouts=result.lead_payouts;
+    if(!applications.length&&!payouts.length){const p=document.createElement("p");p.className="muted";p.textContent="CRM пока не передала статусы заявок или подтверждённые выплаты.";container.append(p);return;}
+    for(const item of applications){
+      const row=document.createElement("div");row.className="history-entry";
+      const heading=document.createElement("strong");heading.textContent=applicationStageLabels[item.stage]||"Статус CRM";
+      const details=document.createElement("p");details.className="muted";details.textContent="Оффер: "+String(item.offer_id||"—");
+      row.append(heading,details);container.append(row);
+    }
+    for(const payout of payouts){
+      const row=document.createElement("div");row.className="history-entry";
+      const heading=document.createElement("strong");
+      heading.textContent=payout.reversed?"Начисление отменено CRM":payout.status==="paid"?"Выплата отмечена CRM":"Вознаграждение подтверждено CRM";
+      const details=document.createElement("p");details.className="muted";
+      details.textContent="Оффер: "+String(payout.offer_id||"—")+" · Сумма: "+String(payout.amount||"0")+" ₽";
+      row.append(heading,details);container.append(row);
+    }
+  }
+  async function loadCrmStatus(){
+    const request=++crmStatusRequest;
+    $("crm-state").textContent="Загружаем подтверждения CRM…";
+    try{const result=await api("/status");if(request!==crmStatusRequest)return;
+      if(!Array.isArray(result.applications)||!Array.isArray(result.lead_payouts))throw new Error("Неполный ответ CRM");
+      renderCrmStatus(result);
+    }catch(e){if(request===crmStatusRequest)$("crm-state").textContent="Не удалось загрузить статусы CRM: "+e.message;}
+  }
   function render(session) {
     current = session;
     const user = session.user || {};
@@ -141,8 +170,8 @@
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
-    if (["approved","active"].includes(state.key))loadTasks();
-    else {++offersRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";}
+    if (["approved","active"].includes(state.key)){loadTasks();loadCrmStatus();}
+    else {++offersRequest;++crmStatusRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   async function refresh() {
@@ -150,7 +179,7 @@
     error("");
     try {
       if (!initData()) {
-        ++offersRequest;
+        ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
         show("connect",true);show("account",false);show("register-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
@@ -160,7 +189,7 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
-      ++offersRequest;
+      ++offersRequest;++crmStatusRequest;
       ++referralRequest;
       show("account",false);show("register-panel",false);show("referral-panel",false);
       show("connect",true);

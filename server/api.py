@@ -49,7 +49,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_crm_event()
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
                   "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
-                  "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report"}
+                  "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -155,6 +155,8 @@ class Handler(BaseHTTPRequestHandler):
                 if get_offers is None:
                     return self.send_json(503, {"error": "Офферы CRM пока недоступны"})
                 result = {"offers": get_offers(user["id"], owner)}
+            elif route == "/api/status":
+                result = db.participant_status(user["id"], owner)
             elif route == "/api/tasks":
                 result = tasks.list_tasks(user["id"], owner)
             elif route == "/api/tasks/report":

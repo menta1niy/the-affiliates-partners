@@ -149,6 +149,9 @@ def initialize():
           telegram_id INTEGER NOT NULL UNIQUE REFERENCES users(id), bound_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_assigned_offers (crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
           offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id));
+        CREATE TABLE IF NOT EXISTS crm_participant_states (
+          crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
+          payload TEXT NOT NULL, updated_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_bloggers (blogger_uuid TEXT PRIMARY KEY,
           channel TEXT NOT NULL, issuer_id INTEGER NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1);
         CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
@@ -733,7 +736,7 @@ def receive_crm_event(event):
     if not isinstance(event, dict) or not isinstance(event.get("event_id"), str) or not 1 <= len(event["event_id"]) <= 128:
         raise Problem(400, "Некорректный идентификатор события CRM")
     kind = event.get("type")
-    if kind not in ("lead.bound", "offers.assigned", "blogger.bound"):
+    if kind not in ("lead.bound", "offers.assigned", "blogger.bound", "participant.state"):
         raise Problem(400, "Неизвестное событие CRM")
     crm_id = event.get("crm_lead_id")
     if kind != "blogger.bound" and (not isinstance(crm_id, str) or not 1 <= len(crm_id) <= 128):
@@ -760,6 +763,27 @@ def receive_crm_event(event):
             if not key or len(key) > 128 or key in ids:
                 raise Problem(400, "Повторяющийся CRM offer ID")
             ids.add(key)
+    elif kind == "participant.state":
+        applications, payouts = event.get("applications"), event.get("lead_payouts")
+        if not isinstance(applications, list) or len(applications) > 200 or not isinstance(payouts, list) or len(payouts) > 200:
+            raise Problem(400, "Некорректное состояние CRM")
+        for item in applications:
+            if (not isinstance(item, dict) or set(item) != {"application_id", "offer_id", "stage"}
+                    or any(not isinstance(item[k], str) or not 1 <= len(item[k]) <= 128 for k in item)
+                    or item["stage"] not in {"applied", "meeting_scheduled", "picked_up", "target_done", "credited", "paid"}):
+                raise Problem(400, "Некорректный статус заявки CRM")
+        for item in payouts:
+            if (not isinstance(item, dict) or set(item) != {"conversion_id", "offer_id", "amount", "status", "reversed"}
+                    or any(not isinstance(item[k], str) or not 1 <= len(item[k]) <= 128 for k in ("conversion_id", "offer_id", "amount", "status"))
+                    or item["status"] not in {"confirmed", "paid"} or type(item["reversed"]) is not bool):
+                raise Problem(400, "Некорректная выплата CRM")
+            try:
+                from decimal import Decimal, InvalidOperation
+                amount = Decimal(item["amount"])
+                if not amount.is_finite() or amount < 0:
+                    raise ValueError
+            except (InvalidOperation, ValueError):
+                raise Problem(400, "Некорректная сумма выплаты CRM") from None
     canonical = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(canonical.encode("utf-8")) > 65536:
         raise Problem(400, "Событие CRM слишком велико")
@@ -798,7 +822,7 @@ def receive_crm_event(event):
                 raise Problem(409, "CRM ID уже закреплён за другим участником")
             conn.execute("INSERT OR IGNORE INTO crm_lead_bindings(crm_lead_id,telegram_id,bound_at) VALUES(?,?,?)",
                          (crm_id, telegram_id, int(time.time())))
-        else:
+        elif kind == "offers.assigned":
             binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
             if not binding:
                 raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
@@ -806,6 +830,14 @@ def receive_crm_event(event):
             for offer in offers:
                 conn.execute("INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)",
                              (crm_id, str(offer["id"]), json.dumps(offer, ensure_ascii=False, sort_keys=True)))
+        else:
+            binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
+            if not binding:
+                raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
+            safe = {"applications": applications, "lead_payouts": payouts}
+            conn.execute("INSERT INTO crm_participant_states(crm_lead_id,payload,updated_at) VALUES(?,?,?) "
+                         "ON CONFLICT(crm_lead_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
+                         (crm_id, json.dumps(safe, ensure_ascii=False, sort_keys=True), int(time.time())))
         conn.execute("INSERT INTO crm_events(event_id,event_hash,event_type,received_at) VALUES(?,?,?,?)",
                      (event["event_id"], digest, kind, int(time.time())))
         return {"changed": True}
@@ -821,3 +853,15 @@ def list_assigned_offers(telegram_id, owner_id):
                             "JOIN crm_lead_bindings b ON b.crm_lead_id=o.crm_lead_id "
                             "WHERE b.telegram_id=? ORDER BY o.offer_id", (telegram_id,)).fetchall()
         return [json.loads(row["payload"]) for row in rows]
+
+
+def participant_status(telegram_id, owner_id):
+    initialize()
+    with transaction() as conn:
+        user = get_user(conn, telegram_id)
+        if not user or user["status"] != "active" or user["consent_at"] is None:
+            return {"applications": [], "lead_payouts": []}
+        row = conn.execute("SELECT s.payload FROM crm_participant_states s "
+                           "JOIN crm_lead_bindings b ON b.crm_lead_id=s.crm_lead_id "
+                           "WHERE b.telegram_id=?", (telegram_id,)).fetchone()
+        return json.loads(row["payload"]) if row else {"applications": [], "lead_payouts": []}

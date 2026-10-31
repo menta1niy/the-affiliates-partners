@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS crm_assigned_offers (
   crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
   offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id)
 );
+CREATE TABLE IF NOT EXISTS crm_participant_states (
+  crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
+  payload TEXT NOT NULL, updated_at BIGINT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS crm_bloggers (
   blogger_uuid TEXT PRIMARY KEY, channel TEXT NOT NULL,
   issuer_id BIGINT NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1

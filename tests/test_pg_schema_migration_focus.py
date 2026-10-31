@@ -30,6 +30,13 @@ class SchemaMigrationFocused(unittest.TestCase):
                                       "telegram_id": candidate["id"], "crm_lead_id": "synthetic-lead"})
                 db.receive_crm_event({"event_id": "crm:synthetic:offers", "type": "offers.assigned",
                                       "crm_lead_id": "synthetic-lead", "offers": [{"id": "synthetic-offer", "name": "Synthetic"}]})
+                db.receive_crm_event({"event_id": "crm:synthetic:state", "type": "participant.state",
+                                      "crm_lead_id": "synthetic-lead",
+                                      "applications": [{"application_id": "synthetic-application",
+                                                        "offer_id": "synthetic-offer", "stage": "credited"}],
+                                      "lead_payouts": [{"conversion_id": "synthetic-conversion",
+                                                        "offer_id": "synthetic-offer", "amount": "350.00",
+                                                        "status": "confirmed", "reversed": False}]})
                 with closing(sqlite3.connect(path)) as conn:
                     tasks._schema(conn)
                     conn.execute("INSERT INTO crm_bloggers(blogger_uuid,channel,issuer_id,active) VALUES(?,?,?,1)",
@@ -44,7 +51,7 @@ class SchemaMigrationFocused(unittest.TestCase):
             with closing(sqlite3.connect(path)) as source:
                 expected = {table: source.execute("SELECT COUNT(*) FROM " + table).fetchone()[0]
                             for table in TABLES}
-                for table in ("crm_registration_outbox", "crm_bloggers", "participant_task_reports",
+                for table in ("crm_registration_outbox", "crm_bloggers", "crm_participant_states", "participant_task_reports",
                               "participant_task_report_outbox",
                               "users", "invitations", "audit", "notifications_outbox"):
                     self.assertGreater(expected[table], 0, table + " requires a nonempty source fixture")
