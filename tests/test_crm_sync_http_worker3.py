@@ -50,7 +50,8 @@ class CRMSyncHTTP(unittest.TestCase):
         self.assertEqual(self.event(offers), (200, {'changed': True}))
         self.assertEqual(self.event(offers), (200, {'changed': False}))
         self.assertEqual(self.count('crm_assigned_offers'), 1)
-        self.assertEqual(self.as_user('/api/offers', h.ALICE)[1]['offers'], offers['offers'])
+        self.assertEqual(self.as_user('/api/offers', h.ALICE)[1]['offers'],
+                         [{'id': 'bank-1', 'name': 'Private offer'}])
         self.assertEqual(self.as_user('/api/offers', h.BOB)[1]['offers'], [])
         self.assertEqual(self.as_user('/api/offers', h.OWNER)[1]['offers'], [])
         before = (self.count('crm_events'), self.count('crm_assigned_offers'))

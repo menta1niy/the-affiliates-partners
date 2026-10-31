@@ -756,6 +756,8 @@ def receive_crm_event(event):
         if not isinstance(offers, list) or len(offers) > 200:
             raise Problem(400, "Некорректный список офферов")
         ids = set()
+        safe_offers = []
+        visible_fields = {"id", "name", "advertiser", "type", "target_action", "referral_url", "lead_reward", "instructions"}
         for offer in offers:
             if not isinstance(offer, dict) or not isinstance(offer.get("id"), (str, int)) or isinstance(offer.get("id"), bool):
                 raise Problem(400, "Некорректный оффер CRM")
@@ -763,6 +765,14 @@ def receive_crm_event(event):
             if not key or len(key) > 128 or key in ids:
                 raise Problem(400, "Повторяющийся CRM offer ID")
             ids.add(key)
+            # Never persist or echo arbitrary CRM fields into a participant's
+            # cabinet. In particular, agency_rate, blogger_payout and profit
+            # are server-internal even when present in an authenticated event.
+            public = {field: offer[field] for field in visible_fields if field in offer}
+            public["id"] = key
+            if "name" not in public and isinstance(offer.get("title"), str):
+                public["name"] = offer["title"]
+            safe_offers.append(public)
     elif kind == "participant.state":
         applications, payouts = event.get("applications"), event.get("lead_payouts")
         if not isinstance(applications, list) or len(applications) > 200 or not isinstance(payouts, list) or len(payouts) > 200:
@@ -827,7 +837,7 @@ def receive_crm_event(event):
             if not binding:
                 raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
             conn.execute("DELETE FROM crm_assigned_offers WHERE crm_lead_id=?", (crm_id,))
-            for offer in offers:
+            for offer in safe_offers:
                 conn.execute("INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)",
                              (crm_id, str(offer["id"]), json.dumps(offer, ensure_ascii=False, sort_keys=True)))
         else:
