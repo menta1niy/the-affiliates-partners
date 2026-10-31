@@ -856,7 +856,7 @@ def receive_crm_event(event):
             public["id"] = key
             if "name" not in public and isinstance(offer.get("title"), str):
                 public["name"] = offer["title"]
-            if "published_instruction" in offer:
+            if offer.get("published_instruction") is not None:
                 public["published_instruction"] = sanitize_published_instruction(offer["published_instruction"])
             safe_offers.append(public)
     elif kind == "participant.state":
