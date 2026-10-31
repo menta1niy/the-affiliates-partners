@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from contextlib import closing, contextmanager
 from pathlib import Path
@@ -20,6 +21,8 @@ STATUS_NOTIFICATIONS = {
 }
 CODE_PATTERN = re.compile(r"^(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48}$")
 BLOGGER_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.I)
+_PG_INIT_LOCK = threading.Lock()
+_PG_INITIALIZED_URL = None
 
 
 class Problem(Exception):
@@ -75,8 +78,15 @@ def transaction():
 
 def initialize():
     if postgres_url():
+        global _PG_INITIALIZED_URL
         from database.postgres import initialize as init_postgres
-        return init_postgres(postgres_url())
+        url = postgres_url()
+        if url != _PG_INITIALIZED_URL:
+            with _PG_INIT_LOCK:
+                if url != _PG_INITIALIZED_URL:
+                    init_postgres(url)
+                    _PG_INITIALIZED_URL = url
+        return
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(str(path), timeout=15)) as conn:

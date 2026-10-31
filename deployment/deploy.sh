@@ -86,7 +86,9 @@ if url:
                PGDATABASE=unquote(parsed.path.lstrip("/")))
     try:
         with backup.open("xb") as output:
-            subprocess.run(["pg_dump", "--format=custom", "--no-owner", "--no-acl"],
+            # Never export CRM's financial/public schema into the Partners
+            # backup location, even when the DB user can read those tables.
+            subprocess.run(["pg_dump", "--format=custom", "--schema=partners", "--no-owner", "--no-acl"],
                            stdout=output, stderr=subprocess.PIPE, env=env, check=True)
         backup.chmod(0o600)
         subprocess.run(["pg_restore", "--list", str(backup)], check=True,
