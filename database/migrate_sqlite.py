@@ -25,6 +25,8 @@ def copy(sqlite_path, target_url):
     with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src:
         src.row_factory = sqlite3.Row
         with psycopg.connect(target_url) as dst:
+            dst.execute("CREATE SCHEMA IF NOT EXISTS partners")
+            dst.execute("SET LOCAL search_path TO partners")
             dst.execute(SCHEMA)
             for table in TABLES:
                 if dst.execute(sql.SQL("SELECT 1 FROM {} LIMIT 1").format(sql.Identifier(table))).fetchone():

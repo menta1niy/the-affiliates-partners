@@ -1,4 +1,5 @@
-"""PostgreSQL compatibility layer for Partners' existing transactional queries."""
+"""PostgreSQL compatibility layer isolated in the dedicated partners schema."""
+SCHEMA_NAME = "partners"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -146,12 +147,14 @@ class Cursor:
 def connect(url):
     import psycopg
     from psycopg.rows import dict_row
-    return Connection(psycopg.connect(url, row_factory=dict_row))
+    # Keep CRM's public schema outside the Partners role's default search path.
+    return Connection(psycopg.connect(url, row_factory=dict_row, options="-csearch_path=partners"))
 
 
 def initialize(url):
     with connect(url).raw as conn:
         conn.execute("SELECT pg_advisory_xact_lock(601721408157)")
+        conn.execute("CREATE SCHEMA IF NOT EXISTS partners")
         conn.execute(SCHEMA)
         # Existing PostgreSQL deployments gain nullable columns non-destructively.
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS introduced_by_id BIGINT REFERENCES users(id)")
