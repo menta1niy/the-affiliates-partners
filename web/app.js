@@ -24,7 +24,7 @@
   function text(id,value) { $(id).textContent = value == null || value === "" ? "—" : String(value); }
   function statusInfo(status) {
     const key = String(status || "unregistered").toLowerCase();
-    const descriptions = {pending:"Заявка ожидает решения модератора. Доступ к предложениям пока закрыт.",approved:"Аккаунт подтверждён. Доступ зависит от действующих предложений и вашей роли.",active:"Ваш аккаунт активен.",rejected:"Заявка отклонена. Для уточнения причины обратитесь к команде.",blocked:"Доступ к аккаунту приостановлен.",invited:"Чтобы продолжить, отправьте заявку с кодом приглашения.",unregistered:"Чтобы продолжить, отправьте заявку с кодом приглашения."};
+    const descriptions = {pending:"Заявка ожидает решения модератора. Доступ к предложениям пока закрыт.",approved:"Аккаунт подтверждён. Доступ зависит от действующих предложений и вашей роли.",active:"Ваш аккаунт активен.",rejected:"Заявка отклонена. Для уточнения причины обратитесь к команде.",blocked:"Доступ к аккаунту приостановлен.",invited:"Откройте ссылку приглашения через Telegram и отправьте заявку.",unregistered:"Откройте ссылку приглашения через Telegram и отправьте заявку."};
     return {key,label:statusLabels[key] || key,description:descriptions[key] || "Для уточнения статуса обратитесь к администратору."};
   }
   function referralUrl(response) {
@@ -88,7 +88,7 @@
     text("profile-name",[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username);
     text("profile-id",user.id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение",inviter_id:user.referrer_id} : user.source==="agency" ? {description:"Приглашение от агентства",inviter_id:user.agency_id} : {});
-    const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.code) : source;
+    const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
     text("source-details",typeof source === "object" ? [source.description,source.inviter_id ? "Пригласивший ID: " + source.inviter_id : "",user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
