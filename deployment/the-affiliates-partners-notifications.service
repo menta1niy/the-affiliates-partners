@@ -1,10 +1,13 @@
 [Unit]
 Description=Dispatch pending The Affiliates Partners Telegram notifications
+ConditionPathExists=/etc/the-affiliates-partners/runtime-user-ready
 After=network-online.target the-affiliates-partners-api.service
 Wants=network-online.target
 
 [Service]
 Type=oneshot
+User=ta-partners
+Group=ta-partners
 WorkingDirectory=/opt/the-affiliates-partners
 ExecStart=/usr/bin/flock -n /run/lock/the-affiliates-partners-notifications.lock /usr/bin/python3 -m tools.dispatch_notifications
 NoNewPrivileges=true
