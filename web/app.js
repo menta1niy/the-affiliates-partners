@@ -6,6 +6,7 @@
   const statusLabels = {pending:"На рассмотрении",approved:"Подтверждён",active:"Активен",rejected:"Отклонён",blocked:"Заблокирован",invited:"Не зарегистрирован",unregistered:"Не зарегистрирован",new:"Не зарегистрирован"};
   let current = null;
   let referralRequest = 0;
+  let offersRequest = 0;
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -47,30 +48,43 @@
       show("referral-panel",true);
     } catch { /* Server decides whether this role can invite. */ }
   }
-  function renderOffers(session, status) {
+  function offerMessage(message) {
     const el = $("offers");
     el.replaceChildren();
-    const paragraph = document.createElement("p");
-    paragraph.className = "muted";
-    const offers = Array.isArray(session.offers) ? session.offers : [];
-    if (!["approved","active"].includes(status)) paragraph.textContent = "Предложения закрыты до подтверждения регистрации.";
-    else if (!offers.length) paragraph.textContent = "Сейчас нет опубликованных для вас банковских предложений.";
-    else {
+    const paragraph=document.createElement("p");paragraph.className="muted";paragraph.textContent=message;el.append(paragraph);
+  }
+  function renderOffers(offers) {
+    const el=$("offers");el.replaceChildren();
+    if (!offers.length) {offerMessage("CRM не назначила вам доступных предложений.");return;}
+    {
       const list = document.createElement("div");list.className="offer-list";
       offers.forEach(offer => {
         if (!offer || typeof offer !== "object") return;
         const item = document.createElement("article");item.className="offer-item";
-        const title = document.createElement("h3");title.textContent=String(offer.title || offer.name || "Банковское предложение");
-        const summary = document.createElement("p");summary.textContent=String(offer.description || "Подробности доступны после выбора предложения.");
+        const title = document.createElement("h3");title.textContent=String(offer.name || "Предложение без названия");
+        const summary = document.createElement("p");summary.textContent=String(offer.instructions || "Инструкция CRM не указана.");
         item.append(title,summary);
-        if (typeof offer.url === "string" && /^https:\/\//.test(offer.url)) {
-          const link=document.createElement("a");link.className="btn ghost";link.textContent="Подробнее ↗";link.href=offer.url;link.target="_blank";link.rel="noopener noreferrer";item.append(link);
+        const details=[offer.advertiser ? "Рекламодатель: "+offer.advertiser : "",offer.type ? "Тип: "+offer.type : "",offer.target_action ? "Целевое действие: "+offer.target_action : ""].filter(Boolean);
+        if(details.length){const info=document.createElement("p");info.className="muted";info.textContent=details.join(" · ");item.append(info);}
+        if (typeof offer.referral_url === "string" && /^https:\/\//i.test(offer.referral_url)) {
+          const link=document.createElement("a");link.className="btn ghost";link.textContent="Перейти к предложению ↗";link.href=offer.referral_url;link.target="_blank";link.rel="noopener noreferrer";item.append(link);
         }
         list.append(item);
       });
       el.append(list);return;
     }
-    el.append(paragraph);
+  }
+  async function loadOffers() {
+    const request=++offersRequest;
+    offerMessage("Загружаем назначенные предложения из CRM…");
+    try {
+      const result=await api("/offers");
+      if(request!==offersRequest)return;
+      if(!result || !Array.isArray(result.offers))throw new Error("Сервер вернул неполный список предложений.");
+      renderOffers(result.offers);
+    } catch(e) {
+      if(request===offersRequest)offerMessage("Не удалось получить предложения из CRM: "+e.message+". Обновите данные для повторной попытки.");
+    }
   }
   function render(session) {
     current = session;
@@ -95,7 +109,8 @@
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
-    renderOffers(session,state.key);
+    if (["approved","active"].includes(state.key))loadOffers();
+    else {++offersRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   async function refresh() {
@@ -103,6 +118,7 @@
     error("");
     try {
       if (!initData()) {
+        ++offersRequest;
         ++referralRequest;show("referral-panel",false);
         show("connect",true);show("account",false);show("register-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
@@ -112,6 +128,7 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
+      ++offersRequest;
       ++referralRequest;
       show("account",false);show("register-panel",false);show("referral-panel",false);
       show("connect",true);
