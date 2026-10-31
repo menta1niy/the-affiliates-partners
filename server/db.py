@@ -18,7 +18,8 @@ STATUS_NOTIFICATIONS = {
     "rejected": "Заявка отклонена.",
     "blocked": "Ваш аккаунт заблокирован.",
 }
-CODE_PATTERN = re.compile(r"^(?:ag|ref)_[A-Za-z0-9_-]{8,48}$")
+CODE_PATTERN = re.compile(r"^(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48}$")
+BLOGGER_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.I)
 
 
 class Problem(Exception):
@@ -81,7 +82,9 @@ def initialize():
     with closing(sqlite3.connect(str(path), timeout=15)) as conn:
         if os.name != "nt":
             conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
+        # Legacy CHECK domains need a table rebuild; temporarily suspend FK
+        # enforcement only within initialization, then validate/re-enable it.
+        conn.execute("PRAGMA foreign_keys=OFF")
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT NOT NULL DEFAULT '',
@@ -92,14 +95,14 @@ def initialize():
           agency_id INTEGER REFERENCES users(id), referrer_id INTEGER REFERENCES users(id),
           manager_id INTEGER REFERENCES users(id), registered_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL, decision_reason TEXT NOT NULL DEFAULT '',
-          source TEXT CHECK(source IN ('agency','referral')), consent_at INTEGER,
+          source TEXT CHECK(source IN ('agency','referral','blogger')), consent_at INTEGER,
           introduced_by_id INTEGER REFERENCES users(id), internal_id INTEGER UNIQUE
         );
         CREATE TABLE IF NOT EXISTS invitations (
-          code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral')),
+          code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral','blogger')),
           issuer_id INTEGER NOT NULL REFERENCES users(id), assignee_id INTEGER REFERENCES users(id),
           created_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1,
-          candidate_label TEXT NOT NULL DEFAULT ''
+          candidate_label TEXT NOT NULL DEFAULT '', blogger_uuid TEXT
         );
         CREATE TABLE IF NOT EXISTS pending_starts (
           telegram_id INTEGER PRIMARY KEY, code TEXT NOT NULL, updated_at INTEGER NOT NULL
@@ -136,6 +139,9 @@ def initialize():
           telegram_id INTEGER NOT NULL UNIQUE REFERENCES users(id), bound_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_assigned_offers (crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
           offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id));
+        CREATE TABLE IF NOT EXISTS crm_bloggers (blogger_uuid TEXT PRIMARY KEY,
+          channel TEXT NOT NULL, issuer_id INTEGER NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1);
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
         CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
         CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);
         CREATE INDEX IF NOT EXISTS ix_audit_created ON audit(id DESC);
@@ -167,7 +173,27 @@ def initialize():
         invitation_columns = {item[1] for item in conn.execute("PRAGMA table_info(invitations)")}
         if "candidate_label" not in invitation_columns:
             conn.execute("ALTER TABLE invitations ADD COLUMN candidate_label TEXT NOT NULL DEFAULT ''")
+        if "blogger_uuid" not in invitation_columns:
+            conn.execute("ALTER TABLE invitations ADD COLUMN blogger_uuid TEXT")
+        for table, old_check, new_check in (
+            ("users", "('agency','referral')", "('agency','referral','blogger')"),
+            ("invitations", "('agency','referral')", "('agency','referral','blogger')"),
+        ):
+            definition = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]
+            if old_check in definition:
+                columns = [item[1] for item in conn.execute(f"PRAGMA table_info({table})")]
+                names = ",".join(columns)
+                conn.execute(definition.replace(f"CREATE TABLE {table}", f"CREATE TABLE {table}_new", 1).replace(old_check, new_check))
+                conn.execute(f"INSERT INTO {table}_new({names}) SELECT {names} FROM {table}")
+                conn.execute(f"DROP TABLE {table}")
+                conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_users_status ON users(status)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_internal_id ON users(internal_id)")
+        if conn.execute("PRAGMA foreign_key_check").fetchone():
+            raise RuntimeError("Legacy database contains invalid foreign keys")
         conn.commit()
+        conn.execute("PRAGMA foreign_keys=ON")
 
 
 def public_user(row):
@@ -230,7 +256,7 @@ def session(identity, owner_id):
             **identity, "role": "lead", "status": "invited", "agency_id": None,
             "referrer_id": None, "manager_id": None,
             "pending_source_info": ({
-                "description": "Приглашение от агентства" if pending["kind"] == "agency" else "Реферальное приглашение",
+                "description": {"agency": "Приглашение от агентства", "referral": "Реферальное приглашение", "blogger": "Приглашение блогера"}[pending["kind"]],
                 "inviter_id": pending["issuer_id"],
             } if pending else None),
         }
@@ -296,12 +322,14 @@ def register(identity, owner_id, invitation_code):
                 "Внутренний ID: " + str(internal_id) + ".\n"
                 "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
                 "Статус: ожидает рассмотрения.")
-        source_type = "referrer" if invite["kind"] == "referral" else "agency"
-        source_partner_id = f"{source_type}:{issuer['id']}"
+        source_type = {"referral": "referrer", "agency": "agency", "blogger": "blogger"}[invite["kind"]]
+        source_partner_id = invite["blogger_uuid"] if invite["kind"] == "blogger" else f"{source_type}:{issuer['id']}"
         payload = {"name": (identity["first_name"] + " " + identity["last_name"]).strip() or str(identity["id"]),
                    "telegram_user_id": identity["id"], "telegram_username": identity["username"] or None,
                    "source_type": source_type, "source_partner_id": source_partner_id,
                    "source_external_id": f"partners:lead:{identity['id']}"}
+        if invite["kind"] == "blogger":
+            payload["source_channel"] = conn.execute("SELECT channel FROM crm_bloggers WHERE blogger_uuid=?", (invite["blogger_uuid"],)).fetchone()["channel"]
         conn.execute("INSERT INTO crm_registration_outbox(telegram_id,payload,created_at) VALUES(?,?,?)",
                      (identity["id"], json.dumps(payload, ensure_ascii=False, sort_keys=True), now))
         return public_user(get_user(conn, identity["id"]))
@@ -350,6 +378,27 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
         return {"code": code, "invite_code": code, "assignee_id": assignee}
 
 
+def invite_blogger(actor, owner_id, blogger_uuid):
+    if not isinstance(blogger_uuid, str) or not BLOGGER_UUID.fullmatch(blogger_uuid):
+        raise Problem(400, "Некорректный UUID блогера")
+    initialize()
+    with transaction() as conn:
+        owner = require_staff(conn, actor, owner_id)
+        if owner["role"] != "owner":
+            raise Problem(403, "Ссылки блогеров выдаёт владелец")
+        binding = conn.execute("SELECT * FROM crm_bloggers WHERE blogger_uuid=? AND active=1", (blogger_uuid.lower(),)).fetchone()
+        if not binding:
+            raise Problem(404, "Нет подтверждённой CRM привязки блогера")
+        existing = conn.execute("SELECT code FROM invitations WHERE kind='blogger' AND blogger_uuid=? AND active=1 ORDER BY created_at LIMIT 1", (blogger_uuid.lower(),)).fetchone()
+        if existing:
+            return {"code": existing["code"], "invite_code": existing["code"], "blogger_uuid": blogger_uuid.lower(), "channel": binding["channel"]}
+        code = "blog_" + secrets.token_urlsafe(18)
+        conn.execute("INSERT INTO invitations(code,kind,issuer_id,created_at,blogger_uuid) VALUES(?,'blogger',?,?,?)",
+                     (code, binding["issuer_id"], int(time.time()), blogger_uuid.lower()))
+        audit(conn, actor, "invite_blogger", binding["issuer_id"], "blogger_uuid=" + blogger_uuid.lower())
+        return {"code": code, "invite_code": code, "blogger_uuid": blogger_uuid.lower(), "channel": binding["channel"]}
+
+
 def revoke_invitation(actor, owner_id, code):
     if not isinstance(code, str) or not CODE_PATTERN.fullmatch(code):
         raise Problem(400, "Некорректный код приглашения")
@@ -364,6 +413,8 @@ def revoke_invitation(actor, owner_id, code):
             raise Problem(404, "Приглашение не найдено")
         if actor != owner_id and invitation["issuer_id"] != actor:
             raise Problem(403, "Можно отозвать только своё приглашение")
+        if invitation["kind"] == "blogger" and actor != owner_id:
+            raise Problem(403, "Ссылки блогеров отзывает владелец")
         if not invitation["active"]:
             return {"changed": False}
         conn.execute("UPDATE invitations SET active=0 WHERE code=? AND active=1", (code,))
@@ -401,8 +452,10 @@ def valid_invitation_source(conn, sender_id, code):
         return False
     row = conn.execute(
         "SELECT i.kind,i.issuer_id,i.assignee_id,u.role AS issuer_role,u.status AS issuer_status,"
+        "b.active AS blogger_active,b.issuer_id AS blogger_issuer,"
         "a.role AS assignee_role,a.status AS assignee_status "
         "FROM invitations i JOIN users u ON u.id=i.issuer_id "
+        "LEFT JOIN crm_bloggers b ON b.blogger_uuid=i.blogger_uuid "
         "LEFT JOIN users a ON a.id=i.assignee_id WHERE i.code=? AND i.active=1",
         (code,),
     ).fetchone()
@@ -412,6 +465,9 @@ def valid_invitation_source(conn, sender_id, code):
         return (row["issuer_role"] in ("owner", "admin", "staff")
                 and row["assignee_role"] in ("owner", "admin", "staff")
                 and row["assignee_status"] == "active")
+    if row["kind"] == "blogger":
+        return (row["blogger_active"] == 1 and row["blogger_issuer"] == row["issuer_id"]
+                and row["issuer_role"] in ("owner", "admin", "staff") )
     return (row["kind"] == "referral" and row["issuer_id"] != sender_id
             and row["issuer_role"] in ("owner", "admin", "staff", "referrer"))
 
@@ -454,7 +510,11 @@ def dashboard(actor, owner_id):
         rows = conn.execute("SELECT * FROM users " + where + " ORDER BY registered_at DESC,id DESC LIMIT 200", params).fetchall()
         counts = dict(conn.execute("SELECT status,count(*) AS n FROM users " + where + " GROUP BY status", params).fetchall())
         users = [public_user(row) for row in rows]
-        invitations = conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label FROM invitations ORDER BY created_at DESC LIMIT 200").fetchall() if staff["role"] != "staff" else conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label FROM invitations WHERE issuer_id=? ORDER BY created_at DESC LIMIT 200", (actor,)).fetchall()
+        invitations = (conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations ORDER BY created_at DESC LIMIT 200").fetchall()
+                       if staff["role"] == "owner" else
+                       conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations WHERE kind!='blogger' ORDER BY created_at DESC LIMIT 200").fetchall()
+                       if staff["role"] == "admin" else
+                       conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations WHERE issuer_id=? AND kind!='blogger' ORDER BY created_at DESC LIMIT 200", (actor,)).fetchall())
         events = conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit ORDER BY id DESC LIMIT 100").fetchall() if staff["role"] != "staff" else conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit WHERE actor_id=? ORDER BY id DESC LIMIT 100", (actor,)).fetchall()
         # The persisted active flag is not enough: an active invitation may
         # have an ineligible issuer or assignee after moderation/role changes.
@@ -620,16 +680,22 @@ def receive_crm_event(event):
     if not isinstance(event, dict) or not isinstance(event.get("event_id"), str) or not 1 <= len(event["event_id"]) <= 128:
         raise Problem(400, "Некорректный идентификатор события CRM")
     kind = event.get("type")
-    if kind not in ("lead.bound", "offers.assigned"):
+    if kind not in ("lead.bound", "offers.assigned", "blogger.bound"):
         raise Problem(400, "Неизвестное событие CRM")
     crm_id = event.get("crm_lead_id")
-    if not isinstance(crm_id, str) or not 1 <= len(crm_id) <= 128:
+    if kind != "blogger.bound" and (not isinstance(crm_id, str) or not 1 <= len(crm_id) <= 128):
         raise Problem(400, "Некорректный CRM ID")
-    if kind == "lead.bound":
+    if kind == "blogger.bound":
+        blogger_uuid, channel, issuer_id, active = (event.get(k) for k in ("blogger_uuid", "channel", "issuer_id", "active"))
+        if (not isinstance(blogger_uuid, str) or not BLOGGER_UUID.fullmatch(blogger_uuid)
+                or not isinstance(channel, str) or not 1 <= len(channel.strip()) <= 200
+                or type(issuer_id) is not int or issuer_id <= 0 or type(active) is not bool):
+            raise Problem(400, "Некорректная привязка блогера CRM")
+    elif kind == "lead.bound":
         telegram_id = event.get("telegram_id")
         if type(telegram_id) is not int or telegram_id <= 0:
             raise Problem(400, "Требуется подтверждённая привязка Telegram ID")
-    else:
+    elif kind == "offers.assigned":
         offers = event.get("offers")
         if not isinstance(offers, list) or len(offers) > 200:
             raise Problem(400, "Некорректный список офферов")
@@ -652,7 +718,20 @@ def receive_crm_event(event):
             if previous["event_hash"] != digest:
                 raise Problem(409, "CRM event ID уже использован с другим содержимым")
             return {"changed": False}
-        if kind == "lead.bound":
+        if kind == "blogger.bound":
+            issuer = get_user(conn, issuer_id)
+            if not issuer or issuer["status"] != "active" or issuer["role"] not in ("owner", "admin", "staff"):
+                raise Problem(409, "CRM указала неактивного ответственного блогера")
+            existing = conn.execute("SELECT issuer_id FROM crm_bloggers WHERE blogger_uuid=?", (blogger_uuid.lower(),)).fetchone()
+            if existing and existing["issuer_id"] != issuer_id:
+                raise Problem(409, "CRM блогер уже привязан к другому ответственному")
+            occupied = conn.execute("SELECT blogger_uuid FROM crm_bloggers WHERE LOWER(channel)=LOWER(?)", (channel.strip(),)).fetchone()
+            if occupied and occupied["blogger_uuid"] != blogger_uuid.lower():
+                raise Problem(409, "Канал CRM уже привязан к другому блогеру")
+            conn.execute("INSERT INTO crm_bloggers(blogger_uuid,channel,issuer_id,active) VALUES(?,?,?,?) "
+                         "ON CONFLICT(blogger_uuid) DO UPDATE SET channel=excluded.channel,active=excluded.active",
+                         (blogger_uuid.lower(), channel.strip(), issuer_id, int(active)))
+        elif kind == "lead.bound":
             participant = get_user(conn, telegram_id)
             if participant is None or participant["consent_at"] is None:
                 raise Problem(409, "Участник Telegram не зарегистрирован")

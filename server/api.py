@@ -47,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
         route = urlsplit(self.path).path
         if route == "/api/integration/crm/events":
             return self.handle_crm_event()
-        routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations",
+        routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
                   "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report"}
         if route not in routes:
@@ -111,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(sender, dict) and isinstance(chat, dict) and type(sender.get("id")) is int and sender["id"] > 0 and sender["id"] == chat.get("id") and chat.get("type") == "private":
             import re
             text = message.get("text", "")
-            match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+((?:ag|ref)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
+            match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+((?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
             fresh = db.record_start(body["update_id"], sender["id"], match.group(1) if match else None)
         else:
             fresh = db.record_start(body["update_id"], 0, None)
@@ -146,6 +146,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = db.revoke_invitation(user["id"], owner, body.get("code"))
             elif route == "/api/admin/invitations":
                 result = db.invite(user["id"], owner, "agency", body.get("assignee_id"), body.get("candidate_label", ""))
+            elif route == "/api/admin/invitations/blogger":
+                result = db.invite_blogger(user["id"], owner, body.get("blogger_uuid"))
             elif route == "/api/admin/dashboard":
                 result = db.dashboard(user["id"], owner)
             elif route == "/api/offers":

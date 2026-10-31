@@ -11,14 +11,14 @@ CREATE TABLE IF NOT EXISTS users (
   agency_id BIGINT REFERENCES users(id), referrer_id BIGINT REFERENCES users(id),
   manager_id BIGINT REFERENCES users(id), registered_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL, decision_reason TEXT NOT NULL DEFAULT '',
-  source TEXT CHECK(source IN ('agency','referral')), consent_at BIGINT,
+  source TEXT CHECK(source IN ('agency','referral','blogger')), consent_at BIGINT,
   introduced_by_id BIGINT REFERENCES users(id), internal_id BIGINT UNIQUE
 );
 CREATE TABLE IF NOT EXISTS invitations (
-  code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral')),
+  code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral','blogger')),
   issuer_id BIGINT NOT NULL REFERENCES users(id),
   assignee_id BIGINT REFERENCES users(id), created_at BIGINT NOT NULL,
-  active INTEGER NOT NULL DEFAULT 1, candidate_label TEXT NOT NULL DEFAULT ''
+  active INTEGER NOT NULL DEFAULT 1, candidate_label TEXT NOT NULL DEFAULT '', blogger_uuid TEXT
 );
 CREATE TABLE IF NOT EXISTS pending_starts (
   telegram_id BIGINT PRIMARY KEY, code TEXT NOT NULL, updated_at BIGINT NOT NULL
@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS crm_assigned_offers (
   crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
   offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id)
 );
+CREATE TABLE IF NOT EXISTS crm_bloggers (
+  blogger_uuid TEXT PRIMARY KEY, channel TEXT NOT NULL,
+  issuer_id BIGINT NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
 CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS ix_audit_created ON audit(id DESC);
@@ -162,6 +167,22 @@ def initialize(url):
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS source TEXT")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at BIGINT")
         conn.execute("ALTER TABLE invitations ADD COLUMN IF NOT EXISTS candidate_label TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE invitations ADD COLUMN IF NOT EXISTS blogger_uuid TEXT")
+        # Replace only the two known legacy domain checks, preserving all other constraints.
+        for table, column in (("users", "source"), ("invitations", "kind")):
+            rows = conn.execute("SELECT c.conname,pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c "
+                                "JOIN pg_class t ON t.oid=c.conrelid WHERE t.relname=%s AND c.contype='c'", (table,)).fetchall()
+            for row in rows:
+                definition = row["definition"]
+                if column in definition and "blogger" not in definition and "agency" in definition and "referral" in definition:
+                    from psycopg import sql
+                    conn.execute(sql.SQL("ALTER TABLE {} DROP CONSTRAINT {}").format(sql.Identifier(table),sql.Identifier(row["conname"])))
+            # Force domain check for both fresh and existing installations.
+            cname = "ck_" + table + "_blogger_source"
+            conn.execute("SELECT 1 FROM pg_constraint WHERE conname=%s", (cname,))
+            if not conn.execute("SELECT 1 FROM pg_constraint WHERE conname=%s", (cname,)).fetchone():
+                from psycopg import sql
+                conn.execute(sql.SQL("ALTER TABLE {} ADD CONSTRAINT {} CHECK ({} IN ('agency','referral','blogger'))").format(sql.Identifier(table),sql.Identifier(cname),sql.Identifier(column)))
         conn.execute("INSERT INTO internal_id_sequence(singleton,next_id) VALUES(1,100) ON CONFLICT DO NOTHING")
         conn.execute("UPDATE internal_id_sequence SET next_id=GREATEST(next_id,COALESCE((SELECT MAX(internal_id)+1 FROM users),100)) WHERE singleton=1")
         missing = conn.execute("SELECT id FROM users WHERE internal_id IS NULL ORDER BY CASE WHEN role='owner' THEN 0 ELSE 1 END,registered_at,id").fetchall()
