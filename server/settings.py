@@ -5,7 +5,11 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ALLOWED = {"TELEGRAM_BOT_TOKEN", "MINI_APP_URL", "ADMIN_TELEGRAM_ID", "SERVER_PORT"}
+ALLOWED = {
+    "TELEGRAM_BOT_TOKEN", "MINI_APP_URL", "ADMIN_TELEGRAM_ID", "SERVER_PORT",
+    "PARTNERS_DB_PATH", "PARTNERS_DATABASE_URL", "PARTNERS_CRM_SHARED_SECRET",
+    "PARTNERS_CRM_BASE_URL", "PARTNERS_CRM_WORKSPACE_ID",
+}
 
 
 def load_settings():

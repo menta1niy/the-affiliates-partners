@@ -159,6 +159,8 @@ install -m 0644 deployment/the-affiliates-partners-deploy.service /etc/systemd/s
 install -m 0644 deployment/the-affiliates-partners-deploy.timer /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-notifications.service /etc/systemd/system/
 install -m 0644 deployment/the-affiliates-partners-notifications.timer /etc/systemd/system/
+install -m 0644 deployment/the-affiliates-partners-crm-registration.service /etc/systemd/system/
+install -m 0644 deployment/the-affiliates-partners-crm-registration.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl restart the-affiliates-partners-api.service
 
@@ -184,6 +186,26 @@ systemctl disable --now the-affiliates-partners-bot.service 2>/dev/null || true
 rm -f /etc/systemd/system/the-affiliates-partners-bot.service
 systemctl daemon-reload
 systemctl enable --now the-affiliates-partners-notifications.timer
+# A new registration is never delivered to an unconfigured CRM. Keep the
+# dispatcher disabled until the separately approved PostgreSQL cutover, and
+# verify private integration settings without logging credentials.
+if [ -f "$ROOT/.pg-cutover-approved" ] && python3 - <<'PY'
+from server import integration
+from server.crm_registration import endpoint
+from server.db import postgres_url
+try:
+    assert postgres_url()
+    assert len(integration.secret()) >= 32
+    endpoint()
+except (AssertionError, integration.BridgeError):
+    raise SystemExit(1)
+PY
+then
+  systemctl enable --now the-affiliates-partners-crm-registration.timer
+else
+  systemctl disable --now the-affiliates-partners-crm-registration.timer 2>/dev/null || true
+  echo "CRM registration dispatcher disabled until approved configuration" >&2
+fi
 printf '%s\n' "$REMOTE" > "${PUBLIC}.deployed.next"
 mv -f "${PUBLIC}.deployed.next" "${PUBLIC}.deployed"
 committed=true
