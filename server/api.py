@@ -48,7 +48,7 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/integration/crm/events":
             return self.handle_crm_event()
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
-                  "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
+                  "/api/admin/dashboard", "/api/admin/participant", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
@@ -150,6 +150,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = db.invite_blogger(user["id"], owner, body.get("blogger_uuid"))
             elif route == "/api/admin/dashboard":
                 result = db.dashboard(user["id"], owner)
+            elif route == "/api/admin/participant":
+                if type(body.get("user_id")) is not int or body["user_id"] <= 0:
+                    return self.send_json(400, {"error": "Некорректный пользователь"})
+                result = db.admin_participant_detail(user["id"], owner, body["user_id"])
             elif route == "/api/offers":
                 get_offers = getattr(db, "list_assigned_offers", None)
                 if get_offers is None:

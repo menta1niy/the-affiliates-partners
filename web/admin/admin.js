@@ -33,6 +33,25 @@
     return el;
   }
   function action(label,fn){const button=make("button",label,"btn ghost");button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
+  function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
+  function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
+  async function openParticipant(user){
+    const id=Number(user.id || user.user_id);
+    const dialog=$("participant-detail");const content=$("participant-detail-content");
+    content.replaceChildren(make("p","Загрузка…"));dialog.showModal();
+    try{
+      const data=await api("/admin/participant",{user_id:id});
+      if(!dialog.open)return;
+      content.replaceChildren();const person=data.user || {};
+      content.append(make("h2",personName(person)));
+      [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(content,key,value));
+      detailRows(content,"Назначенные офферы",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
+      detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
+      detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
+      detailRows(content,"Подтверждённые выплаты участнику",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
+      detailRows(content,"Журнал действий",data.audit,[["Действие","action"],["Кем","actor_id"],["Комментарий","details"],["Время","created_at"]]);
+    }catch(e){content.replaceChildren(make("p",e.message,"message error"));}
+  }
   async function decide(user,decision) {
     const id=Number(user.id || user.user_id);
     let reason;
@@ -109,6 +128,7 @@
       const ids=[user.introduced_by_id?"Пригласил: "+user.introduced_by_id:"",user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Реферер: "+user.referrer_id:""].filter(Boolean);
       row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.internal_id ?? "—"),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
       const actions=make("td");const group=make("div",undefined,"actions");
+      group.append(action("Карточка",()=>openParticipant(user)));
       const targetRole=roleOf(user);
       const permitted=targetRole!=="owner" &&
         !(state.role==="admin" && targetRole==="admin") &&

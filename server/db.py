@@ -583,6 +583,31 @@ def dashboard(actor, owner_id):
                 "pending": [user for user in users if user["status"] == "pending"], "invites": invites, "audit": [dict(x) for x in events]}
 
 
+def admin_participant_detail(actor, owner_id, target_id):
+    """Read-only participant snapshot; every query is bound to an authorized Telegram ID."""
+    initialize()
+    with transaction() as conn:
+        staff = require_staff(conn, actor, owner_id)
+        target = get_user(conn, target_id)
+        permitted_target(conn, staff, target)
+        binding = conn.execute("SELECT crm_lead_id,bound_at FROM crm_lead_bindings WHERE telegram_id=?", (target_id,)).fetchone()
+        crm_id = binding["crm_lead_id"] if binding else None
+        offers = conn.execute("SELECT payload FROM crm_assigned_offers WHERE crm_lead_id=? ORDER BY offer_id", (crm_id,)).fetchall() if crm_id else []
+        state = conn.execute("SELECT payload,updated_at FROM crm_participant_states WHERE crm_lead_id=?", (crm_id,)).fetchone() if crm_id else None
+        from server.tasks import _schema
+        _schema(conn)
+        reports = conn.execute("SELECT report_id,offer_id,action,note,created_at FROM participant_task_reports WHERE telegram_id=? AND crm_lead_id=? ORDER BY created_at DESC,report_id DESC LIMIT 100", (target_id, crm_id)).fetchall() if crm_id else []
+        audit_rows = scoped_audit_rows(conn, staff, 200)
+        audit_rows = [dict(row) for row in audit_rows if row["target_id"] == target_id or row["actor_id"] == target_id]
+        snapshot = json.loads(state["payload"]) if state else {"applications": [], "lead_payouts": []}
+        return {"user": public_user(target), "crm_lead_id": crm_id,
+                "bound_at": binding["bound_at"] if binding else None,
+                "offers": [json.loads(row["payload"]) for row in offers],
+                "reports": [dict(row) for row in reports],
+                "status": snapshot, "status_updated_at": state["updated_at"] if state else None,
+                "audit": audit_rows[:100]}
+
+
 def decision(actor, owner_id, target_id, choice, reason=""):
     choice = {"approve": "active", "reject": "rejected", "block": "blocked"}.get(choice, choice)
     if choice not in ("active", "rejected", "blocked") or not isinstance(reason, str) or len(reason) > 500:
