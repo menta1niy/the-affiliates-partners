@@ -491,9 +491,22 @@ def require_staff(conn, actor, owner_id):
     return user
 
 
+def admin_agency(staff):
+    """Admins have agency-local authority; missing scope denies access."""
+    if staff["role"] != "admin":
+        return None
+    agency = staff["agency_id"]
+    if type(agency) is not int or agency <= 0:
+        raise Problem(403, "Администратор не привязан к агентству")
+    return agency
+
+
 def permitted_target(conn, staff, target):
     if not target:
         raise Problem(404, "Пользователь не найден")
+    agency = admin_agency(staff)
+    if agency is not None and target["agency_id"] != agency:
+        raise Problem(403, "Пользователь другого агентства")
     if staff["role"] == "staff" and target["manager_id"] != staff["id"]:
         raise Problem(403, "Пользователь не закреплён за вами")
     if staff["role"] == "staff" and target["role"] not in ("lead", "referrer"):
@@ -506,16 +519,24 @@ def dashboard(actor, owner_id):
     initialize()
     with transaction() as conn:
         staff = require_staff(conn, actor, owner_id)
-        where, params = ("WHERE manager_id=?", (actor,)) if staff["role"] == "staff" else ("", ())
+        agency = admin_agency(staff)
+        where, params = (("WHERE agency_id=?", (agency,)) if agency is not None
+                         else ("WHERE manager_id=?", (actor,)) if staff["role"] == "staff" else ("", ()))
         rows = conn.execute("SELECT * FROM users " + where + " ORDER BY registered_at DESC,id DESC LIMIT 200", params).fetchall()
         counts = dict(conn.execute("SELECT status,count(*) AS n FROM users " + where + " GROUP BY status", params).fetchall())
         users = [public_user(row) for row in rows]
-        invitations = (conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations ORDER BY created_at DESC LIMIT 200").fetchall()
-                       if staff["role"] == "owner" else
-                       conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations WHERE kind!='blogger' ORDER BY created_at DESC LIMIT 200").fetchall()
-                       if staff["role"] == "admin" else
-                       conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid FROM invitations WHERE issuer_id=? AND kind!='blogger' ORDER BY created_at DESC LIMIT 200", (actor,)).fetchall())
-        events = conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit ORDER BY id DESC LIMIT 100").fetchall() if staff["role"] != "staff" else conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit WHERE actor_id=? ORDER BY id DESC LIMIT 100", (actor,)).fetchall()
+        invite_where, invite_params = (
+            ("WHERE kind!='blogger' AND issuer_id IN (SELECT id FROM users WHERE agency_id=?) "
+             "AND (assignee_id IS NULL OR assignee_id IN (SELECT id FROM users WHERE agency_id=?))", (agency, agency))
+            if agency is not None else
+            ("WHERE kind!='blogger' AND issuer_id=?", (actor,))
+            if staff["role"] == "staff" else ("", ())
+        )
+        invitations = conn.execute(
+            "SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid "
+            "FROM invitations " + invite_where + " ORDER BY created_at DESC LIMIT 200", invite_params
+        ).fetchall()
+        events = scoped_audit_rows(conn, staff, 100)
         # The persisted active flag is not enough: an active invitation may
         # have an ineligible issuer or assignee after moderation/role changes.
         # Keep raw active for audit, but expose effective usability separately.
@@ -577,6 +598,9 @@ def assign(actor, owner_id, target_id, manager_id=None, role=None, clear_manager
             manager = get_user(conn, manager_id)
             if not manager or manager["role"] not in ("owner", "admin", "staff") or manager["status"] != "active":
                 raise Problem(400, "Руководитель не найден")
+            agency = admin_agency(staff)
+            if agency is not None and manager["agency_id"] != agency:
+                raise Problem(403, "Руководитель другого агентства")
             seen = {target_id}
             cursor = manager
             while cursor is not None:
@@ -668,11 +692,17 @@ def audit_events(actor, owner_id):
     initialize()
     with transaction() as conn:
         staff = require_staff(conn, actor, owner_id)
-        if staff["role"] == "staff":
-            rows = conn.execute("SELECT * FROM audit WHERE actor_id=? OR target_id IN (SELECT id FROM users WHERE manager_id=?) ORDER BY id DESC LIMIT 200", (actor, actor)).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT 200").fetchall()
+        rows = scoped_audit_rows(conn, staff, 200)
         return [{key: row[key] for key in ("id", "actor_id", "action", "target_id", "details", "created_at")} for row in rows]
+
+
+def scoped_audit_rows(conn, staff, limit):
+    agency = admin_agency(staff)
+    if agency is not None:
+        return conn.execute("SELECT * FROM audit WHERE actor_id IN (SELECT id FROM users WHERE agency_id=?) AND (target_id IS NULL OR target_id IN (SELECT id FROM users WHERE agency_id=?)) ORDER BY id DESC LIMIT ?", (agency, agency, limit)).fetchall()
+    if staff["role"] == "staff":
+        return conn.execute("SELECT * FROM audit WHERE actor_id=? OR target_id IN (SELECT id FROM users WHERE manager_id=?) ORDER BY id DESC LIMIT ?", (staff["id"], staff["id"], limit)).fetchall()
+    return conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
 def receive_crm_event(event):
