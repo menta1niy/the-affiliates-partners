@@ -24,7 +24,10 @@ class AdminDataTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_empty_snapshot_and_only_approved_offers_visible(self):
-        self.assertEqual(app.admin_snapshot(), {"partners": [], "offers": []})
+        snapshot = app.admin_snapshot()
+        self.assertEqual(snapshot["partners"], [])
+        self.assertEqual(snapshot["offers"], [])
+        self.assertEqual(snapshot["operations"]["notificationsQueued"], 0)
         with app.db() as conn:
             conn.execute("INSERT INTO offers VALUES(?,?,?,?,?,?,?,?,?)",
                          ("offer-1", "Test", "МФО", 1000, "Цель", 7, "Описание", "draft", 1))

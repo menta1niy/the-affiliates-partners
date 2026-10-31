@@ -74,3 +74,7 @@
 .admin-page [aria-busy="true"]{cursor:progress}
 .admin-page button:focus-visible,.admin-page select:focus-visible,.admin-page textarea:focus-visible{outline:2px solid #c8f03c;outline-offset:2px}
 @media(max-width:360px){.admin-actions button{min-width:0;flex-basis:100%}.admin-tabs button{font-size:9px}.admin-card{padding:13px}}
+
+.crm-status{display:flex;align-items:center;gap:10px;padding:13px;margin:0 0 15px;border:1px solid #41563b;border-radius:14px;background:#1d291d;color:#c8f03c;overflow-wrap:anywhere}.crm-status span{flex:1;min-width:0}.crm-status strong{display:block;font-size:12px}.crm-status small{display:block;font-size:10px;color:#bbc9b5;line-height:1.5;margin-top:5px}.crm-status button{background:#344332;color:#c8f03c;border-radius:9px;padding:9px}
+.profile-sources{display:grid;gap:8px;margin-top:15px}.profile-sources span{padding:10px 12px;border:1px solid #354635;border-radius:11px;background:#1a241b;color:#b9cab3;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.source-state{margin:14px 0;padding:16px;background:#1c271d;border:1px solid #40563c;border-radius:16px;overflow-wrap:anywhere}.source-state strong{font-size:12px;color:#c8f03c}.source-state p{font-size:12px;color:#becbb9;line-height:1.6;margin:9px 0 0}.source-state button{margin-top:12px;display:flex;align-items:center;gap:7px;padding:10px 12px;background:#344332;border-radius:9px;color:#c8f03c;font-weight:800;font-size:11px}.payout-hero button:disabled{opacity:.5;cursor:not-allowed}

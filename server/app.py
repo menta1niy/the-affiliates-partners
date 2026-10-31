@@ -151,7 +151,23 @@ def admin_snapshot():
                o.status,o.updated_at,s.source_active
                FROM offers o LEFT JOIN crm_offer_source s ON s.offer_id=o.id
                ORDER BY o.updated_at DESC""")]
-    return {"partners": partners, "offers": offers}
+        outbox_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='bot_outbox'"
+        ).fetchone()
+        queued = conn.execute("SELECT count(*) FROM bot_outbox").fetchone()[0] if outbox_exists else 0
+        snapshots_exist = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='crm_sync_runs'"
+        ).fetchone()
+        last_sync = None
+        if snapshots_exist:
+            last = conn.execute(
+                "SELECT state,finished_at,expected FROM crm_sync_runs "
+                "WHERE state='complete' ORDER BY finished_at DESC LIMIT 1"
+            ).fetchone()
+            if last:
+                last_sync = {"state":last[0],"finished_at":last[1],"offers":last[2]}
+    return {"partners": partners, "offers": offers,
+            "operations": {"notificationsQueued":queued,"lastCrmSync":last_sync}}
 
 
 def queue_partner_status(conn, telegram_id, status):

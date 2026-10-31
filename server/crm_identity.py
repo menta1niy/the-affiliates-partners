@@ -79,9 +79,9 @@ def attest(conn, workspace, attestations, now):
     changed = 0
     for telegram_id, (blogger_id,version,check_version,exists) in decisions.items():
         updated = conn.execute(
-            """UPDATE crm_partner_links SET verified=?,confirmed_at=?
+            """UPDATE crm_partner_links SET verified=?,confirmed_at=?,check_version=''
                WHERE telegram_id=? AND workspace_id=? AND blogger_id=?
-                 AND mapping_version=? AND check_version=?""",
+                 AND mapping_version=? AND check_version=? AND check_version<>''""",
             (int(exists),now if exists else 0,telegram_id,workspace,blogger_id,version,check_version)
         ).rowcount
         changed += int(exists and updated > 0)

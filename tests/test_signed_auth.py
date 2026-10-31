@@ -73,7 +73,9 @@ class SignedAuthTests(unittest.TestCase):
         self.assertEqual(post(signed_data(12345))[0], 403)
         status, payload = post(signed_data(app.ADMIN_ID))
         self.assertEqual(status, 200)
-        self.assertEqual(payload, {"partners": [], "offers": []})
+        self.assertEqual(payload["partners"], [])
+        self.assertEqual(payload["offers"], [])
+        self.assertEqual(payload["operations"]["notificationsQueued"], 0)
 
     def test_admin_auth_does_not_register_or_overwrite_owner_record(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)

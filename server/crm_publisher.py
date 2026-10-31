@@ -153,7 +153,16 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
         return send_with_retry(request)
 
     pending = call(root + "/identity/requests", {"workspace_id": str(workspace_id)})
+    if not isinstance(pending, dict) or not isinstance(pending.get("mappings"), list):
+        raise RuntimeError("CRM identity request response invalid")
     mappings = pending["mappings"]
+    for item in mappings:
+        if (not isinstance(item, dict)
+                or set(item) != {"telegram_id", "blogger_id", "mapping_version", "check_version"}
+                or type(item["telegram_id"]) is not int):
+            raise ValueError("Invalid CRM identity request mapping")
+        UUID(item["mapping_version"])
+        UUID(item["check_version"])
     requested = {str(UUID(item["blogger_id"])) for item in mappings}
     if len(requested) > 10000:
         raise ValueError("Too many identity requests")
@@ -176,6 +185,7 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
         "telegram_id": item["telegram_id"],
         "blogger_id": str(UUID(item["blogger_id"])),
         "mapping_version": item["mapping_version"],
+        "check_version": item["check_version"],
         "exists": str(UUID(item["blogger_id"])) in found
     } for item in mappings]
     result = call(root + "/identity", {"workspace_id": str(workspace_id), "attestations": attestations})
