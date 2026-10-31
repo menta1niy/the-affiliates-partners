@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlparse
 from config import load_local_env
 from crm_feed import normalize_feed, apply_feed, finalize_snapshot
 from crm_snapshot import begin as snapshot_begin, batch as snapshot_batch, finalize as snapshot_finalize
-from crm_identity import schema as identity_schema, owner_assign, attest, issue_checks
+from crm_identity import schema as identity_schema, owner_assign, owner_unlink, attest, issue_checks
 
 load_local_env()
 
@@ -348,6 +348,14 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError, sqlite3.IntegrityError) as error:
                     return self.respond(400, {"error": str(error)})
                 return self.respond(200, {"ok": True, "blogger_id": mapped, "verified": False})
+            if route == "/api/admin/partners/crm-unlink":
+                partner_id = body.get("telegram_id")
+                workspace = os.environ.get("CRM_WORKSPACE_ID", "")
+                if type(partner_id) is not int or partner_id == ADMIN_ID or not workspace:
+                    return self.respond(400, {"error": "Invalid partner or CRM workspace"})
+                with db() as conn:
+                    changed = owner_unlink(conn, partner_id, workspace)
+                return self.respond(200 if changed else 404, {"ok": bool(changed)})
             if route == "/api/admin/partners/status":
                 status = body.get("status")
                 partner_id = body.get("telegram_id")

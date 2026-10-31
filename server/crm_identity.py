@@ -58,6 +58,15 @@ def owner_assign(conn, telegram_id, workspace, blogger_id):
     return uid
 
 
+def owner_unlink(conn, telegram_id, workspace):
+    """Explicit owner revocation; no service-side data or CRM role changes."""
+    schema(conn)
+    return conn.execute(
+        "DELETE FROM crm_partner_links WHERE telegram_id=? AND workspace_id=?",
+        (telegram_id, workspace),
+    ).rowcount
+
+
 def attest(conn, workspace, attestations, now):
     schema(conn)
     if not isinstance(attestations, list) or len(attestations) > 10000:

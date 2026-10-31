@@ -100,8 +100,21 @@ class CRMIdentityTests(unittest.TestCase):
             "attestations":[{**latest,"exists":False}]},service=True)[0],200)
         self.assertFalse(self.send("/api/me",{},owner=12345)[1]["profile"]["crmLinked"])
         self.assertFalse(self.send("/api/me",{},owner=12345)[1]["isAdmin"])
+
+    def test_owner_unlink_revokes_link_and_rejects_nonowner(self):
+        blogger = str(uuid4())
+        self.assertEqual(self.send("/api/admin/partners/crm-link",
+            {"telegram_id":12345,"blogger_id":blogger},owner=app.ADMIN_ID)[0],200)
+        current = self.send("/api/internal/crm/identity/requests",
+            {"workspace_id":self.workspace},service=True)[1]["mappings"][0]
+        route="/api/admin/partners/crm-unlink"
+        self.assertEqual(self.send(route,{"telegram_id":12345},owner=12345)[0],403)
+        self.assertEqual(self.send(route,{"telegram_id":12345},owner=app.ADMIN_ID)[0],200)
+        self.assertFalse(self.send("/api/me",{},owner=12345)[1]["profile"]["crmLinked"])
+        self.assertEqual(self.send("/api/internal/crm/identity/requests",
+            {"workspace_id":self.workspace},service=True)[1]["mappings"],[])
         # A replay from an older positive check cannot restore a removed source.
-        self.assertEqual(self.send(route,{"workspace_id":self.workspace,
+        self.assertEqual(self.send("/api/internal/crm/identity",{"workspace_id":self.workspace,
             "attestations":[{**current,"exists":True}]},service=True)[0],200)
         self.assertFalse(self.send("/api/me",{},owner=12345)[1]["profile"]["crmLinked"])
 
