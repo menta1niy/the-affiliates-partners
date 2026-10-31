@@ -6,6 +6,7 @@ __pycache__/
 .runtime/
 .database-backups/
 *.sqlite3
+data/
 dist/
 node_modules/
 .preview/

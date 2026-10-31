@@ -1,62 +1,64 @@
-# The Affiliates Partners — clean slate
+# The Affiliates Partners — регистрация банковских лидов
 
-This is a **new implementation**, independent of the previous CRM integrations,
-status database, generated mock statistics, build pipeline, and React/Vite stack.
-No old business logic is imported.
+Минимальный Python backend и Telegram Mini App без старого CRM-монолита, React и Vite. Банковский лид — конечный пользователь, выполняющий офферы, а не блогер или рекрутер.
 
-## What works
+## Реализованные разделы
 
-- A fresh responsive HTML/CSS/JavaScript Mini App at `/partners/`.
-- Server-side HMAC verification of Telegram Mini App signed `initData`.
-- Private profile (name, Telegram ID, owner/partner role).
-- Minimal Telegram webhook bot: `/start`, `/app`, `/help`.
-- Health check, one API service, automatic release deployment from `main`.
+- Пользовательская Mini App `/partners/`, отдельная административная `/partners/admin/`.
+- Подписанная Telegram-авторизация (`initData`/HMAC) и исходная роль `owner` только для настроенного Telegram ID.
+- Предварительные приглашения сотрудников `ag_...`, приглашения рефоводов `ref_...`; проверка регистрации на сервере.
+- Постоянные аккаунты и источник привлечения, статусы, ручное одобрение или блокировка.
+- Иерархия и реферальные связи хранятся раздельно, с защитой циклов и аудитом.
+- Telegram webhook с дедупликацией `update_id` и очередь уведомлений с повторными попытками отправки.
+- SQLite с внешними ключами, транзакциями и приватными резервными копиями при деплое.
 
-**Not implemented yet:** CRM sync, offers, personal tracking links, partner approval,
-revenue, payouts, and reporting. No misleading demonstration data is displayed.
+**Не реализованы:** настоящие банковские офферы, CRM-синхронизация, банковские подтверждения, начисления, выплаты и будущие программы 5%/15%. Фиктивные финансовые результаты не показываются.
 
-## Minimal configuration
+## Настройки (только в приватном `.env.local`)
 
-The live private `.env.local` is preserved on the VPS and never committed.
-Copy `.env.example` only for a new local setup, then fill:
+- `TELEGRAM_BOT_TOKEN` — BotFather токен.
+- `MINI_APP_URL` — HTTPS адрес Mini App.
+- `ADMIN_TELEGRAM_ID` — цифровой Telegram ID владельца.
+- `SERVER_PORT` — по умолчанию 8788.
+- `PARTNERS_DB_PATH` — необязательный путь к базе, по умолчанию `data/partners.sqlite3`.
 
-- `TELEGRAM_BOT_TOKEN` — existing verified BotFather secret.
-- `MINI_APP_URL` — HTTPS app link.
-- `ADMIN_TELEGRAM_ID` — verified numeric owner Telegram ID.
-- `SERVER_PORT` — API port, default 8788.
+Токены, база, приватные резервные копии и файлы клиентов не должны попадать в GitHub.
 
-Old CRM credentials and SQLite data are archived separately and never loaded
-by this version.
-
-## Run and test
+## Запуск и проверки
 
 ```bash
 python3 -m unittest discover -s tests -v
 python3 -m server.api
+python3 -m tools.configure_telegram  # dry-run
+python3 -m tools.configure_telegram --apply  # Bot API: меню, webhook
+python3 -m tools.dispatch_notifications  # отправка ожидающих уведомлений
 ```
 
-Static files are under `web/`; no `npm install` or build is needed.
-Open the HTML only through HTTPS on Telegram to receive signed `initData`.
+Статические HTML/CSS/JS находятся в `web/` и не требуют npm.
 
-Telegram commands/menu and HTTPS webhook (dry-run unless `--apply`):
+## API
 
-```bash
-python3 -m tools.configure_telegram
-python3 -m tools.configure_telegram --apply
-```
+Все приватные операции — `POST` JSON с Telegram `initData`:
 
-## Deployment
+- `/api/session` — статус и роль пользователя.
+- `/api/register` — регистрация по приглашению с согласием.
+- `/api/invitations/referral` — реферальный код активной разрешённой роли.
+- `/api/admin/invitations` — агентское приглашение, ответственный сотрудник.
+- `/api/admin/dashboard` — список заявок, участников, приглашений и источников.
+- `/api/admin/decision` — одобрение/отказ/блокировка.
+- `/api/admin/assign` — назначения роли и руководителя.
+- `/api/admin/audit` — журнал действий.
+- `/api/telegram/webhook` — защищённый Telegram webhook.
 
-Use existing domain/TLS and the dedicated Partners systemd units. The
-Partners-only timer invokes `deployment/deploy.sh` and pulls `main`.
-It validates Python tests and the new API on port 8799 before switching
-the static symlink. Telegram handles incoming bot updates and executes replies
-included in our HTTPS webhook response, without an outbound VPS connection.
-The old polling worker is removed. Does not touch the main CRM deployment.
+Роли: `owner`, `admin`, `staff`, `referrer`, `lead`.
+Статусы: `invited`, `pending`, `active`, `rejected`, `blocked`.
 
-## Backup / rollback
+## Деплой
 
-Before reset: archived Git tag `archive/pre-clean-slate-20261031`.
-Private full Git bundle, secrets and SQLite snapshot remain on the Windows
-computer and under `/root/partners-before-clean-slate-20261031/` on VPS.
-Do not publish those files or upload private tokens to GitHub.
+Отдельный Partners-таймер применяет GitHub `main` через `deployment/deploy.sh`.
+Перед релизом проверяются тесты и API на порту 8799 и создаётся транзакционный снимок базы.
+При ошибке релиза предусмотрен откат предыдущей версии; миграции только совместимые.
+Уведомления отправляются независимо по отдельному таймеру, а сбой Telegram API не отменяет регистрацию.
+Основной сайт и CRM имеют отдельные конфигурации и не меняются этим проектом.
+
+Архив старой версии: тег `archive/pre-clean-slate-20261031`. Приватные копии старой базы, ключей и секретов хранятся отдельно.

@@ -3,7 +3,7 @@ import argparse
 import json
 import urllib.request
 
-from server.settings import app_url, bot_token, webhook_secret
+from server.settings import admin_id, app_url, bot_token, webhook_secret
 
 
 def call(method, body):
@@ -35,6 +35,9 @@ def main():
         {"command": "help", "description": "Помощь по боту"},
     ]
     print("Bot menu target:", url)
+    owner = admin_id()
+    admin_url = url.rstrip("/") + "/admin/"
+    print("Owner menu target:", admin_url if owner else "OWNER_NOT_CONFIGURED")
     print("Webhook target:", url.rstrip("/") + "/api/telegram/webhook")
     print("Commands:", ", ".join(command["command"] for command in cmds))
     if not args.apply:
@@ -46,6 +49,18 @@ def main():
     call("setChatMenuButton", {
         "menu_button": {"type": "web_app", "text": "Кабинет", "web_app": {"url": url}}
     })
+    if owner:
+        call("setChatMenuButton", {
+            "chat_id": owner,
+            "menu_button": {
+                "type": "web_app",
+                "text": "Админ-панель",
+                "web_app": {"url": admin_url},
+            },
+        })
+        actual = call("getChatMenuButton", {"chat_id": owner})
+        if actual.get("web_app", {}).get("url") != admin_url:
+            raise RuntimeError("Owner menu button was not confirmed")
     call("setWebhook", {
         "url": url.rstrip("/") + "/api/telegram/webhook",
         "secret_token": webhook_secret(),

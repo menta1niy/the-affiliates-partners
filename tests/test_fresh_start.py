@@ -2,9 +2,12 @@
 import hashlib
 import hmac
 import json
+import os
+import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 from http.server import ThreadingHTTPServer
 from unittest.mock import patch
 from urllib.parse import urlencode
@@ -60,6 +63,16 @@ class ApiTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
+        cls.thread.join(timeout=3)
+
+    def setUp(self):
+        # Every legacy HTTP test gets a fresh database, including webhook update IDs.
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="partners-legacy-test-")
+        self.db_path = str(Path(self.temp_dir.name) / "partners.sqlite3")
+        self.db_patch = patch.dict(os.environ, {"PARTNERS_DB_PATH": self.db_path})
+        self.db_patch.start()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.addCleanup(self.db_patch.stop)
 
     def call(self, path, payload, headers=None):
         req = Request(self.base + path, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", **(headers or {})})

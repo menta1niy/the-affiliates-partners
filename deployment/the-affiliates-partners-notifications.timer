@@ -1,0 +1,12 @@
+[Unit]
+Description=Retry The Affiliates Partners notifications every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=2min
+RandomizedDelaySec=8s
+Persistent=true
+Unit=the-affiliates-partners-notifications.service
+
+[Install]
+WantedBy=timers.target

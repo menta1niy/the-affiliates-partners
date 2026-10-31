@@ -1,5 +1,5 @@
 """Pure Telegram webhook message handler; never calls Telegram from the VPS."""
-from server.settings import app_url
+from server.settings import admin_id, app_url
 
 
 def response_for(update):
@@ -19,12 +19,14 @@ def response_for(update):
         url = app_url()
         if not url:
             return None
+        is_owner = sender["id"] == admin_id()
+        destination = url.rstrip("/") + "/admin/" if is_owner else url
         return {
             "method": "sendMessage",
             "chat_id": sender["id"],
-            "text": "The Affiliates Partners. Откройте личный кабинет:",
+            "text": "The Affiliates Partners. Откройте административную панель:" if is_owner else "The Affiliates Partners. Откройте личный кабинет:",
             "reply_markup": {
-                "inline_keyboard": [[{"text": "Открыть кабинет", "web_app": {"url": url}}]]
+                "inline_keyboard": [[{"text": "Админ-панель" if is_owner else "Открыть кабинет", "web_app": {"url": destination}}]]
             },
         }
     if command == "/help":
