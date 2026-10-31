@@ -12,6 +12,11 @@ from server.settings import ROOT
 
 ROLES = {"owner", "admin", "staff", "referrer", "lead"}
 STATUSES = {"invited", "pending", "active", "rejected", "blocked"}
+STATUS_NOTIFICATIONS = {
+    "active": "Заявка одобрена. Ваш аккаунт активен.",
+    "rejected": "Заявка отклонена.",
+    "blocked": "Ваш аккаунт заблокирован.",
+}
 CODE_PATTERN = re.compile(r"^(?:ag|ref)_[A-Za-z0-9_-]{8,48}$")
 
 
@@ -225,7 +230,9 @@ def register(identity, owner_id, invitation_code):
         conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (identity["id"],))
         audit(conn, identity["id"], "register", identity["id"], "source=" + invite["kind"])
         enqueue(conn, "register:" + str(identity["id"]), owner_id,
-                "Новая заявка The Affiliates Partners: Telegram ID " + str(identity["id"]) + ". Статус: pending.")
+                "Новая заявка в The Affiliates Partners.\n"
+                "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
+                "Статус: ожидает рассмотрения.")
         return public_user(get_user(conn, identity["id"]))
 
 
@@ -412,7 +419,8 @@ def decision(actor, owner_id, target_id, choice, reason=""):
             audit(conn, actor, "decision_" + choice, target_id, reason)
             event_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             enqueue(conn, f"decision:{target_id}:{status}:{event_id}", target_id,
-                    "Статус вашей заявки The Affiliates Partners: " + status + (". Причина: " + reason if reason else "."))
+                    "The Affiliates Partners\n" + STATUS_NOTIFICATIONS[status]
+                    + ("\nПричина: " + reason if reason else ""))
         return public_user(get_user(conn, target_id))
 
 

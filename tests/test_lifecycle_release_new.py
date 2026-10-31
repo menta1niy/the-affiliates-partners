@@ -39,6 +39,12 @@ class ReleaseLifecycle(unittest.TestCase):
                                       decision='approve')[0], 200)
         before = self.outbox()
         self.assertEqual(len(before), 5)  # registration and four distinct status changes
+        messages = [item[2] for item in before]
+        self.assertTrue(any('ожидает рассмотрения' in message for message in messages))
+        self.assertTrue(any('Заявка одобрена' in message for message in messages))
+        self.assertTrue(any('Заявка отклонена' in message for message in messages))
+        self.assertTrue(any('аккаунт заблокирован' in message for message in messages))
+        self.assertTrue(all('Статус: pending' not in message and 'заявки The Affiliates Partners: active' not in message for message in messages))
         self.assertEqual(self.as_user('/api/admin/decision', h.OWNER, user_id=h.ALICE,
                                       decision='approve')[0], 200)
         self.assertEqual(self.outbox(), before)
