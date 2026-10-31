@@ -65,6 +65,22 @@ mkdir -p "${TARGET}.releases"
 RELEASE="${TARGET}.releases/${REMOTE:0:12}"
 mkdir -p "$RELEASE"
 cp -a dist/. "$RELEASE/"
+PREVIOUS_RELEASE=""
+if [ -L "$TARGET" ]; then
+  PREVIOUS_RELEASE=$(readlink "$TARGET")
+fi
+release_committed=false
+restore_previous_release() {
+  code=$?
+  if [ "$code" -ne 0 ] && [ "$release_committed" = false ] && [ -n "$PREVIOUS_RELEASE" ]; then
+    echo 'Release verification failed; restoring previous Mini App symlink' >&2
+    ln -s "$PREVIOUS_RELEASE" "${TARGET}.rollback"
+    mv -Tf "${TARGET}.rollback" "$TARGET"
+    # Git and the database have not been reverted. Rebooting services here
+    # would not restore the prior server code, so stop rather than pretending.
+  fi
+}
+trap restore_previous_release EXIT
 if [ -L "$TARGET" ]; then
   ln -s "$RELEASE" "${TARGET}.next"
   mv -Tf "${TARGET}.next" "$TARGET"
@@ -91,4 +107,5 @@ if [ "$BOT_CHANGED" = true ]; then
 fi
 printf '%s\n' "$REMOTE" > "${MARKER}.next"
 mv -f "${MARKER}.next" "$MARKER"
+release_committed=true
 echo "Mini App released at $REMOTE"

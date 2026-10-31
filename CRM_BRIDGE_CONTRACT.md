@@ -119,6 +119,28 @@ independently configured.
 
 ### Explicit Telegram ↔ CRM identity association
 
+**Operational recheck:** the administrative 'Перепроверить CRM' control
+refreshes the Partners server snapshot, while the partner's profile recheck
+refreshes `/api/partner/data`. Neither button launches an upstream PostgreSQL
+read: only the separately authorized, read-only CRM publisher performs
+identity attestations. Do not represent a screen refresh as source
+verification. A successful source recheck must be run by the publisher with
+`--send --verify-links`, and the owner can then refresh the UI.
+
+The read-only bridge validates workspace IDs, Blogger UUIDs, per-mapping
+versions, and the service acknowledgement. An archived or missing CRM
+Blogger produces a negative attestation, not an invented identity. Local
+bridge tests can use a stub SQL source, but they do not prove production
+PostgreSQL connectivity or ownership of a natural person's CRM account.
+
+**Rollback scope:** the Partners deploy script now restores the previous
+web-release symlink if a post-switch health check fails. The previous
+server Python code and SQLite schema are **not** automatically rolled back;
+database changes remain additive. A privileged operator must inspect the
+failure before deciding whether to restore the prior Git version, restart
+the services or use a verified SQLite backup. The release marker is written
+only after the health checks complete.
+
 **Attestation response ordering:** each owner-selected mapping has a
 `mapping_version`. The authenticated `identity/requests` call now also
 issues a fresh `check_version` for that particular verification round.

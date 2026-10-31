@@ -152,7 +152,8 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
             headers={"Content-Type": "application/json", "X-CRM-Feed-Token": token}, method="POST")
         return send_with_retry(request)
 
-    pending = call(root + "/identity/requests", {"workspace_id": str(workspace_id)})
+    workspace_id = str(UUID(str(workspace_id)))
+    pending = call(root + "/identity/requests", {"workspace_id": workspace_id})
     if not isinstance(pending, dict) or not isinstance(pending.get("mappings"), list):
         raise RuntimeError("CRM identity request response invalid")
     mappings = pending["mappings"]
@@ -161,11 +162,17 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
                 or set(item) != {"telegram_id", "blogger_id", "mapping_version", "check_version"}
                 or type(item["telegram_id"]) is not int):
             raise ValueError("Invalid CRM identity request mapping")
-        UUID(item["mapping_version"])
-        UUID(item["check_version"])
-    requested = {str(UUID(item["blogger_id"])) for item in mappings}
+        if item["telegram_id"] <= 0:
+            raise ValueError("Invalid CRM identity Telegram ID")
+        for key in ("blogger_id", "mapping_version", "check_version"):
+            item[key] = str(UUID(str(item[key])))
+    if len({item["telegram_id"] for item in mappings}) != len(mappings):
+        raise ValueError("Duplicate CRM identity request")
+    requested = {item["blogger_id"] for item in mappings}
     if len(requested) > 10000:
         raise ValueError("Too many identity requests")
+    if not requested:
+        return 0
     try:
         from sqlalchemy import create_engine, text
     except ImportError as error:
@@ -176,22 +183,25 @@ def verify_partner_links(endpoint, token, database_url, workspace_id):
             connection.execute(text("SET TRANSACTION READ ONLY"))
             rows = connection.execute(text("""
                 SELECT id FROM bloggers WHERE workspace_id=:workspace AND archived_at IS NULL
-            """), {"workspace": str(workspace_id)}).all()
-            existing = [str(UUID(str(row[0]))) for row in rows if str(row[0]) in requested]
+            """), {"workspace": workspace_id}).all()
+            existing = {str(UUID(str(row[0]))) for row in rows}
     finally:
         engine.dispose()
-    found = set(existing)
+    found = existing & requested
     attestations = [{
         "telegram_id": item["telegram_id"],
-        "blogger_id": str(UUID(item["blogger_id"])),
+        "blogger_id": item["blogger_id"],
         "mapping_version": item["mapping_version"],
         "check_version": item["check_version"],
-        "exists": str(UUID(item["blogger_id"])) in found
+        "exists": item["blogger_id"] in found
     } for item in mappings]
     result = call(root + "/identity", {"workspace_id": str(workspace_id), "attestations": attestations})
-    if not result.get("ok"):
+    if not isinstance(result, dict) or result.get("ok") is not True:
         raise RuntimeError("CRM identity attestation failed")
-    return result.get("verified", 0)
+    verified = result.get("verified")
+    if type(verified) is not int or not 0 <= verified <= len(mappings):
+        raise RuntimeError("CRM identity attestation acknowledgement invalid")
+    return verified
 
 
 def main(argv=None):
