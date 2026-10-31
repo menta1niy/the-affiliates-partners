@@ -128,9 +128,10 @@
   function renderUsers(){
     const query=$("user-query").value.trim().toLowerCase();
     const filter=$("user-filter").value;
+    const roleFilter=$("role-filter").value;
     const users=state.users.filter(user=>{
       const haystack=[user.id,user.user_id,user.first_name,user.last_name,user.username,user.name,user.role,user.manager_id,user.agency_id,user.referrer_id,user.introduced_by_id,user.source].join(" ").toLowerCase();
-      return (!filter || statusOf(user)===filter) && (!query || haystack.includes(query));
+      return (!filter || statusOf(user)===filter) && (!roleFilter || roleOf(user)===roleFilter) && (!query || haystack.includes(query));
     });
     renderTable($("users-list"),users,"users");
   }
@@ -144,20 +145,35 @@
     const body=make("tbody");
     state.invites.forEach(invite=>{
       const row=make("tr");
+      // Older servers do not expose usable; keep the state visible but do not
+      // offer a share action without an explicit server-side eligibility check.
+      const usable=invite.active===1 || invite.active===true;
+      const canShare=usable && invite.usable===true;
+      const stateLabel=!usable?"Неактивно":invite.usable===false?"Недействительно (права/статус)":invite.usable===true?"Действует":"Статус не проверен";
       row.append(
         make("td",invite.candidate_label || "Без имени"),
         make("td",invite.kind==="agency"?"Агентство":"Реферал"),
         make("td",invite.code || "—"),
         make("td",invite.assignee_id || invite.issuer_id || "—"),
-        make("td",invite.active?"Действует":"Неактивно")
+        make("td",stateLabel)
       );
       const cell=make("td");
-      if(invite.active && typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
+      if(canShare && typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
         const link="https://t.me/affiliates_partners_bot?start="+encodeURIComponent(invite.code);
         cell.append(action("Копировать",async()=>{
           if(!navigator.clipboard?.writeText)throw new Error("Копирование недоступно: выделите код приглашения в таблице.");
           await navigator.clipboard.writeText(link);
           notice("Ссылка приглашения скопирована.");
+        }));
+        const start=make("a","Открыть /start","btn ghost");start.href=link;start.target="_blank";start.rel="noopener noreferrer";cell.append(start);
+      }
+      if(usable && (state.role==="owner" || Number(invite.issuer_id)===state.actorId) &&
+         typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
+        cell.append(action("Отозвать",async()=>{
+          if(!window.confirm("Отозвать приглашение "+invite.code+"? Ссылка перестанет действовать, отменить отзыв нельзя."))return;
+          const result=await api("/invitations/revoke",{code:invite.code});
+          notice(result.changed===false?"Приглашение уже отозвано.":"Приглашение отозвано.");
+          await loadDashboard();
         }));
       }
       row.append(cell);
@@ -189,7 +205,7 @@
         if(event.created_at || event.timestamp)item.append(make("time",event.created_at || event.timestamp));
         root.append(item);
       });
-    }catch(e){root.append(make("p",e.message,"empty"));}
+    }catch(e){root.append(make("p",e.message,"empty"));error(e.message);}
   }
   function switchTab(tab){
     state.tab=tab;
@@ -213,7 +229,7 @@
     }catch(err){error(err.message);}finally{submit.disabled=false;}
   });
   document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>switchTab(button.dataset.tab)));
-  $("user-query").addEventListener("input",renderUsers);$("user-filter").addEventListener("change",renderUsers);
+  $("user-query").addEventListener("input",renderUsers);$("user-filter").addEventListener("change",renderUsers);$("role-filter").addEventListener("change",renderUsers);
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   async function start(){
     try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#111310");}catch{}

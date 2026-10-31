@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urlsplit(self.path).path
-        routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/admin/invitations",
+        routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations",
                   "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook"}
         if route not in routes:
@@ -96,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
             elif route == "/api/invitations/referral":
                 result = db.invite(user["id"], owner, "referral")
+            elif route == "/api/invitations/revoke":
+                result = db.revoke_invitation(user["id"], owner, body.get("code"))
             elif route == "/api/admin/invitations":
                 result = db.invite(user["id"], owner, "agency", body.get("assignee_id"), body.get("candidate_label", ""))
             elif route == "/api/admin/dashboard":

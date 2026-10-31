@@ -5,6 +5,7 @@
   const roleLabels = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник"};
   const statusLabels = {pending:"На рассмотрении",approved:"Подтверждён",active:"Активен",rejected:"Отклонён",blocked:"Заблокирован",invited:"Не зарегистрирован",unregistered:"Не зарегистрирован",new:"Не зарегистрирован"};
   let current = null;
+  let referralRequest = 0;
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -35,9 +36,11 @@
     return "";
   }
   async function loadReferral() {
+    const request = ++referralRequest;
     show("referral-panel",false);
     try {
       const result = await api("/invitations/referral");
+      if(request !== referralRequest) return;
       const link = referralUrl(result);
       if (!link || !/^https:\/\//i.test(link)) return;
       $("referral-link").value = link;
@@ -93,13 +96,14 @@
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     renderOffers(session,state.key);
-    if (["approved","active"].includes(state.key)) loadReferral(); else show("referral-panel",false);
+    if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   async function refresh() {
     const button = $("refresh");button.disabled=true;
     error("");
     try {
       if (!initData()) {
+        ++referralRequest;show("referral-panel",false);
         show("connect",true);show("account",false);show("register-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
       }
@@ -108,6 +112,7 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
+      ++referralRequest;
       show("account",false);show("register-panel",false);show("referral-panel",false);
       show("connect",true);
       error(e.message);text("hero-status","Не удалось проверить вход");

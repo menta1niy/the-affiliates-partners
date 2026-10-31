@@ -1,4 +1,5 @@
 """Durable, transactional partner identities, invitations and moderation."""
+import hashlib
 import os
 import re
 import secrets
@@ -187,6 +188,10 @@ def register(identity, owner_id, invitation_code):
         code = pending["code"]
         if not isinstance(code, str) or not CODE_PATTERN.fullmatch(code):
             raise Problem(400, "Требуется действительное приглашение")
+        # Eligibility is checked again at registration time: issuer roles and
+        # assignees may have changed since Telegram verified the first link.
+        if not valid_invitation_source(conn, identity["id"], code):
+            raise Problem(409, "Приглашение больше не действительно; откройте новую ссылку")
         invite = conn.execute("SELECT * FROM invitations WHERE code=? AND active=1", (code,)).fetchone()
         if invite is None:
             raise Problem(400, "Приглашение не найдено или отключено")
@@ -265,6 +270,29 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
                      (code, kind, actor, assignee, int(time.time()), candidate_label))
         audit(conn, actor, "invite_" + kind, assignee)
         return {"code": code, "invite_code": code, "assignee_id": assignee}
+
+
+def revoke_invitation(actor, owner_id, code):
+    if not isinstance(code, str) or not CODE_PATTERN.fullmatch(code):
+        raise Problem(400, "Некорректный код приглашения")
+    initialize()
+    with transaction() as conn:
+        ensure_owner(conn, owner_id)
+        user = get_user(conn, actor)
+        if not user or user["status"] != "active" or user["role"] not in ("owner", "admin", "staff", "referrer"):
+            raise Problem(403, "Недостаточно прав")
+        invitation = conn.execute("SELECT kind,issuer_id,active FROM invitations WHERE code=?", (code,)).fetchone()
+        if invitation is None:
+            raise Problem(404, "Приглашение не найдено")
+        if actor != owner_id and invitation["issuer_id"] != actor:
+            raise Problem(403, "Можно отозвать только своё приглашение")
+        if not invitation["active"]:
+            return {"changed": False}
+        conn.execute("UPDATE invitations SET active=0 WHERE code=? AND active=1", (code,))
+        digest = hashlib.sha256(code.encode("ascii")).hexdigest()[:16]
+        audit(conn, actor, "invite_revoke", invitation["issuer_id"],
+              f"kind={invitation['kind']};code_sha256={digest}")
+        return {"changed": True}
 
 
 def capture_signed_start(conn, identity):
@@ -350,8 +378,16 @@ def dashboard(actor, owner_id):
         users = [public_user(row) for row in rows]
         invitations = conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label FROM invitations ORDER BY created_at DESC LIMIT 200").fetchall() if staff["role"] != "staff" else conn.execute("SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label FROM invitations WHERE issuer_id=? ORDER BY created_at DESC LIMIT 200", (actor,)).fetchall()
         events = conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit ORDER BY id DESC LIMIT 100").fetchall() if staff["role"] != "staff" else conn.execute("SELECT id,actor_id,action,target_id,details,created_at FROM audit WHERE actor_id=? ORDER BY id DESC LIMIT 100", (actor,)).fetchall()
+        # The persisted active flag is not enough: an active invitation may
+        # have an ineligible issuer or assignee after moderation/role changes.
+        # Keep raw active for audit, but expose effective usability separately.
+        invites = []
+        for invitation in invitations:
+            item = dict(invitation)
+            item["usable"] = valid_invitation_source(conn, 0, item["code"])
+            invites.append(item)
         return {"counts": {k: counts.get(k, 0) for k in STATUSES}, "users": users,
-                "pending": [user for user in users if user["status"] == "pending"], "invites": [dict(x) for x in invitations], "audit": [dict(x) for x in events]}
+                "pending": [user for user in users if user["status"] == "pending"], "invites": invites, "audit": [dict(x) for x in events]}
 
 
 def decision(actor, owner_id, target_id, choice, reason=""):
