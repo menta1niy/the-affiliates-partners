@@ -43,7 +43,9 @@ class TaskReportDelivery(base.ParticipantTasks):
         self.assertEqual(row,(10000000100,2))
 
     def test_hmac_headers_match_event_body(self):
-        event={'event_id':'participant-task:abc','type':'participant.task.reported','report_id':str(uuid4())}
+        event={'event_id':'participant-task:abc','type':'participant.task.reported',
+               'report_id':str(uuid4()),'crm_lead_id':str(uuid4()),'telegram_id':123456,
+               'offer_id':str(uuid4()),'action':'submitted','note':'test','created_at':12345}
         seen=[]
         class Response:
             status=200
@@ -60,7 +62,8 @@ class TaskReportDelivery(base.ParticipantTasks):
             return Response()
         with patch.dict(os.environ,{'PARTNERS_CRM_SHARED_SECRET':'x'*40}):
             task_report_delivery.submit(event,'https://example.invalid',opener=opener,now=12345)
-        self.assertEqual(seen,[event])
+        self.assertEqual(seen,[{key:event[key] for key in ('report_id','crm_lead_id','offer_id','action','note')} |
+                               {'created_at':'1970-01-01T03:25:45+00:00'}])
 
 
 if __name__=='__main__': unittest.main()

@@ -1,6 +1,7 @@
 """Retry signed, unverified participant action reports to CRM without changing CRM stages."""
 import json
 import time
+from datetime import UTC, datetime
 import urllib.error
 import urllib.request
 
@@ -14,7 +15,11 @@ def endpoint():
 def submit(event, url, *, opener=urllib.request.urlopen, now=None):
     if event.get("type") != "participant.task.reported":
         raise integration.BridgeError("Unexpected task report type")
-    raw = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    # The CRM contract is a strict report record. Keep the transport event
+    # identifier and Telegram identity internal to the trusted outbox.
+    payload = {key: event[key] for key in ("report_id", "crm_lead_id", "offer_id", "action", "note")}
+    payload["created_at"] = datetime.fromtimestamp(event["created_at"], UTC).isoformat()
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     if not 0 < len(raw) <= integration.MAX_BODY:
         raise integration.BridgeError("Invalid task report size")
     timestamp = int(time.time() if now is None else now)
