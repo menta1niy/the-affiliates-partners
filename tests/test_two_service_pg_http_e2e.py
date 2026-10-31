@@ -18,6 +18,8 @@ from tests import test_registration as registration
 
 OWNER = registration.OWNER
 ALICE = registration.ALICE
+AGENCY_LEAD = 729101
+REFERRER_LEAD = 729102
 
 SECRET = "local-two-service-e2e-only-shared-secret-20261031"
 
@@ -28,6 +30,12 @@ class TwoServicePostgresHTTP(unittest.TestCase):
         if pg_url:
             os.environ["PARTNERS_DATABASE_URL"] = pg_url.replace("postgresql+psycopg://", "postgresql://")
         registration.HttpHarness.setUp(self)
+        # The PostgreSQL-backed Telegram webhook deduplicates update_id across
+        # methods. Allocate separate synthetic update ranges for both flows.
+        if self._testMethodName == "test_agency_referrer_signed_http_registration_first_attribution":
+            self._next_update_id = 200000
+        else:
+            self._next_update_id = 300000
     stop_server = registration.HttpHarness.stop_server
     post = registration.HttpHarness.post
     as_user = registration.HttpHarness.as_user
@@ -100,16 +108,16 @@ class TwoServicePostgresHTTP(unittest.TestCase):
 
         # Agency invitation is personal; an owner may issue a reusable
         # referral link. Both must keep their actual issuer.
-        self.assertEqual(self.register(ALICE, self.owner_invite())[0], 200)
-        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=ALICE,
+        self.assertEqual(self.register(AGENCY_LEAD, self.owner_invite())[0], 200)
+        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=AGENCY_LEAD,
                                       decision="approve")[0], 200)
         status, referral = self.as_user("/api/invitations/referral", OWNER)
         self.assertEqual(status, 200, referral)
-        self.assertEqual(self.register(registration.BOB, referral["code"])[0], 200)
-        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=registration.BOB,
+        self.assertEqual(self.register(REFERRER_LEAD, referral["code"])[0], 200)
+        self.assertEqual(self.as_user("/api/admin/decision", OWNER, user_id=REFERRER_LEAD,
                                       decision="approve")[0], 200)
-        expected = {ALICE: ("agency", f"agency:{OWNER}"),
-                    registration.BOB: ("referrer", f"referrer:{OWNER}")}
+        expected = {AGENCY_LEAD: ("agency", f"agency:{OWNER}"),
+                    REFERRER_LEAD: ("referrer", f"referrer:{OWNER}")}
         with db.transaction() as conn:
             for telegram_id, (source_type, partner_id) in expected.items():
                 row = conn.execute("SELECT payload FROM crm_registration_outbox WHERE telegram_id=?",
@@ -134,8 +142,8 @@ class TwoServicePostgresHTTP(unittest.TestCase):
                 originals[telegram_id] = lead.id
 
         # Later valid invitations cannot rewrite either source in CRM.
-        self.assertEqual(self.register(ALICE, referral["code"])[0], 200)
-        self.assertEqual(self.register(registration.BOB, self.owner_invite())[0], 200)
+        self.assertEqual(self.register(AGENCY_LEAD, referral["code"])[0], 200)
+        self.assertEqual(self.register(REFERRER_LEAD, self.owner_invite())[0], 200)
         with SessionLocal() as session:
             for telegram_id, (source_type, partner_id) in expected.items():
                 lead = session.get(Lead, originals[telegram_id])
