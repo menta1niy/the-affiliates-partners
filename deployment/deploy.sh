@@ -50,6 +50,52 @@ trap restore_on_failure EXIT
 # Preserve a transactionally consistent copy of the new live database before
 # any new server code touches its schema. Never expose the backup over HTTP.
 install -d -m 0700 "$ROOT/.database-backups"
+# PostgreSQL cutover must be explicitly approved after a tested SQLite export,
+# restore rehearsal and backward-compatible schema review. A source rollback
+# cannot reverse committed PostgreSQL DDL or recover overwritten user rows.
+python3 - "$ROOT" "${REMOTE:0:12}" <<'PY'
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+root = Path(sys.argv[1])
+release = sys.argv[2]
+config = {}
+for raw in (root / ".env.local").read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    config[key.strip()] = value.strip().strip('"').strip("'")
+url = os.environ.get("PARTNERS_DATABASE_URL") or config.get("PARTNERS_DATABASE_URL", "")
+if url:
+    approval = root / ".pg-cutover-approved"
+    if not approval.is_file():
+        raise SystemExit("PostgreSQL deploy blocked: private cutover approval and restore rehearsal required")
+    backup = root / ".database-backups" / (f"before-{release}-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + ".pgdump")
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("postgres", "postgresql") or not parsed.hostname or not parsed.path:
+        raise SystemExit("Invalid PostgreSQL URL; refusing deployment")
+    env = os.environ.copy()
+    env.update(PGHOST=parsed.hostname, PGPORT=str(parsed.port or 5432),
+               PGUSER=unquote(parsed.username or ""),
+               PGPASSWORD=unquote(parsed.password or ""),
+               PGDATABASE=unquote(parsed.path.lstrip("/")))
+    try:
+        with backup.open("xb") as output:
+            subprocess.run(["pg_dump", "--format=custom", "--no-owner", "--no-acl"],
+                           stdout=output, stderr=subprocess.PIPE, env=env, check=True)
+        backup.chmod(0o600)
+        subprocess.run(["pg_restore", "--list", str(backup)], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except (OSError, subprocess.CalledProcessError):
+        backup.unlink(missing_ok=True)
+        raise SystemExit("PostgreSQL backup/verification failed; refusing deployment")
+    print("Private PostgreSQL archive verified; database rollback remains a separate controlled operation")
+PY
 python3 - "$ROOT" "${REMOTE:0:12}" <<'PY'
 import os
 import sqlite3
