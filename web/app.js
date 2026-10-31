@@ -61,6 +61,55 @@
     element.textContent = message || "";
     element.hidden = !message;
   }
+  function safeHttpsUrl(value) {
+    if (typeof value !== "string" || value.length > 2048 || /[\u0000-\u001f\u007f]/.test(value)) return "";
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return "";
+      return url.href;
+    } catch { return ""; }
+  }
+  function renderPublishedInstructions(item, offer) {
+    // Only consume CRM's explicitly published snapshot; never render draft fields.
+    const published = offer.published_instruction;
+    if (!published || typeof published !== "object" || Array.isArray(published)) return;
+    const text = typeof published.text === "string" ? published.text.slice(0, 12000) : "";
+    if (text) {
+      const paragraph = document.createElement("p");
+      paragraph.className = "published-instruction-text";
+      paragraph.textContent = text;
+      item.append(paragraph);
+    }
+    const images = Array.isArray(published.images) ? published.images.slice(0, 12) : [];
+    const gallery = document.createElement("div");
+    gallery.className = "published-instruction-images";
+    images.forEach(entry => {
+      const url = safeHttpsUrl(typeof entry === "string" ? entry : entry?.url);
+      if (!url) return;
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = typeof entry?.alt === "string" ? entry.alt.slice(0, 160) : "Иллюстрация к инструкции";
+      img.loading = "lazy";
+      img.referrerPolicy = "no-referrer";
+      gallery.append(img);
+    });
+    if (gallery.childElementCount) item.append(gallery);
+    const links = Array.isArray(published.links) ? published.links.slice(0, 20) : [];
+    const list = document.createElement("div");
+    list.className = "published-instruction-links";
+    links.forEach(entry => {
+      const url = safeHttpsUrl(typeof entry === "string" ? entry : entry?.url);
+      if (!url) return;
+      const link = document.createElement("a");
+      link.href = url;
+      link.textContent = typeof entry?.label === "string" ? entry.label.slice(0, 160) : "Открыть материал";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.referrerPolicy = "no-referrer";
+      list.append(link);
+    });
+    if (list.childElementCount) item.append(list);
+  }
   function renderOffers(offers) {
     const el=$("offers");el.replaceChildren();
     if (!offers.length) {offerMessage("CRM не назначила вам доступных предложений.");return;}
@@ -70,8 +119,9 @@
         if (!offer || typeof offer !== "object") return;
         const item = document.createElement("article");item.className="offer-item";
         const title = document.createElement("h3");title.textContent=String(offer.name || offer.title || "Предложение без названия");
-        const summary = document.createElement("p");summary.textContent=String(offer.instructions || "Инструкция CRM не указана.");
+        const summary = document.createElement("p");summary.textContent=offer.published_instruction ? "Опубликованная инструкция CRM:" : String(offer.instructions || "Инструкция CRM не указана.");
         item.append(title,summary);
+        renderPublishedInstructions(item,offer);
         const details=[offer.advertiser ? "Рекламодатель: "+offer.advertiser : "",offer.type ? "Тип: "+offer.type : "",offer.target_action ? "Целевое действие: "+offer.target_action : ""].filter(Boolean);
         if(details.length){const info=document.createElement("p");info.className="muted";info.textContent=details.join(" · ");item.append(info);}
         if (typeof offer.referral_url === "string" && /^https:\/\//i.test(offer.referral_url)) {
