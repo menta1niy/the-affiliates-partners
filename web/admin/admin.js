@@ -100,14 +100,14 @@
     if (!users.length){container.append(make("p","Записей нет.","empty"));return;}
     const table=make("table");
     const head=make("thead"),headRow=make("tr");
-    ["Участник","Telegram ID","Статус","Роль","Источник","Менеджер","Действия"].forEach(v=>headRow.append(make("th",v)));
+    ["Участник","Внутренний ID","Telegram ID","Статус","Роль","Источник","Менеджер","Действия"].forEach(v=>headRow.append(make("th",v)));
     head.append(headRow);table.append(head);
     const body=make("tbody");
     users.forEach(user=>{
       const row=make("tr");
       const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
       const ids=[user.introduced_by_id?"Пригласил: "+user.introduced_by_id:"",user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Реферер: "+user.referrer_id:""].filter(Boolean);
-      row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
+      row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.internal_id ?? "—"),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
       const actions=make("td");const group=make("div",undefined,"actions");
       const targetRole=roleOf(user);
       const permitted=targetRole!=="owner" &&
@@ -130,7 +130,7 @@
     const filter=$("user-filter").value;
     const roleFilter=$("role-filter").value;
     const users=state.users.filter(user=>{
-      const haystack=[user.id,user.user_id,user.first_name,user.last_name,user.username,user.name,user.role,user.manager_id,user.agency_id,user.referrer_id,user.introduced_by_id,user.source].join(" ").toLowerCase();
+      const haystack=[user.internal_id,user.id,user.user_id,user.first_name,user.last_name,user.username,user.name,user.role,user.manager_id,user.agency_id,user.referrer_id,user.introduced_by_id,user.source].join(" ").toLowerCase();
       return (!filter || statusOf(user)===filter) && (!roleFilter || roleOf(user)===roleFilter) && (!query || haystack.includes(query));
     });
     renderTable($("users-list"),users,"users");

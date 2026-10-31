@@ -89,7 +89,7 @@
     text("status-description",state.description);
     $("status-pill").dataset.status=state.key;
     text("profile-name",[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username);
-    text("profile-id",user.id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
+    text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : user.internal_id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");

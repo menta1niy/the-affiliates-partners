@@ -69,7 +69,7 @@ def initialize():
           manager_id INTEGER REFERENCES users(id), registered_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL, decision_reason TEXT NOT NULL DEFAULT '',
           source TEXT CHECK(source IN ('agency','referral')), consent_at INTEGER,
-          introduced_by_id INTEGER REFERENCES users(id)
+          introduced_by_id INTEGER REFERENCES users(id), internal_id INTEGER UNIQUE
         );
         CREATE TABLE IF NOT EXISTS invitations (
           code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral')),
@@ -95,6 +95,9 @@ def initialize():
           attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0,
           last_error TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS internal_id_sequence (
+          singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id INTEGER NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
         CREATE INDEX IF NOT EXISTS ix_users_status ON users(status);
         CREATE INDEX IF NOT EXISTS ix_audit_created ON audit(id DESC);
@@ -109,6 +112,20 @@ def initialize():
             # Historic agency introducers cannot be reconstructed from manager;
             # backfill only referrals with a known issuer.
             conn.execute("UPDATE users SET introduced_by_id=referrer_id WHERE source='referral' AND referrer_id IS NOT NULL")
+        if "internal_id" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN internal_id INTEGER")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_internal_id ON users(internal_id)")
+        # Migrate existing users deterministically: owner #100, then earlier
+        # registrations first. Never renumber existing internal IDs.
+        conn.execute("INSERT OR IGNORE INTO internal_id_sequence(singleton,next_id) VALUES(1,100)")
+        highest = conn.execute("SELECT MAX(internal_id) FROM users").fetchone()[0]
+        if highest is not None:
+            conn.execute("UPDATE internal_id_sequence SET next_id=MAX(next_id,?) WHERE singleton=1", (highest + 1,))
+        missing = conn.execute("SELECT id FROM users WHERE internal_id IS NULL ORDER BY CASE WHEN role='owner' THEN 0 ELSE 1 END, registered_at, id").fetchall()
+        for (telegram_id,) in missing:
+            number = conn.execute("SELECT next_id FROM internal_id_sequence WHERE singleton=1").fetchone()[0]
+            conn.execute("UPDATE users SET internal_id=? WHERE id=?", (number, telegram_id))
+            conn.execute("UPDATE internal_id_sequence SET next_id=next_id+1 WHERE singleton=1")
         invitation_columns = {item[1] for item in conn.execute("PRAGMA table_info(invitations)")}
         if "candidate_label" not in invitation_columns:
             conn.execute("ALTER TABLE invitations ADD COLUMN candidate_label TEXT NOT NULL DEFAULT ''")
@@ -118,7 +135,13 @@ def initialize():
 def public_user(row):
     if row is None:
         return None
-    return {key: row[key] for key in ("id", "first_name", "last_name", "username", "role", "status", "agency_id", "referrer_id", "manager_id", "source", "introduced_by_id")}
+    return {key: row[key] for key in ("id", "internal_id", "first_name", "last_name", "username", "role", "status", "agency_id", "referrer_id", "manager_id", "source", "introduced_by_id")}
+
+
+def allocate_internal_id(conn):
+    number = conn.execute("SELECT next_id FROM internal_id_sequence WHERE singleton=1").fetchone()[0]
+    conn.execute("UPDATE internal_id_sequence SET next_id=next_id+1 WHERE singleton=1")
+    return number
 
 
 def audit(conn, actor, action, target=None, details=""):
@@ -141,8 +164,8 @@ def ensure_owner(conn, owner_id):
     now = int(time.time())
     row = get_user(conn, owner_id)
     if row is None:
-        conn.execute("INSERT INTO users(id,first_name,role,status,registered_at,updated_at) VALUES(?,?,'owner','active',?,?)",
-                     (owner_id, "Владелец", now, now))
+        conn.execute("INSERT INTO users(id,internal_id,first_name,role,status,registered_at,updated_at) VALUES(?,? ,?,'owner','active',?,?)",
+                     (owner_id, allocate_internal_id(conn), "Владелец", now, now))
         audit(conn, owner_id, "owner_bootstrap", owner_id)
     elif row["role"] != "owner" or row["status"] != "active":
         conn.execute("UPDATE users SET role='owner',status='active',manager_id=NULL,updated_at=? WHERE id=?", (now, owner_id))
@@ -221,8 +244,9 @@ def register(identity, owner_id, invitation_code):
             manager = issuer["id"] if issuer["role"] == "staff" else issuer["manager_id"]
         referrer = issuer["id"] if invite["kind"] == "referral" else None
         now = int(time.time())
-        conn.execute("""INSERT INTO users(id,first_name,last_name,username,role,agency_id,referrer_id,manager_id,registered_at,updated_at,source,consent_at,introduced_by_id)
-                     VALUES(?,?,?,?,'lead',?,?,?,?,?,?,?,?)""", (identity["id"], identity["first_name"], identity["last_name"],
+        internal_id = allocate_internal_id(conn)
+        conn.execute("""INSERT INTO users(id,internal_id,first_name,last_name,username,role,agency_id,referrer_id,manager_id,registered_at,updated_at,source,consent_at,introduced_by_id)
+                     VALUES(?,?,?,?,?,'lead',?,?,?,?,?,?,?,?)""", (identity["id"], internal_id, identity["first_name"], identity["last_name"],
                                                identity["username"], agency, referrer, manager, now, now, invite["kind"], now, issuer["id"]))
         if invite["kind"] == "agency":
             # Agency introductions are individual, while referral links are reusable.
@@ -231,6 +255,7 @@ def register(identity, owner_id, invitation_code):
         audit(conn, identity["id"], "register", identity["id"], "source=" + invite["kind"])
         enqueue(conn, "register:" + str(identity["id"]), owner_id,
                 "Новая заявка в The Affiliates Partners.\n"
+                "Внутренний ID: " + str(internal_id) + ".\n"
                 "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
                 "Статус: ожидает рассмотрения.")
         return public_user(get_user(conn, identity["id"]))
