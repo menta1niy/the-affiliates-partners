@@ -10,6 +10,14 @@ from server.auth import verify_init_data
 from server.bot import response_for
 from server.settings import admin_id, bot_token, webhook_secret
 from server import db
+from server import integration
+
+
+def storage_error(exc):
+    """Database backend can be SQLite or PostgreSQL after migration."""
+    if isinstance(exc, sqlite3.Error):
+        return True
+    return type(exc).__module__.split('.')[0] in ('psycopg', 'psycopg2')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -25,14 +33,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if urlsplit(self.path).path == "/api/health":
+            try:
+                db.initialize()
+                with db.transaction() as conn:
+                    conn.execute("SELECT 1")
+            except Exception:
+                return self.send_json(503, {"ok": False, "service": "the-affiliates-partners-v2"})
             return self.send_json(200, {"ok": True, "service": "the-affiliates-partners-v2"})
         return self.send_json(404, {"error": "Маршрут не найден"})
 
     def do_POST(self):
         route = urlsplit(self.path).path
+        if route == "/api/integration/crm/events":
+            return self.handle_crm_event()
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations",
                   "/api/admin/dashboard", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
-                  "/api/telegram/webhook"}
+                  "/api/telegram/webhook", "/api/offers"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -52,9 +68,38 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/telegram/webhook":
             try:
                 return self.handle_webhook(body)
-            except sqlite3.Error:
-                return self.send_json(503, {"error": "Хранилище временно недоступно"})
+            except Exception as exc:
+                if storage_error(exc):
+                    return self.send_json(503, {"error": "Хранилище временно недоступно"})
+                raise
         return self.handle_authorized(route, body)
+
+    def handle_crm_event(self):
+        """CRM-only ingress. Telegram initData is never accepted as CRM authority."""
+        try:
+            if not self.headers.get("X-TA-Event-ID"):
+                return self.send_json(401, {"error": "Событие CRM не подтверждено"})
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= integration.MAX_BODY:
+                return self.send_json(400, {"error": "Некорректный размер события"})
+            raw = self.rfile.read(size)
+            event = integration.verify(raw, self.headers.get("X-TA-Timestamp"),
+                                       self.headers.get("X-TA-Signature"),
+                                       event_id_header=self.headers.get("X-TA-Event-ID"))
+        except (ValueError, integration.BridgeError):
+            return self.send_json(401, {"error": "Событие CRM не подтверждено"})
+        receive = getattr(db, "receive_crm_event", None)
+        if receive is None:
+            return self.send_json(503, {"error": "Синхронизация CRM не настроена"})
+        try:
+            result = receive(event)
+            return self.send_json(200, result)
+        except db.Problem as exc:
+            return self.send_json(exc.code, {"error": str(exc)})
+        except Exception as exc:
+            if storage_error(exc):
+                return self.send_json(503, {"error": "Хранилище временно недоступно"})
+            raise
 
     def handle_webhook(self, body):
         if type(body.get("update_id")) is not int:
@@ -102,6 +147,11 @@ class Handler(BaseHTTPRequestHandler):
                 result = db.invite(user["id"], owner, "agency", body.get("assignee_id"), body.get("candidate_label", ""))
             elif route == "/api/admin/dashboard":
                 result = db.dashboard(user["id"], owner)
+            elif route == "/api/offers":
+                get_offers = getattr(db, "list_assigned_offers", None)
+                if get_offers is None:
+                    return self.send_json(503, {"error": "Офферы CRM пока недоступны"})
+                result = {"offers": get_offers(user["id"], owner)}
             elif route == "/api/admin/decision":
                 if type(body.get("user_id")) is not int or body["user_id"] <= 0:
                     return self.send_json(400, {"error": "Некорректный пользователь"})
@@ -124,8 +174,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, result)
         except db.Problem as exc:
             return self.send_json(exc.code, {"error": str(exc)})
-        except sqlite3.Error:
-            return self.send_json(503, {"error": "Хранилище временно недоступно"})
+        except Exception as exc:
+            if storage_error(exc):
+                return self.send_json(503, {"error": "Хранилище временно недоступно"})
+            raise
         except (ValueError, TypeError, OverflowError):
             return self.send_json(400, {"error": "Некорректные данные"})
 
