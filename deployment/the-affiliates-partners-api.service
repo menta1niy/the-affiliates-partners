@@ -13,6 +13,11 @@ RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
+UMask=0077
+LimitCORE=0
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
 
 [Install]
 WantedBy=multi-user.target
