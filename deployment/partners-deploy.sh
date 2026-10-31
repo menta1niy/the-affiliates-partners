@@ -110,8 +110,21 @@ if [ "$SERVICE_CHANGED" = true ]; then
 fi
 if [ "$API_CHANGED" = true ]; then
   systemctl restart the-affiliates-partners-api.service
-  systemctl is-active --quiet the-affiliates-partners-api.service
-  curl --fail --silent --max-time 8 http://127.0.0.1:8788/api/health >/dev/null
+  # systemd may report active before Python has bound its listening socket.
+  # Verify readiness, not just the process state, before publishing the release.
+  api_ready=false
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if systemctl is-active --quiet the-affiliates-partners-api.service \
+       && curl --fail --silent --max-time 2 http://127.0.0.1:8788/api/health >/dev/null; then
+      api_ready=true
+      break
+    fi
+    sleep 1
+  done
+  if [ "$api_ready" != true ]; then
+    echo 'Partner API did not become ready after restart' >&2
+    exit 1
+  fi
 fi
 if [ "$BOT_CHANGED" = true ]; then
   systemctl restart the-affiliates-partners-bot.service
