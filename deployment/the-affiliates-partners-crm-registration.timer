@@ -1,0 +1,12 @@
+[Unit]
+Description=Retry Partners CRM registrations every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+RandomizedDelaySec=5s
+Persistent=true
+Unit=the-affiliates-partners-crm-registration.service
+
+[Install]
+WantedBy=timers.target

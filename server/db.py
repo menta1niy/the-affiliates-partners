@@ -119,6 +119,14 @@ def initialize():
           attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0,
           last_error TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS crm_registration_outbox (
+          telegram_id INTEGER PRIMARY KEY REFERENCES users(id),
+          payload TEXT NOT NULL, created_at INTEGER NOT NULL,
+          delivered_at INTEGER, crm_lead_id TEXT,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          next_attempt_at INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT NOT NULL DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS internal_id_sequence (
           singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id INTEGER NOT NULL
         );
@@ -288,6 +296,14 @@ def register(identity, owner_id, invitation_code):
                 "Внутренний ID: " + str(internal_id) + ".\n"
                 "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
                 "Статус: ожидает рассмотрения.")
+        source_type = "referrer" if invite["kind"] == "referral" else "agency"
+        source_partner_id = f"{source_type}:{issuer['id']}"
+        payload = {"name": (identity["first_name"] + " " + identity["last_name"]).strip() or str(identity["id"]),
+                   "telegram_user_id": identity["id"], "telegram_username": identity["username"] or None,
+                   "source_type": source_type, "source_partner_id": source_partner_id,
+                   "source_external_id": f"partners:lead:{identity['id']}"}
+        conn.execute("INSERT INTO crm_registration_outbox(telegram_id,payload,created_at) VALUES(?,?,?)",
+                     (identity["id"], json.dumps(payload, ensure_ascii=False, sort_keys=True), now))
         return public_user(get_user(conn, identity["id"]))
 
 
@@ -640,6 +656,10 @@ def receive_crm_event(event):
             participant = get_user(conn, telegram_id)
             if participant is None or participant["consent_at"] is None:
                 raise Problem(409, "Участник Telegram не зарегистрирован")
+            outbound = conn.execute("SELECT crm_lead_id FROM crm_registration_outbox WHERE telegram_id=?",
+                                    (telegram_id,)).fetchone()
+            if outbound is not None and outbound["crm_lead_id"] is not None and outbound["crm_lead_id"] != crm_id:
+                raise Problem(409, "CRM ID не совпадает с регистрацией участника")
             current = conn.execute("SELECT crm_lead_id,telegram_id FROM crm_lead_bindings WHERE crm_lead_id=? OR telegram_id=?",
                                    (crm_id, telegram_id)).fetchall()
             if current and any(r["crm_lead_id"] != crm_id or r["telegram_id"] != telegram_id for r in current):

@@ -43,6 +43,14 @@ CREATE TABLE IF NOT EXISTS crm_events (
   event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL, event_type TEXT NOT NULL,
   received_at BIGINT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS crm_registration_outbox (
+  telegram_id BIGINT PRIMARY KEY REFERENCES users(id),
+  payload TEXT NOT NULL, created_at BIGINT NOT NULL,
+  delivered_at BIGINT, crm_lead_id TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at BIGINT NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS crm_lead_bindings (
   crm_lead_id TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL UNIQUE REFERENCES users(id),
   bound_at BIGINT NOT NULL

@@ -35,8 +35,18 @@ python3 -m server.api
 python3 -m tools.configure_telegram  # dry-run
 python3 -m tools.configure_telegram --apply  # Bot API: меню, webhook
 python3 -m tools.dispatch_notifications  # отправка ожидающих уведомлений
+python3 -m server.crm_registration  # отправка зарегистрированных лидов в CRM
 python3 -m tools.runtime_acceptance  # HTTP-приёмка в отдельной временной SQLite, без изменения production
 ```
+
+Для CRM-регистрации нужны `PARTNERS_CRM_BASE_URL` (HTTPS, базовый URL CRM),
+`PARTNERS_CRM_WORKSPACE_ID` (UUID) и общий ключ
+`PARTNERS_CRM_SHARED_SECRET` (не менее 32 символов, совпадает с ключом CRM).
+Таймер `deployment/the-affiliates-partners-crm-registration.timer` запускает
+диспетчер раз в минуту. При отсутствии конфигурации он завершается с ошибкой,
+сохраняя очередь для следующей попытки. CRM ID сохраняется после успешного
+ответа, а привязка офферов активируется только через подписанное событие
+`lead.bound` на `/api/integration/crm/events`.
 
 Статические HTML/CSS/JS находятся в `web/` и не требуют npm.
 
