@@ -55,6 +55,10 @@ class HttpHarness(unittest.TestCase):
         self.stack.enter_context(patch.dict(os.environ, {"PARTNERS_DB_PATH": self.db_path}))
         self.stack.enter_context(patch("server.api.bot_token", return_value=TOKEN))
         self.stack.enter_context(patch("server.api.admin_id", return_value=OWNER))
+        # Keep the webhook secret fixed for the whole HTTP harness lifetime.
+        # Nested per-request mock patches race when concurrent registrations
+        # run their verified /start webhooks in separate threads.
+        self.stack.enter_context(patch("server.api.webhook_secret", return_value="header-secret"))
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._update_lock = threading.Lock()
         self._next_update_id = 100000
@@ -255,8 +259,7 @@ class HttpHarness(unittest.TestCase):
 
     def webhook_start(self, update_id, uid, code):
         update = {"update_id": update_id, "message": {"from": {"id": uid}, "chat": {"id": uid, "type": "private"}, "text": "/start " + code}}
-        with patch("server.api.webhook_secret", return_value="header-secret"):
-            return self.post("/api/telegram/webhook", update, headers={"X-Telegram-Bot-Api-Secret-Token": "header-secret"})
+        return self.post("/api/telegram/webhook", update, headers={"X-Telegram-Bot-Api-Secret-Token": "header-secret"})
 
     def test_invalid_first_start_does_not_lock_attribution(self):
         valid = self.owner_invite()
