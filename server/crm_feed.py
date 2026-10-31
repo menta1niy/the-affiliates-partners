@@ -34,7 +34,12 @@ def normalize_feed(payload, configured_workspace):
             raise ValueError("Repeated CRM offer")
         unique.add(remote_id)
         name, category, goal = (item[key] for key in ("name", "offer_type", "target_action"))
-        if not all(isinstance(v, str) and 0 < len(v.strip()) <= 180 for v in (name, category, goal)):
+        # CRM name is VARCHAR(180), offer_type is a compact enum, but
+        # target_action is TEXT. Reject unreasonable payloads without
+        # truncating a legitimate longer target-action description.
+        if (not isinstance(name, str) or not 0 < len(name.strip()) <= 180
+                or not isinstance(category, str) or not 0 < len(category.strip()) <= 24
+                or not isinstance(goal, str) or not 0 < len(goal.strip()) <= 1000):
             raise ValueError("Invalid public offer fields")
         if type(item["is_active"]) is not bool:
             raise ValueError("Invalid active flag")

@@ -78,6 +78,20 @@ class CRMFeedTests(unittest.TestCase):
             category = conn.execute("SELECT type FROM offers WHERE id=?", ("crm-"+offer_id,)).fetchone()[0]
         self.assertIn("БАНКИ", category)
 
+    def test_crm_text_target_action_is_not_truncated_or_rejected_at_180(self):
+        workspace = "5b101265-838f-4ed0-a3ee-f57913dfcae7"
+        offer_id = "f93fc60c-73bd-4832-8b7c-17c842004066"
+        goal = "Подтверждённое оформление карты с дополнительными условиями. " * 5
+        with patch.dict(os.environ, {"CRM_FEED_TOKEN": "x"*40, "CRM_WORKSPACE_ID": workspace}):
+            code, _ = self.submit({"workspace_id": workspace, "offers": [
+                {"id": offer_id, "name": "Банковская карта", "offer_type": "debit",
+                 "target_action": goal, "is_active": True}
+            ]}, "x"*40)
+        self.assertEqual(code, 200)
+        with app.db() as conn:
+            stored = conn.execute("SELECT goal FROM offers WHERE id=?", ("crm-"+offer_id,)).fetchone()[0]
+        self.assertEqual(stored, goal.strip())
+
     def test_complete_snapshot_pauses_removed_offer_without_deleting_other_data(self):
         workspace = "5b101265-838f-4ed0-a3ee-f57913dfcae7"
         old_id = "f93fc60c-73bd-4832-8b7c-17c842004066"

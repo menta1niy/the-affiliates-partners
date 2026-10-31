@@ -28,6 +28,8 @@
 .admin-crm-link small{color:#b7c9af;font-size:11px}
 .admin-crm-link input{min-width:0;width:100%;padding:11px;border:1px solid #44553f;background:#111a13;color:#f3f1ea;border-radius:9px;font-size:12px}
 .admin-crm-link button{padding:11px;background:#394931;color:#f3f1ea;border-radius:9px;font-weight:750}
+.admin-operations{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;color:#b7c9af;font-size:12px}
+.admin-operations span{background:#172218;border:1px solid #35452f;border-radius:10px;padding:9px 12px}
 @media(max-width:375px){.admin-filters{grid-template-columns:1fr}}
 .admin-card{background:#1b241c;border:1px solid #3e523c;border-radius:18px;padding:16px;margin-bottom:13px;overflow-wrap:anywhere}
 .admin-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
