@@ -56,6 +56,11 @@
     el.replaceChildren();
     const paragraph=document.createElement("p");paragraph.className="muted";paragraph.textContent=message;el.append(paragraph);
   }
+  function taskNotice(message) {
+    const element = $("task-notice");
+    element.textContent = message || "";
+    element.hidden = !message;
+  }
   function renderOffers(offers) {
     const el=$("offers");el.replaceChildren();
     if (!offers.length) {offerMessage("CRM не назначила вам доступных предложений.");return;}
@@ -80,8 +85,8 @@
           const submit=document.createElement("button");submit.className="btn primary";submit.type="submit";submit.textContent="Сообщить о действии";
           const feedback=document.createElement("p");feedback.className="muted";feedback.setAttribute("role","status");
           form.append(selection,note,submit,feedback);
-          form.addEventListener("submit",async event=>{event.preventDefault();submit.disabled=true;feedback.textContent="Отправляем отчёт…";
-            try{await api("/tasks/report",{offer_id:String(offer.id),action:selection.value,note:note.value});feedback.textContent="Отчёт принят. Подтверждение результата ожидается от CRM.";note.value="";await loadTasks();}
+          form.addEventListener("submit",async event=>{event.preventDefault();submit.disabled=true;taskNotice("");feedback.textContent="Отправляем отчёт…";
+            try{await api("/tasks/report",{offer_id:String(offer.id),action:selection.value,note:note.value});taskNotice("Отчёт принят. Подтверждение результата ожидается от CRM.");note.value="";await loadTasks();}
             catch(e){feedback.textContent="Не удалось отправить отчёт: "+e.message;}finally{submit.disabled=false;}});
           item.append(form);
         }
@@ -149,6 +154,7 @@
   }
   function render(session) {
     current = session;
+    taskNotice("");
     const user = session.user || {};
     const role = session.role || user.role || "user";
     const rawStatus = session.status || user.status || (session.registered === false ? "unregistered" : "unregistered");
@@ -179,6 +185,7 @@
     error("");
     try {
       if (!initData()) {
+        taskNotice("");
         ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
         show("connect",true);show("account",false);show("register-panel",false);
@@ -189,6 +196,7 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
+      taskNotice("");
       ++offersRequest;++crmStatusRequest;
       ++referralRequest;
       show("account",false);show("register-panel",false);show("referral-panel",false);
