@@ -296,13 +296,16 @@ class Handler(BaseHTTPRequestHandler):
             if uid != ADMIN_ID and (not profile or profile["status"] != "active" or not profile["phone"]):
                 return self.respond(403, {"error": "Partner approval required"})
             linked = False
+            link_state = "unlinked"
             if uid != ADMIN_ID:
                 with db() as conn:
                     row = conn.execute("SELECT verified FROM crm_partner_links WHERE telegram_id=?", (uid,)).fetchone()
                     linked = bool(row and row[0])
+                    link_state = "verified" if linked else "pending" if row else "unlinked"
             # Do not synthesize tracking links or CRM amounts from offer metadata.
             return self.respond(200, {
                 "crmLinked": linked,
+                "crmLinkStatus": link_state,
                 "tracking": {"available": False, "reason": "tracking_source_not_connected"},
                 "conversions": {"available": False, "reason": "conversion_source_not_connected"},
                 "payments": {"available": False, "reason": "payment_source_not_connected"},

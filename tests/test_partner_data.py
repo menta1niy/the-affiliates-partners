@@ -58,6 +58,7 @@ class PartnerDataTests(unittest.TestCase):
         self.assertEqual(result["conversions"]["available"], False)
         self.assertEqual(result["payments"]["available"], False)
         self.assertFalse(result["crmLinked"])
+        self.assertEqual(result["crmLinkStatus"], "unlinked")
         self.assertFalse({"agency_rate","agency_profit","blogger_accrual"} & set(str(result).split()))
         self.assertEqual(self.post("/api/links/not-an-offer", uid)[0], 404)
         with app.db() as conn:
