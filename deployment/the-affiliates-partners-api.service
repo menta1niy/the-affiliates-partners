@@ -1,12 +1,12 @@
 [Unit]
-Description=The Affiliates Partners Telegram Mini App API
+Description=The Affiliates Partners fresh API
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=/opt/the-affiliates-partners
-ExecStart=/usr/bin/python3 /opt/the-affiliates-partners/server/app.py
+ExecStart=/usr/bin/python3 -m server.api
 Environment=SERVER_PORT=8788
 Restart=on-failure
 RestartSec=3

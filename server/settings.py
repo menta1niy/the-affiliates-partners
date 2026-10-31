@@ -1,0 +1,36 @@
+"""Read only the minimal private settings needed by the new application."""
+import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+ALLOWED = {"TELEGRAM_BOT_TOKEN", "MINI_APP_URL", "ADMIN_TELEGRAM_ID", "SERVER_PORT"}
+
+
+def load_settings():
+    local = ROOT / ".env.local"
+    if local.is_file():
+        for line in local.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key in ALLOWED:
+                os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
+load_settings()
+
+
+def admin_id():
+    value = os.environ.get("ADMIN_TELEGRAM_ID", "")
+    return int(value) if value.isdecimal() else None
+
+
+def bot_token():
+    return os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+
+def app_url():
+    value = os.environ.get("MINI_APP_URL", "")
+    return value if value.startswith("https://") else ""

@@ -1,10 +1,10 @@
 [Unit]
-Description=Check The Affiliates Partners repository for updates
+Description=Check GitHub for new Partners release every 5 minutes
 
 [Timer]
-OnBootSec=90s
-OnUnitActiveSec=3min
-RandomizedDelaySec=20s
+OnBootSec=2min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=10s
 Persistent=true
 Unit=the-affiliates-partners-deploy.service
 

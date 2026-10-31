@@ -1,9 +1,8 @@
 [Unit]
-Description=Deploy The Affiliates Partners Mini App from GitHub
+Description=Deploy fresh The Affiliates Partners from GitHub
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
-ExecStart=/bin/bash /opt/the-affiliates-partners/deployment/partners-deploy.sh
+ExecStart=/bin/bash /opt/the-affiliates-partners/deployment/deploy.sh

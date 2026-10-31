@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f2">
+  <meta name="referrer" content="no-referrer">
+  <title>The Affiliates — Partners</title>
+  <link rel="stylesheet" href="/partners/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/partners/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">a<span>.</span></span>
+        <span class="brand-name">the affiliates<small>partner space</small></span>
+      </div>
+      <div class="version">НОВАЯ ОСНОВА <span aria-hidden="true">●</span></div>
+    </header>
+
+    <main class="main">
+      <div class="eyebrow"><span class="eyebrow-line"></span> THE AFFILIATES / PARTNERS</div>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-body">
+          <span class="hero-index">01 / ЛИЧНЫЙ КАБИНЕТ</span>
+          <h1 id="hero-title">Простое начало.<br><em>Ничего лишнего.</em></h1>
+          <p id="hero-description">Новая версия партнёрского пространства. Подтвердим подключение Telegram и начнём работу с чистой системы.</p>
+          <div class="hero-actions">
+            <button class="button button-dark" id="refresh-button" type="button">
+              <span>Проверить вход</span><span aria-hidden="true">↗</span>
+            </button>
+            <a class="button button-outline" href="https://t.me/affiliates_partners_bot" target="_blank" rel="noopener noreferrer">
+              Открыть бота <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+        <div class="hero-symbol" aria-hidden="true">a<span>.</span></div>
+      </section>
+
+      <nav class="tabs" aria-label="Разделы">
+        <button type="button" class="tab active" id="tab-overview" aria-current="page">Обзор <span>01</span></button>
+        <button type="button" class="tab" id="tab-profile">Профиль <span>02</span></button>
+      </nav>
+
+      <section id="panel-overview" class="panel-group" aria-labelledby="tab-overview">
+        <div class="columns">
+          <section class="surface account" aria-labelledby="account-title">
+            <div class="surface-top"><span>СОСТОЯНИЕ ПОДКЛЮЧЕНИЯ</span><span class="circle-indicator" id="indicator" aria-hidden="true"></span></div>
+            <h2 id="account-title">Telegram <span>↗</span></h2>
+            <p id="connection-status" class="account-state" role="status">Проверяем соединение…</p>
+            <p id="connection-details" class="muted">Для входа используется подтверждённая подпись Telegram. Пароль и номер телефона не нужны.</p>
+          </section>
+          <section class="surface approach" aria-labelledby="approach-title">
+            <div class="surface-top"><span>ПРИНЦИП РАБОТЫ</span><span>02 / 02</span></div>
+            <h2 id="approach-title">Чистый старт.</h2>
+            <p>Никаких выдуманных показателей, выплат или офферов. Следующие разделы будем подключать только к реальным данным.</p>
+            <div class="approach-footer"><span class="dot"></span> Данные прежней версии сохранены отдельно</div>
+          </section>
+        </div>
+      </section>
+
+      <section id="panel-profile" class="panel-group" aria-labelledby="tab-profile" hidden>
+        <div class="surface profile">
+          <div class="surface-top"><span>ПРОФИЛЬ TELEGRAM</span><span>02 / 02</span></div>
+          <div class="profile-avatar" id="avatar" aria-hidden="true">?</div>
+          <h2 id="profile-name">Не подключён</h2>
+          <p id="profile-username" class="muted">Откройте Mini App из Telegram.</p>
+          <div class="profile-row"><span>Идентификатор</span><strong id="profile-id">—</strong></div>
+          <div class="profile-row"><span>Роль</span><strong id="profile-role">—</strong></div>
+          <p class="profile-note">Это начало новой системы. Старые регистрации и финансовые данные сюда не переносились.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><span>© THE AFFILIATES</span><span>PARTNERS / НОВАЯ ПЛАТФОРМА</span></footer>
+  </div>
+</body>
+</html>

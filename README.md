@@ -1,43 +1,61 @@
-# The Affiliates Partners · Telegram Mini App
+# The Affiliates Partners — clean slate
 
-Рабочая стартовая реализация по дизайну Figma:
-https://www.figma.com/design/trZs3E9XenzX0D4c3QDqMo
+This is a **new implementation**, independent of the previous CRM integrations,
+status database, generated mock statistics, build pipeline, and React/Vite stack.
+No old business logic is imported.
 
-## Реализовано
+## What works
 
-- React/Vite/TypeScript: две основные вкладки, каталог, подробные условия, статистика, начисления, выплаты, регистрационный экран.
-- Адаптивная тёмная тема The Affiliates, Manrope + Unbounded, действия, фильтры и анимация средствами браузера.
-- Telegram-бот на Python: /start, кнопка request_contact, проверка contact.user_id, сохранение Telegram ID/имени/username/телефона, кнопка запуска Mini App.
-- Серверная проверка подписи Telegram WebApp initData и её срока жизни; SQLite только для начального профиля.
-- Демонстрационный режим в обычном браузере. В нём ссылки и выплаты намеренно не проводятся.
+- A fresh responsive HTML/CSS/JavaScript Mini App at `/partners/`.
+- Server-side HMAC verification of Telegram Mini App signed `initData`.
+- Private profile (name, Telegram ID, owner/partner role).
+- Minimal Telegram bot: `/start`, `/app`, `/help`.
+- Health check, isolated systemd services, automatic release deployment from `main`.
 
-## Локальный запуск
+**Not implemented yet:** CRM sync, offers, personal tracking links, partner approval,
+revenue, payouts, and reporting. No misleading demonstration data is displayed.
 
-1. `npm.cmd install`
-2. `npm.cmd run dev` — интерфейс по адресу `http://localhost:5178`.
-3. В другом терминале `python server/app.py` — API по адресу `http://127.0.0.1:8788`.
-4. Для сборки `npm.cmd run build`. Готовые статические файлы находятся в `dist/`.
+## Minimal configuration
 
-В PowerShell с запрещёнными скриптами используйте `npm.cmd` вместо `npm`.
+The live private `.env.local` is preserved on the VPS and never committed.
+Copy `.env.example` only for a new local setup, then fill:
 
-Файл `.env.local` теперь автоматически загружается Python-сервером и ботом через `server/config.py`. Для запуска бота достаточно `python server/bot.py`; переменные вручную устанавливать не требуется. Не помещайте токен в исходный код и не публикуйте `.env.local`.
+- `TELEGRAM_BOT_TOKEN` — existing verified BotFather secret.
+- `MINI_APP_URL` — HTTPS app link.
+- `ADMIN_TELEGRAM_ID` — verified numeric owner Telegram ID.
+- `SERVER_PORT` — API port, default 8788.
 
-## Подключение Telegram
+Old CRM credentials and SQLite data are archived separately and never loaded
+by this version.
 
-1. Создать бота через @BotFather либо взять существующего, к которому есть права управления.
-2. Создать HTTPS-хостинг для `dist/`. API должен быть доступен по тому же origin по пути `/api` (настроить reverse proxy к порту 8788); Telegram Mini Apps требует публичный HTTPS URL.
-3. Настроить переменные окружения из `.env.example`: `TELEGRAM_BOT_TOKEN`, `MINI_APP_URL`, `ALLOWED_ORIGIN`. Не сохранять токен в репозитории или браузерном коде.
-4. Запустить `python server/app.py` и `python server/bot.py` в двух отдельных процессах. Не запускать два long-polling экземпляра одного бота одновременно.
-5. В @BotFather установить Menu Button → Web App URL на `MINI_APP_URL`. Команда /start выдаёт кнопку контакта. После успешной отправки контакта бот отправит кнопку открытия Mini App.
+## Run and test
 
-## Ограничения текущего этапа
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m server.api
+python3 -m server.bot
+```
 
-Это **реальный frontend и рабочий каркас бота**, но пока **не production-партнёрская сеть**:
+Static files are under `web/`; no `npm install` or build is needed.
+Open the HTML only through HTTPS on Telegram to receive signed `initData`.
 
-- Партнёр после отправки номера получает статус `pending`. Администраторское одобрение и подключение ролей к The Affiliates CRM предстоит реализовать.
-- В режиме Telegram /api/offers возвращает пустой список до подключения CRM, чтобы не рекламировать выдуманные рабочие офферы.
-- Трекинг переходов, partner_id, постбеки, конверсии, статусный ledger, реальные суммы и выплата не подключены. Сервер **не выдаёт ссылку**, пока не реализована атрибуция.
-- В браузерном демо отображаются примерные офферы и числа. Они не являются реальными данными партнёра.
-- Перед публичным запуском: HTTPS, защищённое хранилище токена, durable database/backup, настройка администраторского одобрения, rate limiting, аудит финансовых событий, согласие на обработку персональных данных.
+Telegram command/menu configuration (dry-run unless `--apply`):
 
-Согласованная архитектура и дальнейшие шаги изложены в `PRODUCT_SPEC.md`.
+```bash
+python3 -m tools.configure_telegram
+python3 -m tools.configure_telegram --apply
+```
+
+## Deployment
+
+Use existing domain/TLS and the dedicated Partners systemd units. The
+Partners-only timer invokes `deployment/deploy.sh` and pulls `main`.
+It validates Python tests and the new API on port 8799 before switching
+the static symlink. Does not touch the main CRM deployment.
+
+## Backup / rollback
+
+Before reset: archived Git tag `archive/pre-clean-slate-20261031`.
+Private full Git bundle, secrets and SQLite snapshot remain on the Windows
+computer and under `/root/partners-before-clean-slate-20261031/` on VPS.
+Do not publish those files or upload private tokens to GitHub.
