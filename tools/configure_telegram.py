@@ -25,6 +25,7 @@ def call(method, body):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Write Bot API settings")
+    parser.add_argument("--drop-pending", action="store_true", help="Explicitly discard queued Telegram messages")
     args = parser.parse_args()
     url = app_url()
     if not url:
@@ -65,7 +66,7 @@ def main():
         "url": url.rstrip("/") + "/api/telegram/webhook",
         "secret_token": webhook_secret(),
         "allowed_updates": ["message"],
-        "drop_pending_updates": True,
+        "drop_pending_updates": args.drop_pending,
     })
     info = call("getWebhookInfo", {})
     if info.get("url") != url.rstrip("/") + "/api/telegram/webhook":
