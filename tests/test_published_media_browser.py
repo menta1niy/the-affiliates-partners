@@ -59,7 +59,7 @@ def verify():
                     path = route.request.url.rsplit("/api/", 1)[-1]
                     response = {
                         "session": {"source": "telegram", "status": "active", "role": "lead", "user": {"id": 10, "first_name": "Synthetic"}},
-                        "tasks": {"tasks": [offer], "history": []},
+                        "tasks": {"tasks": [offer, {"id": "legacy", "name": "No attachments", "instructions": "Legacy safe instruction"}], "history": []},
                         "status": {"applications": [], "lead_payouts": []},
                         "invitations/referral": {},
                     }.get(path, {})
@@ -75,6 +75,8 @@ def verify():
                 assert page.locator(".published-instruction-links a").first.get_attribute("rel") == "noopener noreferrer"
                 assert page.locator(".published-instruction-text img").count() == 0
                 assert page.get_by_text("Published baseline").count() == 0
+                assert page.get_by_role("heading", name="No attachments").is_visible()
+                assert page.get_by_text("Legacy safe instruction").is_visible()
                 assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")
                 assert not errors, errors
                 page.close()
