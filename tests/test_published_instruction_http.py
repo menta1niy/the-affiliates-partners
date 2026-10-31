@@ -24,18 +24,28 @@ class PublishedInstructionHTTP(CRMSyncHTTP):
             self.assertEqual(self.as_user(route,h.BOB)[1][key],[])
         self.assertEqual(self.event({**event,'event_id':'offers:bad-signature'},signature='0'*64)[0],401)
         for index, url in enumerate(('javascript:alert(1)','http://example.org/x',
-                                     'https://user:pass@example.org','https://example.org:444/a',
+                                     'https://user:pass@example.org','https://example.org:99999/a',
                                      'https://example.org/a#fragment')):
             invalid = {'event_id':f'offers:invalid:{index}','type':'offers.assigned',
                        'crm_lead_id':'crm:rich','offers':[{**offer,'published_instruction':
                            {**good,'links':[{'url':url,'label':'Bad'}]}}]}
             self.assertEqual(self.event(invalid)[0],400,url)
         for index, payload in enumerate(({**good,'draft':'secret'},
-                                         {**good,'text':'<script>alert(1)</script>'},
+                                         {**good,'text':'x'*12001},
                                          {**good,'images':[{'url':'https://example.org','alt':'ok','private':'secret'}]})):
             self.assertEqual(self.event({'event_id':f'offers:bad-field:{index}',
                 'type':'offers.assigned','crm_lead_id':'crm:rich','offers':
                 [{**offer,'published_instruction':payload}]})[0],400)
+
+    def test_crm_contract_boundaries_and_literal_markup(self):
+        from server.db import Problem, sanitize_published_instruction
+        full = {'text':'<script>shown literally</script>' + 'x'*(12000-len('<script>shown literally</script>')),
+                'images':[{'url':f'https://example.org:8443/{i}.png','alt':'Image'} for i in range(12)],
+                'links':[{'url':f'https://example.org:9443/{i}','label':'Link'} for i in range(24)]}
+        self.assertEqual(sanitize_published_instruction(full),full)
+        for key in ('images','links'):
+            with self.subTest(key=key), self.assertRaises(Problem):
+                sanitize_published_instruction({**full,key:full[key]+full[key][:1]})
 
 
 if __name__ == '__main__':

@@ -773,8 +773,6 @@ def sanitize_published_instruction(value):
     def plain(text, limit):
         if not isinstance(text, str) or len(text) > limit or any(ord(c) < 32 and c not in '\n\t\r' for c in text):
             raise Problem(400, "Invalid published instruction text")
-        if re.search(r"<\s*/?\s*[a-z][^>]*>", text, re.I):
-            raise Problem(400, "HTML is not permitted in published instructions")
         return text
 
     def https(url):
@@ -782,8 +780,9 @@ def sanitize_published_instruction(value):
             raise Problem(400, "Invalid published instruction URL")
         try:
             parsed = urlsplit(url)
+            port = parsed.port  # Invalid or out-of-range ports raise ValueError.
             valid = (parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username
-                     and not parsed.password and parsed.port in (None, 443)
+                     and not parsed.password and (port is None or port > 0)
                      and not parsed.fragment and not parsed.hostname.endswith("."))
         except ValueError:
             valid = False
@@ -791,9 +790,9 @@ def sanitize_published_instruction(value):
             raise Problem(400, "Published instruction requires HTTPS URL")
         return url
 
-    if not isinstance(value["images"], list) or len(value["images"]) > 10:
+    if not isinstance(value["images"], list) or len(value["images"]) > 12:
         raise Problem(400, "Invalid published images")
-    if not isinstance(value["links"], list) or len(value["links"]) > 20:
+    if not isinstance(value["links"], list) or len(value["links"]) > 24:
         raise Problem(400, "Invalid published links")
     images, links = [], []
     for item in value["images"]:
@@ -804,7 +803,7 @@ def sanitize_published_instruction(value):
         if not isinstance(item, dict) or set(item) != {"url", "label"}:
             raise Problem(400, "Invalid published link fields")
         links.append({"url": https(item["url"]), "label": plain(item["label"], 200)})
-    return {"text": plain(value["text"], 10000), "images": images, "links": links}
+    return {"text": plain(value["text"], 12000), "images": images, "links": links}
 
 
 def receive_crm_event(event):
