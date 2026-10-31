@@ -171,6 +171,40 @@ def connect(url):
     return Connection(psycopg.connect(url, row_factory=dict_row, options="-csearch_path=partners"))
 
 
+def validate_ready(url):
+    """Read-only runtime schema gate for DML-only PostgreSQL credentials."""
+    required = {
+        "users": {"id", "internal_id", "introduced_by_id", "source", "consent_at"},
+        "invitations": {"code", "kind", "candidate_label", "blogger_uuid"},
+        "crm_registration_outbox": {"telegram_id", "payload", "delivered_at"},
+        "crm_lead_bindings": {"crm_lead_id", "telegram_id"},
+        "crm_assigned_offers": {"crm_lead_id", "offer_id", "payload"},
+        "crm_participant_states": {"crm_lead_id", "payload"},
+        "crm_bloggers": {"blogger_uuid", "issuer_id", "channel"},
+        "participant_task_reports": {"report_id", "telegram_id", "crm_lead_id"},
+        "participant_task_report_outbox": {"report_id", "payload"},
+    }
+    tables = ("pending_starts", "telegram_updates", "audit", "notifications_outbox", "internal_id_sequence", "crm_events")
+    indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user"}
+    with connect(url).raw as conn:
+        rows = conn.execute("SELECT table_name,column_name FROM information_schema.columns "
+                            "WHERE table_schema='partners'").fetchall()
+        existing = {}
+        for item in rows:
+            existing.setdefault(item["table_name"], set()).add(item["column_name"])
+        missing = [name for name in tables if name not in existing]
+        missing += [name + "." + col for name, cols in required.items() for col in cols - existing.get(name, set())]
+        present_indexes = {r["indexname"] for r in conn.execute(
+            "SELECT indexname FROM pg_indexes WHERE schemaname='partners'").fetchall()}
+        missing += ["index:" + index for index in sorted(indexes - present_indexes)]
+        if missing:
+            raise RuntimeError("Partners PostgreSQL schema is not ready: " + ", ".join(sorted(missing)))
+        # Verify operational table access using a read-only, zero-row query.
+        for name in (*tables, *required):
+            from psycopg import sql
+            conn.execute(sql.SQL("SELECT 1 FROM {} LIMIT 0").format(sql.Identifier(name)))
+
+
 def initialize(url):
     with connect(url).raw as conn:
         conn.execute("SELECT pg_advisory_xact_lock(601721408157)")

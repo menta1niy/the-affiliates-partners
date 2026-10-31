@@ -79,13 +79,21 @@ def transaction():
 def initialize():
     if postgres_url():
         global _PG_INITIALIZED_URL
-        from database.postgres import initialize as init_postgres
+        from database.postgres import initialize as init_postgres, validate_ready
         url = postgres_url()
-        if url != _PG_INITIALIZED_URL:
+        schema_mode = os.environ.get("PARTNERS_PG_SCHEMA_READY", "").strip().lower()
+        if schema_mode not in ("", "false", "true"):
+            raise RuntimeError("PARTNERS_PG_SCHEMA_READY must be true or false")
+        schema_ready = schema_mode == "true"
+        cache_key = (url, schema_ready)
+        if cache_key != _PG_INITIALIZED_URL:
             with _PG_INIT_LOCK:
-                if url != _PG_INITIALIZED_URL:
-                    init_postgres(url)
-                    _PG_INITIALIZED_URL = url
+                if cache_key != _PG_INITIALIZED_URL:
+                    if schema_ready:
+                        validate_ready(url)
+                    else:
+                        init_postgres(url)
+                    _PG_INITIALIZED_URL = cache_key
         return
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
