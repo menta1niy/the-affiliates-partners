@@ -6,6 +6,24 @@ from tests import test_registration as identities
 
 
 class ParticipantStatusHTTP(signed.CRMSyncHTTP):
+    def test_unified_lead_view_is_scoped_and_uses_crm_snapshots(self):
+        self.assertEqual(self.register(identities.ALICE, self.owner_invite())[0], 200)
+        self.assertEqual(self.register(identities.BOB, self.owner_invite())[0], 200)
+        self.assertEqual(self.as_user('/api/admin/decision', identities.OWNER,
+                                      user_id=identities.ALICE, decision='approve')[0], 200)
+        self.assertEqual(self.event({'event_id': 'view:bind', 'type': 'lead.bound',
+                                     'crm_lead_id': 'crm:view', 'telegram_id': identities.ALICE})[0], 200)
+        self.assertEqual(self.event({'event_id': 'view:state', 'type': 'participant.state',
+                                     'crm_lead_id': 'crm:view', 'snapshot_version': 1,
+                                     'applications': [{'application_id': 'app', 'offer_id': 'o', 'stage': 'applied'}],
+                                     'lead_payouts': []})[0], 200)
+        status, view = self.as_user('/api/lead-view', identities.ALICE)
+        self.assertEqual(status, 200)
+        self.assertEqual(view['crm_lead_id'], 'crm:view')
+        self.assertEqual(view['applications'][0]['stage'], 'applied')
+        self.assertEqual(view['lead_payouts'], [])
+        self.assertEqual(self.as_user('/api/lead-view', identities.BOB)[1]['crm_lead_id'], None)
+
     def test_out_of_order_snapshots_cannot_regress_payment_or_reversal(self):
         self.assertEqual(self.register(identities.ALICE, self.owner_invite())[0], 200)
         self.assertEqual(self.as_user('/api/admin/decision', identities.OWNER,

@@ -197,7 +197,7 @@
   async function loadCrmStatus(){
     const request=++crmStatusRequest;
     $("crm-state").textContent="Загружаем подтверждения CRM…";
-    try{const result=await api("/status");if(request!==crmStatusRequest)return;
+    try{const result=await api("/lead-view");if(request!==crmStatusRequest)return;
       if(!Array.isArray(result.applications)||!Array.isArray(result.lead_payouts))throw new Error("Неполный ответ CRM");
       renderCrmStatus(result);
     }catch(e){if(request===crmStatusRequest)$("crm-state").textContent="Не удалось загрузить статусы CRM: "+e.message;}

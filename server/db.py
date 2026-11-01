@@ -989,3 +989,33 @@ def participant_status(telegram_id, owner_id):
                            "JOIN crm_lead_bindings b ON b.crm_lead_id=s.crm_lead_id "
                            "WHERE b.telegram_id=?", (telegram_id,)).fetchone()
         return json.loads(row["payload"]) if row else {"applications": [], "lead_payouts": []}
+
+
+def participant_lead_view(telegram_id, owner_id):
+    """One identity-scoped read model. CRM owns the lead, offers and finance.
+
+    Partners retains only its Telegram identity, report history and the latest
+    signed CRM projections. Nothing here creates a second financial record.
+    """
+    initialize()
+    with transaction() as conn:
+        user = get_user(conn, telegram_id)
+        if not user or user["status"] != "active" or user["consent_at"] is None:
+            return {"crm_lead_id": None, "offers": [], "applications": [], "lead_payouts": []}
+        binding = conn.execute(
+            "SELECT crm_lead_id FROM crm_lead_bindings WHERE telegram_id=?", (telegram_id,)
+        ).fetchone()
+        if binding is None:
+            return {"crm_lead_id": None, "offers": [], "applications": [], "lead_payouts": []}
+        lead_id = binding["crm_lead_id"]
+        offers = conn.execute(
+            "SELECT payload FROM crm_assigned_offers WHERE crm_lead_id=? ORDER BY offer_id", (lead_id,)
+        ).fetchall()
+        state = conn.execute(
+            "SELECT payload FROM crm_participant_states WHERE crm_lead_id=?", (lead_id,)
+        ).fetchone()
+        snapshot = json.loads(state["payload"]) if state else {}
+        return {"crm_lead_id": lead_id,
+                "offers": [json.loads(item["payload"]) for item in offers],
+                "applications": snapshot.get("applications", []),
+                "lead_payouts": snapshot.get("lead_payouts", [])}
