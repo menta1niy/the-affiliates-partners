@@ -35,6 +35,9 @@ restore_on_failure() {
   if [ -n "${PROBE_PID:-}" ]; then
     kill "$PROBE_PID" 2>/dev/null || true
   fi
+  if [ -n "${PREFLIGHT_DB:-}" ] && [ -d "$PREFLIGHT_DB" ]; then
+    rm -rf -- "$PREFLIGHT_DB"
+  fi
   if [ "$result" -ne 0 ] && [ "$committed" != true ]; then
     echo "Partners deployment failed; restoring previous application source and static release" >&2
     if [ -n "$PREVIOUS_RELEASE" ]; then
@@ -157,6 +160,7 @@ kill "$PROBE_PID" 2>/dev/null || true
 wait "$PROBE_PID" 2>/dev/null || true
 PROBE_PID=""
 rm -rf -- "$PREFLIGHT_DB"
+PREFLIGHT_DB=""
 
 install -d -m 0755 "$RELEASES"
 RELEASE="$RELEASES/${REMOTE:0:12}"
