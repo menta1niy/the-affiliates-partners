@@ -15,7 +15,7 @@ body { min-height: 100dvh; background: var(--paper); }
 /* Telegram's floating Close / menu controls sit below the iPhone status bar.
    Keep the background full-bleed, but move interactive content below them. */
 @media(max-width:740px) {
-  .tg-fullscreen .shell { padding-top: calc(max(env(safe-area-inset-top, 0px), var(--tg-safe-top), var(--tg-content-top)) + 76px); }
+  .tg-fullscreen .shell { padding-top: calc(max(env(safe-area-inset-top, 0px), var(--tg-safe-top), var(--tg-content-top)) + 32px); }
 }
 @media(max-width:740px) { .shell { padding-left: max(17px, env(safe-area-inset-left, 0px), var(--tg-content-left)); padding-right: max(17px, env(safe-area-inset-right, 0px), var(--tg-content-right)); } }
 :root { font-family: 'Unbounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-weight: 300; }
