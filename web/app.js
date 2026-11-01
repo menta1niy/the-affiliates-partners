@@ -204,6 +204,7 @@
   }
   function render(session) {
     current = session;
+    window.renderOwnerLeadPreview?.(session);
     taskNotice("");
     const user = session.user || {};
     const role = session.role || user.role || "user";
