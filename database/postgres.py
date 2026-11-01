@@ -66,8 +66,10 @@ CREATE TABLE IF NOT EXISTS crm_offer_snapshot_versions (
 );
 CREATE TABLE IF NOT EXISTS crm_participant_states (
   crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
-  payload TEXT NOT NULL, updated_at BIGINT NOT NULL
+  payload TEXT NOT NULL, updated_at BIGINT NOT NULL,
+  snapshot_version BIGINT NOT NULL DEFAULT 0
 );
+ALTER TABLE crm_participant_states ADD COLUMN IF NOT EXISTS snapshot_version BIGINT NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS crm_bloggers (
   blogger_uuid TEXT PRIMARY KEY, channel TEXT NOT NULL,
   issuer_id BIGINT NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1
@@ -184,7 +186,7 @@ def validate_ready(url):
         "crm_lead_bindings": {"crm_lead_id", "telegram_id"},
         "crm_assigned_offers": {"crm_lead_id", "offer_id", "payload"},
         "crm_offer_snapshot_versions": {"crm_lead_id", "snapshot_version"},
-        "crm_participant_states": {"crm_lead_id", "payload"},
+        "crm_participant_states": {"crm_lead_id", "payload", "snapshot_version"},
         "crm_bloggers": {"blogger_uuid", "issuer_id", "channel"},
         "participant_task_reports": {"report_id", "telegram_id", "crm_lead_id"},
         "participant_task_report_outbox": {"report_id", "payload"},

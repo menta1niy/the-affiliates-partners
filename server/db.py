@@ -172,7 +172,8 @@ def initialize():
           snapshot_version INTEGER NOT NULL CHECK(snapshot_version > 0));
         CREATE TABLE IF NOT EXISTS crm_participant_states (
           crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
-          payload TEXT NOT NULL, updated_at INTEGER NOT NULL);
+          payload TEXT NOT NULL, updated_at INTEGER NOT NULL,
+          snapshot_version INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS crm_bloggers (blogger_uuid TEXT PRIMARY KEY,
           channel TEXT NOT NULL, issuer_id INTEGER NOT NULL REFERENCES users(id), active INTEGER NOT NULL DEFAULT 1);
         CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
@@ -181,6 +182,9 @@ def initialize():
         CREATE INDEX IF NOT EXISTS ix_audit_created ON audit(id DESC);
         """)
         user_columns = {item[1] for item in conn.execute("PRAGMA table_info(users)")}
+        state_columns = {item[1] for item in conn.execute("PRAGMA table_info(crm_participant_states)")}
+        if "snapshot_version" not in state_columns:
+            conn.execute("ALTER TABLE crm_participant_states ADD COLUMN snapshot_version INTEGER NOT NULL DEFAULT 0")
         if "source" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN source TEXT CHECK(source IN ('agency','referral'))")
         if "consent_at" not in user_columns:
@@ -866,6 +870,9 @@ def receive_crm_event(event):
                 public["published_instruction"] = sanitize_published_instruction(offer["published_instruction"])
             safe_offers.append(public)
     elif kind == "participant.state":
+        snapshot_version = event.get("snapshot_version")
+        if snapshot_version is not None and (type(snapshot_version) is not int or not 1 <= snapshot_version <= 9223372036854775807):
+            raise Problem(400, "Некорректная версия состояния CRM")
         applications, payouts = event.get("applications"), event.get("lead_payouts")
         if not isinstance(applications, list) or len(applications) > 200 or not isinstance(payouts, list) or len(payouts) > 200:
             raise Problem(400, "Некорректное состояние CRM")
@@ -944,10 +951,17 @@ def receive_crm_event(event):
             binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
             if not binding:
                 raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
+            current = conn.execute("SELECT snapshot_version FROM crm_participant_states WHERE crm_lead_id=?", (crm_id,)).fetchone()
+            incoming_version = snapshot_version or 0
+            if current is not None and (incoming_version <= current["snapshot_version"]
+                                       if incoming_version else current["snapshot_version"] > 0):
+                conn.execute("INSERT INTO crm_events(event_id,event_hash,event_type,received_at) VALUES(?,?,?,?)",
+                             (event["event_id"], digest, kind, int(time.time())))
+                return {"changed": False}
             safe = {"applications": applications, "lead_payouts": payouts}
-            conn.execute("INSERT INTO crm_participant_states(crm_lead_id,payload,updated_at) VALUES(?,?,?) "
-                         "ON CONFLICT(crm_lead_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at",
-                         (crm_id, json.dumps(safe, ensure_ascii=False, sort_keys=True), int(time.time())))
+            conn.execute("INSERT INTO crm_participant_states(crm_lead_id,payload,updated_at,snapshot_version) VALUES(?,?,?,?) "
+                         "ON CONFLICT(crm_lead_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at,snapshot_version=excluded.snapshot_version",
+                         (crm_id, json.dumps(safe, ensure_ascii=False, sort_keys=True), int(time.time()), incoming_version))
         conn.execute("INSERT INTO crm_events(event_id,event_hash,event_type,received_at) VALUES(?,?,?,?)",
                      (event["event_id"], digest, kind, int(time.time())))
         return {"changed": True}

@@ -6,6 +6,30 @@ from tests import test_registration as identities
 
 
 class ParticipantStatusHTTP(signed.CRMSyncHTTP):
+    def test_out_of_order_snapshots_cannot_regress_payment_or_reversal(self):
+        self.assertEqual(self.register(identities.ALICE, self.owner_invite())[0], 200)
+        self.assertEqual(self.as_user('/api/admin/decision', identities.OWNER,
+                                      user_id=identities.ALICE, decision='approve')[0], 200)
+        self.assertEqual(self.event({'event_id':'seq:bind','type':'lead.bound',
+                                     'crm_lead_id':'crm:seq','telegram_id':identities.ALICE})[0], 200)
+        base = {'type':'participant.state','crm_lead_id':'crm:seq',
+                'applications':[{'application_id':'a','offer_id':'o','stage':'credited'}],
+                'lead_payouts':[{'conversion_id':'c','offer_id':'o','amount':'50','status':'confirmed','reversed':False}]}
+        paid = {**base,'event_id':'seq:paid','snapshot_version':2,
+                'applications':[{'application_id':'a','offer_id':'o','stage':'paid'}],
+                'lead_payouts':[{**base['lead_payouts'][0],'status':'paid'}]}
+        stale = {**base,'event_id':'seq:stale','snapshot_version':1}
+        self.assertEqual(self.event(paid), (200, {'changed':True}))
+        self.assertEqual(self.event(stale), (200, {'changed':False}))
+        self.assertEqual(self.as_user('/api/status', identities.ALICE)[1]['lead_payouts'][0]['status'], 'paid')
+        reversed_event = {**paid,'event_id':'seq:reversed','snapshot_version':3,
+                          'lead_payouts':[{**paid['lead_payouts'][0],'reversed':True}]}
+        self.assertEqual(self.event(reversed_event), (200, {'changed':True}))
+        self.assertEqual(self.event({**paid,'event_id':'seq:replay'}), (200, {'changed':False}))
+        self.assertEqual(self.as_user('/api/status', identities.ALICE)[1]['lead_payouts'][0]['reversed'], True)
+        self.assertEqual(self.event({**base,'event_id':'seq:legacy'}), (200, {'changed':False}))
+        self.assertEqual(self.event({**base,'event_id':'seq:invalid','snapshot_version':-1})[0],400)
+
     def test_private_status_and_confirmed_payouts(self):
         self.assertEqual(self.register(identities.ALICE, self.owner_invite())[0], 200)
         self.assertEqual(self.register(identities.BOB, self.owner_invite())[0], 200)
