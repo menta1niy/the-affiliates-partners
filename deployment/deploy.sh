@@ -102,7 +102,8 @@ if url:
     # The archive is not considered verified until restored into an isolated
     # disposable database. The restore runner uses the local postgres account,
     # never the live application's connection credentials.
-    subprocess.run(["/bin/bash", str(root / "deployment" / "verify-pg-backup.sh"), str(backup)],
+    subprocess.run(["/bin/bash", str(root / "deployment" / "verify-pg-backup.sh"),
+                    str(backup), env["PGDATABASE"]],
                    check=True, stdout=subprocess.DEVNULL)
     print("Private PostgreSQL archive restored and verified in an isolated database")
 PY
@@ -142,7 +143,8 @@ test -s web/admin/admin.js
 # Supplying an explicit empty value overrides the private .env.local loader.
 PREFLIGHT_DB="$(mktemp -d)"
 chmod 0700 "$PREFLIGHT_DB"
-PARTNERS_DATABASE_URL= PARTNERS_DB_PATH="$PREFLIGHT_DB/probe.sqlite3" SERVER_PORT=8799 python3 -m server.api >/dev/null 2>&1 &
+PARTNERS_DATABASE_URL= PARTNERS_REQUIRE_POSTGRES=false PARTNERS_PG_SCHEMA_READY=false \
+  PARTNERS_DB_PATH="$PREFLIGHT_DB/probe.sqlite3" SERVER_PORT=8799 python3 -m server.api >/dev/null 2>&1 &
 PROBE_PID=$!
 API_READY=false
 for attempt in 1 2 3 4 5 6 7 8; do
