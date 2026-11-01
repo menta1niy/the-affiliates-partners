@@ -17,6 +17,27 @@ TABLES = ("users", "invitations", "pending_starts", "telegram_updates",
 USER_REFS = ("agency_id", "referrer_id", "manager_id", "introduced_by_id")
 
 
+def validate_source_schema(src, dst):
+    """Refuse silently dropping populated unrecognized SQLite data."""
+    from psycopg import sql
+
+    source_tables = [row[0] for row in src.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+    for table in source_tables:
+        if table not in TABLES:
+            if src.execute("SELECT 1 FROM '" + table.replace("'", "''") + "' LIMIT 1").fetchone():
+                raise ValueError("Nonempty unsupported SQLite table: " + table)
+            continue
+        source_columns = {row[1] for row in src.execute(
+            "PRAGMA table_info('" + table.replace("'", "''") + "')")}
+        target_columns = {row[0] for row in dst.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='partners' AND table_name=%s", (table,))}
+        unknown = source_columns - target_columns
+        if unknown and src.execute("SELECT 1 FROM '" + table.replace("'", "''") + "' LIMIT 1").fetchone():
+            raise ValueError("Unsupported SQLite columns in " + table + ": " + ", ".join(sorted(unknown)))
+
+
 def copy(sqlite_path, target_url):
     import psycopg
     from psycopg import sql
@@ -29,6 +50,7 @@ def copy(sqlite_path, target_url):
             dst.execute("CREATE SCHEMA IF NOT EXISTS partners")
             dst.execute("SET LOCAL search_path TO partners")
             dst.execute(SCHEMA)
+            validate_source_schema(src, dst)
             for table in TABLES:
                 if dst.execute(sql.SQL("SELECT 1 FROM {} LIMIT 1").format(sql.Identifier(table))).fetchone():
                     raise ValueError("Target PostgreSQL must be empty: " + table)
