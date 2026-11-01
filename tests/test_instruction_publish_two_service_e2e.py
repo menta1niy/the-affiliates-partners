@@ -6,6 +6,7 @@ import socket
 import sys
 import threading
 import unittest
+from http.server import ThreadingHTTPServer
 from decimal import Decimal
 from pathlib import Path
 from urllib.error import HTTPError
@@ -13,6 +14,7 @@ from urllib.request import Request, build_opener, HTTPCookieProcessor
 from uuid import uuid4
 
 from tests import test_registration as identities
+from tests.test_published_media_browser import Handler as StaticMiniAppHandler
 
 
 class PublishedInstructionHTTP(unittest.TestCase):
@@ -153,6 +155,57 @@ class PublishedInstructionHTTP(unittest.TestCase):
         self.assertEqual(snapshot['images'][0]['url'], initial['images'][0])
         self.assertEqual(snapshot['links'][0]['url'], initial['links'][0])
 
+        # The browser is backed by real, signed participant HTTP responses from
+        # the receiving service, not by a hand-written offer fixture.
+        def browser_assert(expected_text, old_text=None):
+            from playwright.sync_api import sync_playwright
+
+            static = ThreadingHTTPServer(('127.0.0.1', 0), StaticMiniAppHandler)
+            static_thread = threading.Thread(target=static.serve_forever, daemon=True)
+            static_thread.start()
+            try:
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch(headless=True)
+                    try:
+                        for width in (390, 1440):
+                            page = browser.new_page(viewport={'width': width, 'height': 820})
+                            errors = []
+                            page.on('pageerror', lambda error: errors.append(str(error)))
+
+                            def live_api(route):
+                                path = route.request.url.split('/partners/api/', 1)[-1]
+                                if path == 'session':
+                                    code, data = self.as_user('/api/session', participant)
+                                elif path == 'tasks':
+                                    code, data = self.as_user('/api/tasks', participant)
+                                elif path == 'status':
+                                    code, data = self.as_user('/api/status', participant)
+                                else:
+                                    code, data = 404, {'error': 'unavailable in this QA run'}
+                                route.fulfill(status=code, content_type='application/json', body=json.dumps(data))
+
+                            page.route('**/partners/api/**', live_api)
+                            page.goto(f'http://127.0.0.1:{static.server_port}/partners/?tgWebAppData=synthetic-qa')
+                            page.get_by_text(expected_text, exact=False).first.wait_for(timeout=15000)
+                            self.assertEqual(page.locator('.published-instruction-images img').count(),
+                                             1 if expected_text == first_text else 0)
+                            self.assertEqual(page.locator('.published-instruction-links a').count(),
+                                             1 if expected_text == first_text else 0)
+                            self.assertEqual(page.locator('.published-instruction-text script').count(), 0)
+                            if old_text:
+                                self.assertEqual(page.get_by_text(old_text, exact=False).count(), 0)
+                            self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
+                            self.assertEqual(errors, [])
+                            page.close()
+                    finally:
+                        browser.close()
+            finally:
+                static.shutdown()
+                static.server_close()
+                static_thread.join(timeout=3)
+
+        browser_assert(first_text)
+
         second_text = 'Replacement after revoking old instructions'
         status, newer = request(root + '/drafts', {'text': second_text, 'images': [], 'links': []})
         self.assertEqual(status, 201, newer)
@@ -163,3 +216,4 @@ class PublishedInstructionHTTP(unittest.TestCase):
         latest = visible()['published_instruction']
         self.assertEqual(latest, {'text': second_text, 'images': [], 'links': []})
         self.assertNotIn(first_text, json.dumps(visible()))
+        browser_assert(second_text, old_text=first_text)
