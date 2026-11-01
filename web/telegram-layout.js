@@ -18,6 +18,7 @@
   try {
     app.ready();
     app.expand();
+    app.disableVerticalSwipes?.();
     app.setHeaderColor?.('#111310');
     app.setBackgroundColor?.('#111310');
     app.setBottomBarColor?.('#111310');
