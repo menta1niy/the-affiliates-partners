@@ -24,6 +24,7 @@ h1, h2, h3, h4, h5, h6, .brand, .metric strong { font-family: 'Unbounded', sans-
 .panel h2, .panel h3, .section-heading h2 { letter-spacing: -.025em; }
 
 /* Restrained dashboard surfaces: soft depth, selectively frosted, no decorative clutter. */
+.owner-preview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:20px 0}.owner-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.owner-preview-card{padding:17px;border-radius:16px;border:1px solid var(--line);background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.012)),var(--surface)}.owner-preview-card h3{font-size:14px;line-height:1.55;margin:12px 0 8px}.owner-preview-card p{font-size:12px;margin:0}.owner-preview-status{display:inline-block;border-radius:20px;padding:6px 9px;font-size:10px;background:rgba(211,244,137,.10);color:var(--lime)}.owner-preview-status.done{color:#d4d7d0;background:rgba(255,255,255,.09)}@media(max-width:740px){.owner-preview-grid{grid-template-columns:1fr}.owner-preview-stats .metric{padding:10px}.owner-preview-stats .metric strong{font-size:18px}}
 :root { --paper:#101110; --surface:#1d1f1d; --line:rgba(236,241,226,.11); --muted:#adb3a8; --lime:#d3f489; }
 body { background:radial-gradient(ellipse 75% 24% at 50% -12%,rgba(211,244,137,.055),transparent 78%),var(--paper); }
 .hero { position:relative; isolation:isolate; overflow:hidden; background:linear-gradient(145deg,#d9f69b 0%,#c9ed80 100%); box-shadow:0 12px 42px rgba(0,0,0,.18); }
