@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS crm_assigned_offers (
   crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
   offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id)
 );
+CREATE TABLE IF NOT EXISTS crm_offer_snapshot_versions (
+  crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
+  snapshot_version BIGINT NOT NULL CHECK(snapshot_version > 0)
+);
 CREATE TABLE IF NOT EXISTS crm_participant_states (
   crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
   payload TEXT NOT NULL, updated_at BIGINT NOT NULL
@@ -179,6 +183,7 @@ def validate_ready(url):
         "crm_registration_outbox": {"telegram_id", "payload", "delivered_at"},
         "crm_lead_bindings": {"crm_lead_id", "telegram_id"},
         "crm_assigned_offers": {"crm_lead_id", "offer_id", "payload"},
+        "crm_offer_snapshot_versions": {"crm_lead_id", "snapshot_version"},
         "crm_participant_states": {"crm_lead_id", "payload"},
         "crm_bloggers": {"blogger_uuid", "issuer_id", "channel"},
         "participant_task_reports": {"report_id", "telegram_id", "crm_lead_id"},

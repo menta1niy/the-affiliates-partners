@@ -167,6 +167,9 @@ def initialize():
           telegram_id INTEGER NOT NULL UNIQUE REFERENCES users(id), bound_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_assigned_offers (crm_lead_id TEXT NOT NULL REFERENCES crm_lead_bindings(crm_lead_id),
           offer_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(crm_lead_id,offer_id));
+        CREATE TABLE IF NOT EXISTS crm_offer_snapshot_versions (
+          crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
+          snapshot_version INTEGER NOT NULL CHECK(snapshot_version > 0));
         CREATE TABLE IF NOT EXISTS crm_participant_states (
           crm_lead_id TEXT PRIMARY KEY REFERENCES crm_lead_bindings(crm_lead_id),
           payload TEXT NOT NULL, updated_at INTEGER NOT NULL);
@@ -836,6 +839,9 @@ def receive_crm_event(event):
         if type(telegram_id) is not int or telegram_id <= 0:
             raise Problem(400, "Требуется подтверждённая привязка Telegram ID")
     elif kind == "offers.assigned":
+        snapshot_version = event.get("snapshot_version")
+        if snapshot_version is not None and (type(snapshot_version) is not int or not 1 <= snapshot_version <= 9223372036854775807):
+            raise Problem(400, "Invalid CRM offer snapshot version")
         offers = event.get("offers")
         if not isinstance(offers, list) or len(offers) > 200:
             raise Problem(400, "Некорректный список офферов")
@@ -922,10 +928,18 @@ def receive_crm_event(event):
             binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
             if not binding:
                 raise Problem(409, "CRM ID не привязан к подтверждённому Telegram пользователю")
-            conn.execute("DELETE FROM crm_assigned_offers WHERE crm_lead_id=?", (crm_id,))
-            for offer in safe_offers:
-                conn.execute("INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)",
-                             (crm_id, str(offer["id"]), json.dumps(offer, ensure_ascii=False, sort_keys=True)))
+            prior = conn.execute("SELECT snapshot_version FROM crm_offer_snapshot_versions WHERE crm_lead_id=?", (crm_id,)).fetchone()
+            # Old senders remain supported until the first versioned snapshot;
+            # thereafter legacy/delayed events cannot undo newer state.
+            if prior is None or (snapshot_version is not None and snapshot_version > prior["snapshot_version"]):
+                conn.execute("DELETE FROM crm_assigned_offers WHERE crm_lead_id=?", (crm_id,))
+                for offer in safe_offers:
+                    conn.execute("INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)",
+                                 (crm_id, str(offer["id"]), json.dumps(offer, ensure_ascii=False, sort_keys=True)))
+                if snapshot_version is not None:
+                    conn.execute("INSERT INTO crm_offer_snapshot_versions(crm_lead_id,snapshot_version) VALUES(?,?) "
+                                 "ON CONFLICT(crm_lead_id) DO UPDATE SET snapshot_version=excluded.snapshot_version",
+                                 (crm_id, snapshot_version))
         else:
             binding = conn.execute("SELECT telegram_id FROM crm_lead_bindings WHERE crm_lead_id=?", (crm_id,)).fetchone()
             if not binding:
