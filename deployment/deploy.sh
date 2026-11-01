@@ -96,7 +96,12 @@ if url:
     except (OSError, subprocess.CalledProcessError):
         backup.unlink(missing_ok=True)
         raise SystemExit("PostgreSQL backup/verification failed; refusing deployment")
-    print("Private PostgreSQL archive verified; database rollback remains a separate controlled operation")
+    # The archive is not considered verified until restored into an isolated
+    # disposable database. The restore runner uses the local postgres account,
+    # never the live application's connection credentials.
+    subprocess.run(["/bin/bash", str(root / "deployment" / "verify-pg-backup.sh"), str(backup)],
+                   check=True, stdout=subprocess.DEVNULL)
+    print("Private PostgreSQL archive restored and verified in an isolated database")
 PY
 python3 - "$ROOT" "${REMOTE:0:12}" <<'PY'
 import os
@@ -130,8 +135,11 @@ test -s web/style.css
 test -s web/admin/index.html
 test -s web/admin/admin.js
 
-# Check the new API on a separate port before restarting the production API.
-SERVER_PORT=8799 python3 -m server.api >/dev/null 2>&1 &
+# Health preflight must never initialize/migrate the live PostgreSQL schema.
+# Supplying an explicit empty value overrides the private .env.local loader.
+PREFLIGHT_DB="$(mktemp -d)"
+chmod 0700 "$PREFLIGHT_DB"
+PARTNERS_DATABASE_URL= PARTNERS_DB_PATH="$PREFLIGHT_DB/probe.sqlite3" SERVER_PORT=8799 python3 -m server.api >/dev/null 2>&1 &
 PROBE_PID=$!
 API_READY=false
 for attempt in 1 2 3 4 5 6 7 8; do
@@ -148,6 +156,7 @@ fi
 kill "$PROBE_PID" 2>/dev/null || true
 wait "$PROBE_PID" 2>/dev/null || true
 PROBE_PID=""
+rm -rf -- "$PREFLIGHT_DB"
 
 install -d -m 0755 "$RELEASES"
 RELEASE="$RELEASES/${REMOTE:0:12}"
