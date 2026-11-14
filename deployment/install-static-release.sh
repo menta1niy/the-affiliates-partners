@@ -53,7 +53,7 @@ files = manifest["files"]
 if not isinstance(files, dict) or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit", "")):
     raise SystemExit("Invalid release manifest")
 expected = {"index.html", "admin/index.html", "app.js", "admin/admin.js",
-            "style.css", "theme-green.css", "telegram-layout.js"}
+            "style.css", "telegram-layout.js"}
 if not expected.issubset(files):
     raise SystemExit("Required files absent from manifest")
 actual = {p.relative_to(root / "web").as_posix() for p in (root / "web").rglob("*") if p.is_file()}
@@ -67,10 +67,12 @@ for path, digest in files.items():
         raise SystemExit("Unsafe manifest file entry")
     if hashlib.sha256((root / "web" / path).read_bytes()).hexdigest() != digest:
         raise SystemExit("File checksum mismatch")
-if "theme-green.css?v=1" not in (root / "web" / "admin" / "index.html").read_text("utf-8"):
-    raise SystemExit("Admin is not loading the theme")
-if "theme-green.css?v=1" not in (root / "web" / "index.html").read_text("utf-8"):
-    raise SystemExit("User app is not loading the theme")
+for html in (root / "web" / "index.html", root / "web" / "admin" / "index.html"):
+    source = html.read_text("utf-8")
+    if 'href="/partners/style.css"' not in source or "theme-green.css" in source:
+        raise SystemExit("Mini App must load only the consolidated stylesheet")
+if "Green identity v1" not in (root / "web" / "style.css").read_text("utf-8"):
+    raise SystemExit("Consolidated green theme is missing")
 print("VALIDATED_COMMIT", manifest["commit"])
 PY
 

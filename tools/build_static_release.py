@@ -26,7 +26,6 @@ REQUIRED = {
     "app.js",
     "admin/admin.js",
     "style.css",
-    "theme-green.css",
     "telegram-layout.js",
 }
 
