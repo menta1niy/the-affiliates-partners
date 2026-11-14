@@ -25,6 +25,26 @@ class OutboundRegistrationTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    def test_endpoint_rejects_malformed_or_credentialed_base(self):
+        for base in (
+            "https://user:password@crm.example",
+            "https://crm.example:8080",
+            "https://crm.example/path",
+            "https://crm.example?unexpected=1",
+            "https://crm.example/#fragment",
+            "https://crm.example:bad",
+            "http://crm.example",
+        ):
+            with self.subTest(base=base), patch.dict(os.environ, {"PARTNERS_CRM_BASE_URL": base}):
+                with self.assertRaisesRegex(Exception, "CRM endpoint is not configured"):
+                    crm_registration.endpoint()
+
+    def test_endpoint_accepts_configured_https_root(self):
+        self.assertEqual(
+            crm_registration.endpoint(),
+            "https://crm.example/api/v1/workspaces/00000000-0000-4000-8000-000000000001/integrations/partners/leads",
+        )
+
     def create_consent(self):
         with db.transaction() as conn:
             conn.execute("INSERT INTO users(id,internal_id,first_name,role,status,registered_at,updated_at,consent_at,source) "

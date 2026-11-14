@@ -8,6 +8,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from server import db, integration
@@ -16,7 +17,15 @@ from server import db, integration
 def endpoint():
     base = os.environ.get("PARTNERS_CRM_BASE_URL", "").rstrip("/")
     workspace = os.environ.get("PARTNERS_CRM_WORKSPACE_ID", "")
-    if not base.startswith("https://") or not base.split("/", 3)[2] or not workspace:
+    try:
+        parsed = urlsplit(base)
+        valid_base = (parsed.scheme == "https" and bool(parsed.hostname)
+                      and parsed.port in (None, 443) and not parsed.username
+                      and not parsed.password and not parsed.path
+                      and not parsed.query and not parsed.fragment)
+    except ValueError:
+        valid_base = False
+    if not valid_base or not workspace:
         raise integration.BridgeError("CRM endpoint is not configured")
     try:
         UUID(workspace)
