@@ -12,7 +12,7 @@ source history. Aeza runs selected revisions and stores runtime state.
 
 ## Mini App release
 
-User and admin pages share web/theme-green.css. The darkest #051F20 is the
+User and admin pages share the consolidated web/style.css. The darkest #051F20 is the
 main background. #0B2B26 is used for cards, #163832 for inputs,
 #235347 for selected/accent bars, #8EB69B for CTA/success, and
 #DAF1DE for primary text. Accent bars receive a restrained matte-glass blur.
@@ -42,10 +42,20 @@ are ta-crm-api and ta-partners-api. Telegram webhook cutover is separate.
   ta-restic-snapshot.timer, set to 04:10 UTC plus randomized delay.
 - A manually transferred encrypted snapshot on Windows was independently
   verified with restic check --read-data, restic restore and dump SHA-256.
-- Automatic offsite replication is not yet configured. The Windows
-  archive is one point-in-time backup, and the daily scheduled snapshots
-  still reside on Aeza unless explicitly transferred.
+- An automatic read-only SFTP pull is configured on Windows through the
+  TheAffiliates-Aeza-Offsite-Pull scheduled task. The pull checks SHA-256,
+  stores up to 14 verified timestamped encrypted archives, and preserves
+  the previous archives on transfer failure.
+- The standalone PostgreSQL backup timer was disabled on 2026-11-14;
+  ta-restic-snapshot.timer requires the PostgreSQL backup service and runs
+  it once before each snapshot. Keep the service dependency intact.
+- A full PostgreSQL restore from a server-side restic snapshot succeeded
+  in a disposable database (49 tables, 102 foreign keys); an independent
+  restore from a Windows-downloaded archive remains a separate drill.
+- Server-side restic retention has been staged locally and dry-run checked
+  (--keep-within 7d, --keep-weekly 4, --keep-monthly 3). It is NOT deployed
+  because the live change was blocked before execution.
 - Never commit the restic password or put it in Obsidian or console logs.
   Keep a separate secured copy away from the encrypted repository.
-- Plan a dedicated offsite destination, automated transfer, retention,
-  alerts and periodic independent restore drills.
+- Keep recovery key copies separately protected and periodically test the
+  independent Windows archive, retention and restore procedure.

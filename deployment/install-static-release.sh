@@ -79,7 +79,14 @@ PY
 COMMIT="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["commit"])' "$STAGING/manifest.json")"
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "Unexpected git SHA" >&2; exit 1; }
 RELEASE="$RELEASES/$COMMIT"
-[[ ! -e "$RELEASE" && ! -L "$RELEASE" ]] || { echo "Release already installed; no changes made" >&2; exit 0; }
+if [[ -e "$RELEASE" || -L "$RELEASE" ]]; then
+    if [[ -L "$PUBLIC" && "$(readlink -f "$PUBLIC")" == "$RELEASE" ]]; then
+        echo "Release already active; no changes made"
+        exit 0
+    fi
+    echo "Release exists but is not active; refusing to overwrite or skip cutover" >&2
+    exit 1
+fi
 chown -R root:www-data "$STAGING/web"
 find "$STAGING/web" -type d -exec chmod 0755 {} +
 find "$STAGING/web" -type f -exec chmod 0644 {} +
