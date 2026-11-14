@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -35,11 +36,26 @@ def git(*args: str) -> str:
 
 
 def main() -> None:
-    if git("status", "--porcelain", "--", "web"):
+    if git("status", "--porcelain", "--untracked-files=all", "--", "web"):
         raise SystemExit("Web source has uncommitted changes: commit and validate first")
     commit = git("rev-parse", "HEAD")
-    files = sorted(p for p in SOURCE.rglob("*") if p.is_file())
+    files = []
+    for directory, dirs, names in os.walk(SOURCE, followlinks=False):
+        for name in dirs + names:
+            path = Path(directory) / name
+            if path.is_symlink():
+                raise SystemExit(f"Symlinks are forbidden in static release: {path}")
+        for name in names:
+            path = Path(directory) / name
+            if not path.is_file():
+                raise SystemExit(f"Non-regular asset: {path}")
+            files.append(path)
+    files.sort()
     paths = {p.relative_to(SOURCE).as_posix() for p in files}
+    tracked = set(git("ls-files", "--cached", "--", "web").splitlines())
+    tracked = {name.removeprefix("web/") for name in tracked}
+    if paths != tracked:
+        raise SystemExit("Release assets differ from tracked web files (including ignored files)")
     if not REQUIRED.issubset(paths):
         raise SystemExit("Required Mini App assets are missing")
     if "owner-preview.js" in paths:
@@ -54,6 +70,8 @@ def main() -> None:
     }
     if any(p.startswith(".") or "/." in p or p.endswith(".env") for p in paths):
         raise SystemExit("Hidden or environment file found in release")
+    if OUTPUT == SOURCE or SOURCE in OUTPUT.parents:
+        raise SystemExit("Output must be outside the web source")
     OUTPUT.mkdir(parents=True, exist_ok=True)
     archive = OUTPUT / f"partners-web-{commit[:12]}.tar.gz"
     serialized = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()

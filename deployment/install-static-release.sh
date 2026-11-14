@@ -13,6 +13,7 @@ LOCK=/run/lock/the-affiliates-partners-static.lock
 [[ $EUID -eq 0 ]] || { echo "Root required" >&2; exit 1; }
 [[ $EXPECTED =~ ^[0-9a-fA-F]{64}$ ]] || { echo "Invalid checksum" >&2; exit 1; }
 test -f "$ARCHIVE"
+[[ ! -L "$ARCHIVE" ]] || { echo "Archive must be a regular file" >&2; exit 1; }
 ACTUAL="$(sha256sum "$ARCHIVE" | cut -d' ' -f1)"
 [[ "${ACTUAL,,}" == "${EXPECTED,,}" ]] || { echo "Archive checksum mismatch" >&2; exit 1; }
 
@@ -24,24 +25,33 @@ trap 'rm -rf -- "$STAGING"' EXIT
 
 # Validate names before unpacking so an archive cannot write outside staging.
 python3 - "$ARCHIVE" <<'PY'
-import sys, tarfile
+import pathlib, sys, tarfile
 with tarfile.open(sys.argv[1], "r:gz") as archive:
-    names = [member.name for member in archive]
+    members = archive.getmembers()
+    names = [member.name for member in members]
+    if len(members) > 10000 or sum(member.size for member in members) > 512 * 1024 * 1024:
+        raise SystemExit("Release exceeds size or file limits")
     if len(names) != len(set(names)):
         raise SystemExit("Duplicate paths in release")
-    for member in archive:
+    if "manifest.json" not in names:
+        raise SystemExit("Missing manifest")
+    for member in members:
         path = member.name
         if not (path == "manifest.json" or path.startswith("web/")):
             raise SystemExit("Unexpected archive root")
-        if ".." in path.split("/") or path.startswith("/") or not member.isfile():
+        parts = path.split("/")
+        if (path.startswith("/") or any(part in ("", ".", "..") for part in parts)
+                or "\\" in path or not member.isfile() or member.size > 128 * 1024 * 1024):
             raise SystemExit("Unsafe archive member")
 PY
 tar -xzf "$ARCHIVE" -C "$STAGING" --no-same-owner --no-same-permissions
 python3 - "$STAGING" <<'PY'
-import hashlib, json, pathlib, sys
+import hashlib, json, pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 manifest = json.loads((root / "manifest.json").read_text("utf-8"))
 files = manifest["files"]
+if not isinstance(files, dict) or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit", "")):
+    raise SystemExit("Invalid release manifest")
 expected = {"index.html", "admin/index.html", "app.js", "admin/admin.js",
             "style.css", "theme-green.css", "telegram-layout.js"}
 if not expected.issubset(files):
@@ -50,6 +60,11 @@ actual = {p.relative_to(root / "web").as_posix() for p in (root / "web").rglob("
 if actual != set(files):
     raise SystemExit("Manifest differs from archive content")
 for path, digest in files.items():
+    if (not isinstance(path, str) or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            or path.startswith("/") or "\\" in path
+            or any(part in ("", ".", "..") for part in path.split("/"))):
+        raise SystemExit("Unsafe manifest file entry")
     if hashlib.sha256((root / "web" / path).read_bytes()).hexdigest() != digest:
         raise SystemExit("File checksum mismatch")
 if "theme-green.css?v=1" not in (root / "web" / "admin" / "index.html").read_text("utf-8"):
@@ -61,28 +76,33 @@ PY
 
 COMMIT="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["commit"])' "$STAGING/manifest.json")"
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "Unexpected git SHA" >&2; exit 1; }
-RELEASE="$RELEASES/${COMMIT:0:12}"
-[[ ! -e "$RELEASE" ]] || { echo "Release already installed; no changes made" >&2; exit 0; }
+RELEASE="$RELEASES/$COMMIT"
+[[ ! -e "$RELEASE" && ! -L "$RELEASE" ]] || { echo "Release already installed; no changes made" >&2; exit 0; }
+chown -R root:www-data "$STAGING/web"
+find "$STAGING/web" -type d -exec chmod 0755 {} +
+find "$STAGING/web" -type f -exec chmod 0644 {} +
 mv -- "$STAGING/web" "$RELEASE"
-chown -R root:www-data "$RELEASE"
-find "$RELEASE" -type d -exec chmod 0755 {} +
-find "$RELEASE" -type f -exec chmod 0644 {} +
 
 # Preserve existing live files outside the public tree as a rollback copy.
-BACKUP="$RELEASES/previous-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$BACKUP"
+BACKUP="$(mktemp -d "$RELEASES/.previous.XXXXXXXX")"
+rmdir "$BACKUP"
 if [[ -L "$PUBLIC" ]]; then
     PREVIOUS="$(readlink "$PUBLIC")"
-    ln -s "$RELEASE" "$PUBLIC.next"
-    mv -Tf "$PUBLIC.next" "$PUBLIC"
+    NEXT="$(mktemp "$RELEASES/.link.XXXXXXXX")"
+    rm -- "$NEXT"
+    ln -s "$RELEASE" "$NEXT"
+    mv -Tf -- "$NEXT" "$PUBLIC"
     echo "PREVIOUS_RELEASE=$PREVIOUS"
 elif [[ -d "$PUBLIC" ]]; then
     mv "$PUBLIC" "$BACKUP"
     if ! ln -s "$RELEASE" "$PUBLIC"; then
-        mv "$BACKUP" "$PUBLIC"
+        mv -- "$BACKUP" "$PUBLIC" || echo "URGENT: Restore directory manually from $BACKUP" >&2
         exit 1
     fi
     echo "ROLLBACK_COPY=$BACKUP"
+elif [[ -e "$PUBLIC" ]]; then
+    echo "Refusing to replace unexpected public path" >&2
+    exit 1
 else
     ln -s "$RELEASE" "$PUBLIC"
 fi
