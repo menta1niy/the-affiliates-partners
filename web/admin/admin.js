@@ -2,7 +2,8 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
-  const state = {users:[],pending:[],invites:[],tab:"pending",role:"",actorId:null};
+  const state = {users:[],pending:[],invites:[],usersTruncated:false,tab:"pending",role:"",actorId:null};
+  let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   function initData() {
@@ -36,12 +37,13 @@
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
   async function openParticipant(user){
+    const requestId=++participantRequestId;
     const id=Number(user.id || user.user_id);
     const dialog=$("participant-detail");const content=$("participant-detail-content");
     content.replaceChildren(make("p","Загрузка…"));dialog.showModal();
     try{
       const data=await api("/admin/participant",{user_id:id});
-      if(!dialog.open)return;
+      if(!dialog.open || requestId!==participantRequestId)return;
       content.replaceChildren();const person=data.user || {};
       content.append(make("h2",personName(person)));
       [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(content,key,value));
@@ -50,7 +52,7 @@
       detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
       detailRows(content,"Подтверждённые выплаты участнику",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
       detailRows(content,"Журнал действий",data.audit,[["Действие","action"],["Кем","actor_id"],["Комментарий","details"],["Время","created_at"]]);
-    }catch(e){content.replaceChildren(make("p",e.message,"message error"));}
+    }catch(e){if(dialog.open && requestId===participantRequestId)content.replaceChildren(make("p",e.message,"message error"));}
   }
   async function decide(user,decision) {
     const id=Number(user.id || user.user_id);
@@ -154,6 +156,7 @@
       return (!filter || statusOf(user)===filter) && (!roleFilter || roleOf(user)===roleFilter) && (!query || haystack.includes(query));
     });
     renderTable($("users-list"),users,"users");
+    if(state.usersTruncated)$("users-list").prepend(make("p","Показаны только последние 200 участников. Поиск и фильтры не охватывают всю базу; нужна серверная пагинация.","message"));
   }
   function renderInvites(){
     const root=$("invites-list");
@@ -206,10 +209,12 @@
     const users=Array.isArray(data.users)?data.users:(Array.isArray(data.results)?data.results:[]);
     const pending=Array.isArray(data.pending)?data.pending:users.filter(u=>statusOf(u)==="pending");
     state.users=users;state.pending=pending;
+    state.usersTruncated=data.users_truncated===true;
     state.invites=Array.isArray(data.invites)?data.invites:[];
     const totals={total:counts.total ?? counts.users ?? counts.total_users ?? Object.values(counts).reduce((sum,value)=>sum+(Number(value)||0),0),pending:counts.pending,active:counts.active,blocked:counts.blocked};
     for(const key of ["total","pending","active","blocked"])$("count-"+key).textContent=number(totals[key]);
     renderTable($("pending-list"),pending,"pending");renderUsers();
+    if(state.usersTruncated)$("pending-list").prepend(make("p","Список заявок может быть неполным: сервер отдаёт только последних 200 участников.","message"));
     renderInvites();
   }
   async function loadDashboard(){const data=await api("/admin/dashboard");renderDashboard(data);}

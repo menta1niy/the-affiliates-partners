@@ -597,6 +597,7 @@ def dashboard(actor, owner_id):
             item["usable"] = valid_invitation_source(conn, 0, item["code"])
             invites.append(item)
         return {"counts": {k: counts.get(k, 0) for k in STATUSES}, "users": users,
+                "users_truncated": sum(counts.values()) > len(users),
                 "pending": [user for user in users if user["status"] == "pending"], "invites": invites, "audit": [dict(x) for x in events]}
 
 

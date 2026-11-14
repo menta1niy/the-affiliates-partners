@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class BrowserHandler(Handler):
     def do_GET(self):
         files = {'/partners/admin/': 'web/admin/index.html', '/partners/admin/admin.js': 'web/admin/admin.js',
-                 '/partners/style.css': 'web/style.css'}
+                 '/partners/style.css': 'web/style.css', '/partners/telegram-layout.js': 'web/telegram-layout.js'}
         target = files.get(self.path)
         if not target:
             return super().do_GET()
@@ -75,5 +75,58 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                         self.assertFalse(errors, errors)
                         self.assertLessEqual(dialog.evaluate('(e) => e.getBoundingClientRect().right'), width + 1)
                         page.close()
+            finally:
+                browser.close()
+
+    def test_switching_cards_does_not_show_stale_participant(self):
+        with patch('server.api.bot_token', return_value=TOKEN), patch('server.api.admin_id', return_value=OWNER), sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.add_init_script("""
+                    const originalFetch = window.fetch.bind(window);
+                    window.fetch = async (url, options) => {
+                      if (String(url).endsWith('/admin/participant') &&
+                          JSON.parse(options.body).user_id === 881031) {
+                        await new Promise(resolve => setTimeout(resolve, 650));
+                      }
+                      return originalFetch(url, options);
+                    };
+                """)
+                url = self.base + '/partners/admin/#tgWebAppData=' + __import__('urllib.parse', fromlist=['quote']).quote(init_data(OWNER), safe='')
+                page.goto(url, wait_until='domcontentloaded')
+                page.locator('[data-tab="users"]').click()
+                first = page.locator('tr').filter(has_text=str(self.lead_a)).get_by_role('button', name='Карточка')
+                second = page.locator('tr').filter(has_text=str(self.lead_b)).get_by_role('button', name='Карточка')
+                first.click()
+                page.locator('#participant-detail').get_by_role('button', name='Закрыть').click()
+                second.click()
+                dialog = page.locator('#participant-detail')
+                dialog.get_by_text('Telegram ID:').wait_for()
+                page.wait_for_timeout(850)
+                self.assertIn(str(self.lead_b), dialog.inner_text())
+                self.assertNotIn(str(self.lead_a), dialog.inner_text())
+            finally:
+                browser.close()
+
+    def test_truncation_warning_remains_after_filter(self):
+        with db.transaction() as conn:
+            conn.executemany(
+                "INSERT INTO users(id,first_name,role,status,agency_id,registered_at,updated_at) "
+                "VALUES(?, 'Synthetic', 'lead', 'pending', ?, ?, ?)",
+                [(910000 + i, self.a, 900000 + i, 900000 + i) for i in range(205)],
+            )
+        with patch('server.api.bot_token', return_value=TOKEN), patch('server.api.admin_id', return_value=OWNER), sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={'width': 390, 'height': 844})
+                url = self.base + '/partners/admin/#tgWebAppData=' + __import__('urllib.parse', fromlist=['quote']).quote(init_data(self.admin), safe='')
+                page.goto(url, wait_until='domcontentloaded')
+                page.locator('[data-tab="users"]').click()
+                warning = page.locator('#users-list .message')
+                warning.get_by_text('Поиск и фильтры не охватывают всю базу', exact=False).wait_for()
+                page.locator('#user-query').fill('nonexistent')
+                self.assertTrue(warning.is_visible())
+                self.assertTrue(page.locator('#pending-list .message').count())
             finally:
                 browser.close()

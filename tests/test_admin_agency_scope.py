@@ -47,6 +47,20 @@ class AdminAgencyScopeTests(unittest.TestCase):
         self.assertEqual(self.as_user('/api/admin/dashboard', OWNER)[0], 200)
         self.assertIn('ref_BBBBBBBB', json.dumps(self.as_user('/api/admin/dashboard', OWNER)[1]))
 
+    def test_dashboard_discloses_truncated_list(self):
+        now = int(time.time())
+        with db.transaction() as conn:
+            conn.executemany(
+                "INSERT INTO users(id,first_name,role,status,agency_id,registered_at,updated_at) "
+                "VALUES(?, 'Synthetic', 'lead', 'pending', ?, ?, ?)",
+                [(900000 + i, self.a, now + i, now + i) for i in range(205)],
+            )
+        status, dashboard = self.as_user('/api/admin/dashboard', self.admin)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(dashboard['users']), 200)
+        self.assertTrue(dashboard['users_truncated'])
+        self.assertGreater(dashboard['counts']['pending'], len(dashboard['pending']))
+
     def test_cross_agency_access_denied_and_local_assignment_allowed(self):
         for path, payload in [
             ('/api/admin/decision', {'user_id': self.lead_b, 'decision': 'block', 'reason': 'test'}),
