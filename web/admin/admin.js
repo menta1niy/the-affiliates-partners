@@ -179,7 +179,7 @@
       );
       const cell=make("td");
       if(canShare && typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
-        const link="https://t.me/affiliates_partners_bot?start="+encodeURIComponent(invite.code);
+        const link="https://t.me/affialite_partners_bot?start="+encodeURIComponent(invite.code);
         cell.append(action("Копировать",async()=>{
           if(!navigator.clipboard?.writeText)throw new Error("Копирование недоступно: выделите код приглашения в таблице.");
           await navigator.clipboard.writeText(link);
@@ -241,7 +241,7 @@
       const candidateLabel=$("candidate-label").value.trim();
       const data=await api("/admin/invitations",{...(id?{assignee_id:Number(id)}:{}),candidate_label:candidateLabel});
       const code=data.invite_code || data.code;
-      const url=data.link || data.url || (typeof code==="string" && /^ag_[a-zA-Z0-9_-]{8,48}$/.test(code) ? "https://t.me/affiliates_partners_bot?start="+encodeURIComponent(code) : "");
+      const url=data.link || data.url || (typeof code==="string" && /^ag_[a-zA-Z0-9_-]{8,48}$/.test(code) ? "https://t.me/affialite_partners_bot?start="+encodeURIComponent(code) : "");
       const result=$("invite-result");result.replaceChildren();
       result.append(make("strong",code ? "Код: "+code : "Приглашение создано"));
       if(url && /^https:\/\//.test(url)){const input=make("input");input.value=url;input.readOnly=true;input.setAttribute("aria-label","Ссылка приглашения");result.append(input);}
@@ -252,7 +252,7 @@
   $("user-query").addEventListener("input",renderUsers);$("user-filter").addEventListener("change",renderUsers);$("role-filter").addEventListener("change",renderUsers);
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   async function start(){
-    try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#111310");}catch{}
+    try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");}catch{}
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
     try {
       const session=await api("/session");

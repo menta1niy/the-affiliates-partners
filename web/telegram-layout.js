@@ -19,9 +19,9 @@
     app.ready();
     app.expand();
     app.disableVerticalSwipes?.();
-    app.setHeaderColor?.('#111310');
-    app.setBackgroundColor?.('#111310');
-    app.setBottomBarColor?.('#111310');
+    app.setHeaderColor?.('#051F20');
+    app.setBackgroundColor?.('#051F20');
+    app.setBottomBarColor?.('#051F20');
     app.onEvent?.('safeAreaChanged', updateInsets);
     app.onEvent?.('contentSafeAreaChanged', updateInsets);
     app.onEvent?.('fullscreenChanged', updateInsets);

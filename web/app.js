@@ -36,7 +36,7 @@
     if (typeof response.url === "string") return response.url;
     if (typeof response.link === "string") return response.link;
     if (typeof response.referral_link === "string") return response.referral_link;
-    if (typeof response.code === "string" && /^ref_[a-zA-Z0-9_-]{8,48}$/.test(response.code)) return "https://t.me/affiliates_partners_bot?start=" + encodeURIComponent(response.code);
+    if (typeof response.code === "string" && /^ref_[a-zA-Z0-9_-]{8,48}$/.test(response.code)) return "https://t.me/affialite_partners_bot?start=" + encodeURIComponent(response.code);
     return "";
   }
   async function loadReferral() {
@@ -277,6 +277,6 @@
     } catch(e) {text("referral-message",e.message);}
   });
   $("refresh").addEventListener("click",refresh);
-  try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#111310");} catch {}
+  try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");} catch {}
   refresh();
 })();
