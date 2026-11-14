@@ -15,7 +15,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        filename = {"/partners/": "index.html", "/partners/style.css": "style.css", "/partners/app.js": "app.js"}.get(path)
+        filename = {"/partners/": "index.html", "/partners/style.css": "style.css", "/partners/app.js": "app.js",
+                    "/partners/telegram-layout.js": "telegram-layout.js"}.get(path)
         if filename is None:
             self.send_error(404)
             return
@@ -38,6 +39,7 @@ def verify():
                 page.on("pageerror", lambda err: errors.append(str(err)))
                 offer = {
                     "id": "synthetic-offer", "name": "Synthetic published offer",
+                    "referral_url": "https://bank.example.test/apply",
                     "instructions": "Published baseline",
                     "published_instruction": {
                         "text": "<img src=x onerror=alert(1)>\nSafe text",
@@ -59,7 +61,9 @@ def verify():
                     path = route.request.url.rsplit("/api/", 1)[-1]
                     response = {
                         "session": {"source": "telegram", "status": "active", "role": "lead", "user": {"id": 10, "first_name": "Synthetic"}},
-                        "tasks": {"tasks": [offer, {"id": "legacy", "name": "No attachments", "instructions": "Legacy safe instruction"}], "history": []},
+                        "tasks": {"tasks": [offer, {"id": "legacy", "name": "No attachments", "instructions": "Legacy safe instruction",
+                                            "referral_url": "https://user:password@bank.example.test/apply"},
+                                           {"id": "scheme", "name": "Untrusted URL", "referral_url": "https://bad.example.test\\n.evil.test/"}], "history": []},
                         "status": {"applications": [], "lead_payouts": []},
                         "invitations/referral": {},
                     }.get(path, {})
@@ -74,6 +78,10 @@ def verify():
                 assert page.locator(".published-instruction-links a").first.get_attribute("href") == "https://docs.example.test/guide"
                 assert page.locator(".published-instruction-links a").first.get_attribute("rel") == "noopener noreferrer"
                 assert page.locator(".published-instruction-text img").count() == 0
+                offer_links = page.get_by_role("link", name="Перейти к предложению")
+                assert offer_links.count() == 1, page.locator('.offer-item a').evaluate_all('(els) => els.map(e => e.href)')
+                assert offer_links.first.get_attribute("href") == "https://bank.example.test/apply"
+                assert offer_links.first.get_attribute("referrerpolicy") == "no-referrer"
                 assert page.get_by_text("Published baseline").count() == 0
                 assert page.get_by_role("heading", name="No attachments").is_visible()
                 assert page.get_by_text("Legacy safe instruction").is_visible()

@@ -19,6 +19,7 @@ class Handler(BaseHTTPRequestHandler):
             "/partners/": "index.html",
             "/partners/style.css": "style.css",
             "/partners/app.js": "app.js",
+            "/partners/telegram-layout.js": "telegram-layout.js",
         }
         if path not in mapping:
             self.send_error(404)
@@ -64,16 +65,18 @@ def main():
                     payload = {
                         "session": {"source": "telegram", "status": "active", "role": "lead", "user": {"id": 42, "first_name": "Тест", "status": "active"}},
                         "tasks": {"tasks": [{"id": "offer-sample", "name": "Тестовое назначение", "instructions": "Выполните условия"}], "history": []},
-                        "status": {"applications": [{"offer_id": "offer-sample", "stage": "applied"}], "lead_payouts": []},
-                        "invitations/referral": {"error": "no invitation"},
+                        "lead-view": {"applications": [{"offer_id": "offer-sample", "stage": "applied"}], "lead_payouts": []},
+                        "invitations/referral": {"code": "ref_TestCode1234", "url": "https://attacker.example.test/fake-invite"},
                         "tasks/report": {"ok": True},
                     }.get(endpoint, {})
                     route.fulfill(status=200, content_type="application/json", body=json.dumps(payload, ensure_ascii=False))
                 page.route("**/partners/api/**", synthetic_api)
                 page.goto(url + "?tgWebAppData=synthetic-test-only")
                 page.get_by_role("heading", name="Тестовое назначение").wait_for(timeout=12000)
-                assert page.get_by_text("Заявка отправлена").is_visible()
+                page.get_by_text("Заявка отправлена").wait_for(state="visible", timeout=12000)
                 assert page.get_by_role("button", name="Сообщить о действии").is_visible()
+                page.locator("#referral-panel").wait_for(state="visible", timeout=12000)
+                assert page.locator("#referral-link").input_value() == "https://t.me/affialite_partners_bot?start=ref_TestCode1234"
                 page.get_by_role("button", name="Сообщить о действии").click()
                 page.get_by_text("Отчёт принят. Подтверждение результата ожидается от CRM.").wait_for(timeout=12000)
                 assert page.get_by_role("heading", name="Тестовое назначение").is_visible()

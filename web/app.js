@@ -33,10 +33,10 @@
     return {key,label:statusLabels[key] || key,description:descriptions[key] || "Для уточнения статуса обратитесь к администратору."};
   }
   function referralUrl(response) {
-    if (typeof response.url === "string") return response.url;
-    if (typeof response.link === "string") return response.link;
-    if (typeof response.referral_link === "string") return response.referral_link;
-    if (typeof response.code === "string" && /^ref_[a-zA-Z0-9_-]{8,48}$/.test(response.code)) return "https://t.me/affialite_partners_bot?start=" + encodeURIComponent(response.code);
+    // Invite codes come from the authorized server endpoint. Never copy
+    // arbitrary remote URLs into a participant's referral invitation.
+    const code=response?.code || response?.invite_code;
+    if (typeof code === "string" && /^ref_[a-zA-Z0-9_-]{8,48}$/.test(code)) return "https://t.me/affialite_partners_bot?start=" + encodeURIComponent(code);
     return "";
   }
   async function loadReferral() {
@@ -62,7 +62,7 @@
     element.hidden = !message;
   }
   function safeHttpsUrl(value) {
-    if (typeof value !== "string" || value.length > 2048 || /[\u0000-\u001f\u007f]/.test(value)) return "";
+    if (typeof value !== "string" || value.length > 2048 || /[\\\u0000-\u001f\u007f]/.test(value)) return "";
     try {
       const url = new URL(value);
       if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return "";
@@ -124,8 +124,9 @@
         renderPublishedInstructions(item,offer);
         const details=[offer.advertiser ? "Рекламодатель: "+offer.advertiser : "",offer.type ? "Тип: "+offer.type : "",offer.target_action ? "Целевое действие: "+offer.target_action : ""].filter(Boolean);
         if(details.length){const info=document.createElement("p");info.className="muted";info.textContent=details.join(" · ");item.append(info);}
-        if (typeof offer.referral_url === "string" && /^https:\/\//i.test(offer.referral_url)) {
-          const link=document.createElement("a");link.className="btn ghost";link.textContent="Перейти к предложению ↗";link.href=offer.referral_url;link.target="_blank";link.rel="noopener noreferrer";item.append(link);
+        const offerUrl=safeHttpsUrl(offer.referral_url);
+        if (offerUrl) {
+          const link=document.createElement("a");link.className="btn ghost";link.textContent="Перейти к предложению ↗";link.href=offerUrl;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";item.append(link);
         }
         if(offer.id !== undefined && offer.id !== null){
           const form=document.createElement("form");form.className="task-report";
