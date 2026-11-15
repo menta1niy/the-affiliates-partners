@@ -167,6 +167,37 @@
       item.append(heading,info);if(record.note){const note=document.createElement("p");note.textContent=record.note;item.append(note);}container.append(item);
     });
   }
+  const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"Отправлено на проверку",completed:"Завершено (отметка администратора)",rejected:"Отклонено"};
+  async function loadManualOverview(){
+    const request=++offersRequest;
+    offerMessage("Загружаем ваши офферы…");
+    try{
+      const result=await api("/mvp/overview");
+      if(request!==offersRequest)return;
+      const root=$("offers");root.replaceChildren();
+      const stats=result.statistics||{};
+      const summary=document.createElement("p");summary.className="muted";
+      summary.textContent=`Всего назначено: ${stats.total||0} · В работе: ${stats.in_progress||0} · Завершено: ${stats.completed||0}`;
+      root.append(summary);
+      const offers=Array.isArray(result.offers)?result.offers:[];
+      if(!offers.length){root.append(document.createTextNode("Офферы пока не назначены администратором."));return;}
+      const list=document.createElement("div");list.className="offer-list";
+      for(const offer of offers){
+        const item=document.createElement("article");item.className="offer-item";
+        const h=document.createElement("h3");h.textContent=offer.name;
+        const info=document.createElement("p");info.textContent=`Категория: ${offer.category} · Оплата за целевое действие: ${offer.payout_rub} ₽ · Холд: ${offer.hold_days} дн.`;
+        const target=document.createElement("p");target.textContent="Целевое действие: "+offer.target_action;
+        const progress=document.createElement("p");progress.className="muted";progress.textContent="Статус: "+(manualStages[offer.stage]||offer.stage);
+        item.append(h,info,target,progress);
+        if(offer.instructions){const instructions=document.createElement("p");instructions.textContent=offer.instructions;item.append(instructions);}
+        if(offer.note){const note=document.createElement("p");note.textContent="Комментарий администратора: "+offer.note;item.append(note);}
+        const url=safeHttpsUrl(offer.referral_url);
+        if(url){const link=document.createElement("a");link.className="btn ghost";link.textContent="Открыть предложение ↗";link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";item.append(link);}
+        list.append(item);
+      }
+      root.append(list);
+    }catch(e){if(request===offersRequest)offerMessage("Не удалось получить офферы: "+e.message);}
+  }
   async function loadTasks(){
     const request=++offersRequest;
     offerMessage("Загружаем задания из CRM…");
@@ -215,8 +246,8 @@
     const unregistered = ["invited","unregistered","new","not_registered"].includes(state.key);
     show("register-panel",unregistered);
     const verifiedInvite = Boolean(session.source_info?.inviter_id);
-    show("register-form",unregistered && verifiedInvite);
-    text("registration-instructions",verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
+    show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
+    text("registration-instructions",session.open_registration===true ? "Подтвердите согласие и отправьте заявку. Администратор увидит ваш Telegram ID и username." : verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
     text("status-description",state.description);
@@ -228,7 +259,13 @@
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
-    if (["approved","active"].includes(state.key)){loadTasks();loadCrmStatus();}
+    if (["approved","active"].includes(state.key) && session.open_registration===true){
+      $("offers").closest("section").querySelector("h2").textContent="Мои офферы и статистика";
+      $("offers").closest("section").querySelector("p").textContent="Статусы ведёт администратор. Они не являются банковским подтверждением выплаты.";
+      $("task-history").closest("section").hidden=true;
+      $("crm-state").closest("section").hidden=true;
+      loadManualOverview();
+    }else if (["approved","active"].includes(state.key)){loadTasks();loadCrmStatus();}
     else {++offersRequest;++crmStatusRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }

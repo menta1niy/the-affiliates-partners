@@ -7,6 +7,7 @@
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
+  const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"На проверке",completed:"Завершено",rejected:"Отклонено"};
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -41,17 +42,53 @@
     const requestId=++participantRequestId;
     const id=Number(user.id || user.user_id);
     const dialog=$("participant-detail");const content=$("participant-detail-content");
-    content.replaceChildren(make("p","Загрузка…"));dialog.showModal();
+    content.replaceChildren(make("p","Загрузка…"));if(!dialog.open)dialog.showModal();
     try{
       const data=await api("/admin/participant",{user_id:id});
       if(!dialog.open || requestId!==participantRequestId)return;
       content.replaceChildren();const person=data.user || {};
       content.append(make("h2",personName(person)));
       [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(content,key,value));
-      detailRows(content,"Назначенные офферы",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
-      detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
-      detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
-      detailRows(content,"Подтверждённые выплаты участнику",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
+      if(data.crm_lead_id){
+        detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
+        detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
+        detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
+        detailRows(content,"Подтверждённые выплаты CRM",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
+      }
+      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+        const section=make("section",undefined,"panel");section.append(make("h3","Управление офферами и статусами"));
+        const stats=data.manual?.statistics||{};
+        section.append(make("p",`Назначено: ${stats.total||0} · В работе: ${stats.in_progress||0} · Завершено: ${stats.completed||0}`,"muted"));
+        const assignments=Array.isArray(data.manual?.offers)?data.manual.offers:[];
+        for(const offer of assignments){
+          const item=make("div",undefined,"participant-detail-item");
+          item.append(make("strong",offer.name),make("p",`${offer.category} · ${offer.payout_rub} ₽ · Холд ${offer.hold_days} дн. · ${offer.target_action}`));
+          const select=make("select");
+          for(const [key,label] of Object.entries(manualStages)){const option=make("option",label);option.value=key;select.append(option);}select.value=offer.stage;
+          const note=make("input");note.placeholder="Комментарий для участника";note.maxLength=300;note.value=offer.note||"";
+          item.append(select,note,action("Сохранить статус",async()=>{
+            await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,stage:select.value,note:note.value});
+            notice("Статус обновлён");await openParticipant(person);
+          }),action("Убрать оффер",async()=>{
+            if(!window.confirm("Убрать назначение оффера?"))return;
+            await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,enabled:false,note:""});
+            await openParticipant(person);
+          }));
+          section.append(item);
+        }
+        const available=await api("/admin/mvp/catalog");
+        if(requestId!==participantRequestId || !dialog.open)return;
+        const picker=make("select");picker.setAttribute("aria-label","Оффер для назначения");
+        for(const offer of available.offers||[]){if(!offer.active || assignments.some(a=>a.id===offer.id))continue;const option=make("option",offer.name);option.value=offer.id;picker.append(option);}
+        if(picker.options.length){section.append(picker,action("Назначить оффер",async()=>{
+          await api("/admin/mvp/assignment",{user_id:id,offer_id:picker.value,stage:"assigned",note:""});
+          notice("Оффер назначен");await openParticipant(person);
+        }));}else section.append(make("p","Нет новых доступных офферов. Добавьте их в каталоге.","muted"));
+        if(person.status==="pending")section.append(action("Одобрить участника",async()=>{
+          await api("/admin/decision",{user_id:id,decision:"approve"});notice("Участник одобрен");await loadDashboard();await openParticipant(person);
+        }));
+        content.append(section);
+      }
       detailRows(content,"Журнал действий",data.audit,[["Действие","action"],["Кем","actor_id"],["Комментарий","details"],["Время","created_at"]]);
     }catch(e){if(dialog.open && requestId===participantRequestId)content.replaceChildren(make("p",e.message,"message error"));}
   }
@@ -241,6 +278,29 @@
       });
     }catch(e){root.append(make("p",e.message,"empty"));error(e.message);}
   }
+  async function openOfferCatalog(){
+    let dialog=$("mvp-catalog-dialog");
+    if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel";dialog.style.cssText="width:min(620px,94vw);max-height:90vh;overflow:auto;background:#0B2B26;color:#DAF1DE;border:1px solid #235347;border-radius:16px";document.body.append(dialog);}
+    dialog.replaceChildren();
+    const close=action("Закрыть",()=>dialog.close());dialog.append(close,make("h2","Каталог офферов"));
+    const list=make("div");dialog.append(list);
+    const fields=[["name","Название","text"],["category","Категория","text"],["target_action","Целевое действие","text"],["payout_rub","Оплата, ₽","number"],["hold_days","Холд, дней","number"],["instructions","Инструкция","text"],["referral_url","HTTPS-ссылка","url"]];
+    const form=make("form");form.className="form-grid";
+    const inputs={};let editingId=null;
+    const heading=make("h3","Добавить оффер");form.append(heading);
+    for(const [key,label,type] of fields){const wrap=make("label",label);const input=make("input");input.type=type;input.name=key;input.maxLength=key==="instructions"?2000:2048;if(type==="number"){input.min="0";input.step="1";}if(key==="payout_rub"||key==="hold_days")input.value="0";inputs[key]=input;wrap.append(input);form.append(wrap);}
+    const active=make("input");active.type="checkbox";active.checked=true;const activeLabel=make("label"," Доступен для назначений");activeLabel.prepend(active);form.append(activeLabel);
+    const save=make("button","Сохранить оффер","btn primary");save.type="submit";form.append(save);
+    form.addEventListener("submit",async e=>{e.preventDefault();save.disabled=true;try{
+      const payload={};for(const [key] of fields)payload[key]=inputs[key].value.trim();
+      payload.payout_rub=Number(payload.payout_rub);payload.hold_days=Number(payload.hold_days);payload.active=active.checked;
+      if(editingId)payload.offer_id=editingId;
+      await api("/admin/mvp/offer",payload);editingId=null;heading.textContent="Добавить оффер";form.reset();inputs.payout_rub.value="0";inputs.hold_days.value="0";await reload();notice("Оффер сохранён");
+    }catch(err){error(err.message);}finally{save.disabled=false;}});
+    dialog.append(form);
+    async function reload(){list.replaceChildren(make("p","Загрузка…"));const data=await api("/admin/mvp/catalog");list.replaceChildren();for(const offer of data.offers||[]){const item=make("div",undefined,"participant-detail-item");item.append(make("strong",offer.name),make("p",`${offer.category} · ${offer.payout_rub} ₽ · ${offer.hold_days} дн. · ${offer.active?"Доступен":"Отключён"}`));item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;form.scrollIntoView({behavior:"smooth"});}));list.append(item);}}
+    dialog.showModal();await reload();
+  }
   function switchTab(tab){
     state.tab=tab;
     document.querySelectorAll("[data-tab]").forEach(button=>button.setAttribute("aria-selected",String(button.dataset.tab===tab)));
@@ -273,6 +333,7 @@
   $("user-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("role-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
+  const catalogButton=action("Каталог офферов",openOfferCatalog);catalogButton.id="mvp-catalog-open";$("reload").before(catalogButton);
   async function start(){
     try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");}catch{}
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
@@ -281,6 +342,7 @@
       const role=session.role || session.user?.role;
       state.role=role;
       state.actorId=Number(session.user?.id);
+      catalogButton.hidden=!(["owner","admin"].includes(role));
       const status=session.status || session.user?.status;
       if(!["owner","admin","staff"].includes(role) || (status && !["active","approved"].includes(status))){
         show("no-access",true);return;

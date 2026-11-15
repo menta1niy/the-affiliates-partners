@@ -99,6 +99,20 @@ class AdminAgencyScopeTests(unittest.TestCase):
                 self.assertEqual(self.as_user('/api/admin/users', self.admin, **bad)[0], 400)
         self.assertEqual(self.as_user('/api/admin/users', self.lead_a)[0], 403)
 
+    def test_manual_mvp_offer_assignment_is_agency_scoped(self):
+        payload={"name":"Банковская карта", "category":"Карты", "target_action":"Активация",
+                 "payout_rub":800, "hold_days":14, "instructions":"Инструкция", "referral_url":""}
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.admin, **payload)[0],403)
+        status, created=self.as_user('/api/admin/mvp/offer', OWNER, **payload)
+        self.assertEqual(status,200,created)
+        offer=created['offer_id']
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment', self.admin,
+                                     user_id=self.lead_b, offer_id=offer, note='')[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment', self.admin,
+                                     user_id=self.lead_a, offer_id=offer, note='')[0],200)
+        self.assertEqual(self.as_user('/api/admin/participant',self.admin,user_id=self.lead_a)[1]['manual']['statistics']['total'],1)
+        self.assertEqual(self.as_user('/api/admin/participant',self.other_admin,user_id=self.lead_a)[0],403)
+
     def test_cross_agency_access_denied_and_local_assignment_allowed(self):
         for path, payload in [
             ('/api/admin/decision', {'user_id': self.lead_b, 'decision': 'block', 'reason': 'test'}),

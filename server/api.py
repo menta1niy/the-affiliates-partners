@@ -12,6 +12,7 @@ from server.settings import admin_id, bot_token, webhook_secret
 from server import db
 from server import integration
 from server import tasks
+from server import mvp
 
 
 def storage_error(exc):
@@ -49,7 +50,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_crm_event()
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
                   "/api/admin/dashboard", "/api/admin/users", "/api/admin/participant", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
-                  "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view"}
+                  "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
+                  "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -132,13 +134,17 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
                 if pending_source:
                     result["source_info"] = pending_source
+                result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
             elif route == "/api/register":
                 if body.get("consent") is not True:
                     return self.send_json(400, {"error": "Необходимо согласие"})
                 code = body.get("invite_code")
                 if code is not None and not isinstance(code, str):
                     return self.send_json(400, {"error": "Некорректный код"})
-                profile = db.register(user, owner, code)
+                if os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true" and code is None:
+                    profile = db.register_open(user, owner)
+                else:
+                    profile = db.register(user, owner, code)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
             elif route == "/api/invitations/referral":
                 result = db.invite(user["id"], owner, "referral")
@@ -158,6 +164,17 @@ class Handler(BaseHTTPRequestHandler):
                 if type(body.get("user_id")) is not int or body["user_id"] <= 0:
                     return self.send_json(400, {"error": "Некорректный пользователь"})
                 result = db.admin_participant_detail(user["id"], owner, body["user_id"])
+                result["manual"] = (mvp.overview(body["user_id"], owner, for_admin=user["id"])
+                                    if result["user"]["role"] in ("lead", "referrer") else
+                                    {"offers": [], "statistics": {"total": 0, "completed": 0, "in_progress": 0}})
+            elif route == "/api/admin/mvp/catalog":
+                result = mvp.catalog(user["id"], owner)
+            elif route == "/api/admin/mvp/offer":
+                result = mvp.save_offer(user["id"], owner, body)
+            elif route == "/api/admin/mvp/assignment":
+                result = mvp.assignment(user["id"], owner, body)
+            elif route == "/api/mvp/overview":
+                result = mvp.overview(user["id"], owner)
             elif route == "/api/offers":
                 get_offers = getattr(db, "list_assigned_offers", None)
                 if get_offers is None:

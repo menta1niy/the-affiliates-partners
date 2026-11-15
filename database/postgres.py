@@ -84,6 +84,20 @@ CREATE TABLE IF NOT EXISTS participant_task_report_outbox (
   delivered_at BIGINT, attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at BIGINT NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS manual_offers (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
+  target_action TEXT NOT NULL, payout_rub INTEGER NOT NULL,
+  hold_days INTEGER NOT NULL, instructions TEXT NOT NULL DEFAULT '',
+  referral_url TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
+  created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS manual_assignments (
+  telegram_id BIGINT NOT NULL REFERENCES users(id),
+  offer_id TEXT NOT NULL REFERENCES manual_offers(id),
+  stage TEXT NOT NULL DEFAULT 'assigned', note TEXT NOT NULL DEFAULT '',
+  updated_at BIGINT NOT NULL, PRIMARY KEY(telegram_id,offer_id)
+);
+CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id);
 CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
@@ -190,9 +204,11 @@ def validate_ready(url):
         "crm_bloggers": {"blogger_uuid", "issuer_id", "channel"},
         "participant_task_reports": {"report_id", "telegram_id", "crm_lead_id"},
         "participant_task_report_outbox": {"report_id", "payload"},
+        "manual_offers": {"id", "name", "category", "target_action", "payout_rub", "hold_days", "active"},
+        "manual_assignments": {"telegram_id", "offer_id", "stage", "note", "updated_at"},
     }
     tables = ("pending_starts", "telegram_updates", "audit", "notifications_outbox", "internal_id_sequence", "crm_events")
-    indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user"}
+    indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user", "ix_manual_assignments_user"}
     with connect(url).raw as conn:
         rows = conn.execute("SELECT table_name,column_name FROM information_schema.columns "
                             "WHERE table_schema='partners'").fetchall()

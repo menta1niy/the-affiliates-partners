@@ -380,6 +380,38 @@ def register(identity, owner_id, invitation_code):
         return public_user(get_user(conn, identity["id"]))
 
 
+def register_open(identity, owner_id):
+    """Opt-in standalone MVP onboarding; still requires verified Telegram initData.
+
+    Unlike the existing referral workflow, no attribution is invented and no
+    CRM registration event is sent. A human admin must approve the new lead.
+    """
+    initialize()
+    with transaction() as check:
+        pending = check.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
+        linked = bool(pending and valid_invitation_source(check, identity["id"], pending["code"]))
+    if linked or identity.get("start_param"):
+        return register(identity, owner_id, None)
+    with transaction() as conn:
+        ensure_owner(conn, owner_id)
+        existing = get_user(conn, identity["id"])
+        if existing:
+            return public_user(existing)
+        capture_signed_start(conn, identity)
+        verified_source = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
+        if verified_source and valid_invitation_source(conn, identity["id"], verified_source["code"]):
+            raise Problem(409, "Используйте подтверждённое приглашение для регистрации")
+        now = int(time.time())
+        conn.execute("INSERT INTO users(id,internal_id,first_name,last_name,username,role,status,agency_id,manager_id,registered_at,updated_at,consent_at) "
+                     "VALUES(?,?,?,?,?,'lead','pending',?,?,?,?,?)",
+                     (identity["id"], allocate_internal_id(conn), identity["first_name"], identity["last_name"],
+                      identity["username"], owner_id, owner_id, now, now, now))
+        audit(conn, identity["id"], "mvp_registration", identity["id"])
+        enqueue(conn, f"mvp:register:{identity['id']}", owner_id,
+                "Новая заявка Partners. Telegram ID: " + str(identity["id"]))
+        return public_user(get_user(conn, identity["id"]))
+
+
 def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
     if kind not in ("agency", "referral"):
         raise Problem(400, "Недопустимый тип приглашения")
