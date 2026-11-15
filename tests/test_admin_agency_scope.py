@@ -61,6 +61,44 @@ class AdminAgencyScopeTests(unittest.TestCase):
         self.assertTrue(dashboard['users_truncated'])
         self.assertGreater(dashboard['counts']['pending'], len(dashboard['pending']))
 
+    def test_paginated_search_covers_older_rows_without_crossing_agencies(self):
+        now = int(time.time())
+        with db.transaction() as conn:
+            conn.executemany(
+                "INSERT INTO users(id,first_name,role,status,agency_id,registered_at,updated_at) "
+                "VALUES(?, ?, 'lead', 'pending', ?, ?, ?)",
+                [(920000 + i, 'Paged Agent', self.a, now + i, now + i) for i in range(207)],
+            )
+            conn.execute("UPDATE users SET first_name='Hidden Needle' WHERE id=?", (self.lead_b,))
+        expected = 207 + 4
+        pages = []
+        for page in range(1, 6):
+            status, result = self.as_user('/api/admin/users', self.admin, page=page)
+            self.assertEqual(status, 200)
+            self.assertEqual(result['total'], expected)
+            self.assertLessEqual(len(result['users']), 50)
+            pages.extend(user['id'] for user in result['users'])
+        self.assertEqual(len(pages), expected)
+        self.assertEqual(len(set(pages)), expected)
+        self.assertNotIn(self.lead_b, pages)
+        status, found = self.as_user('/api/admin/users', self.admin, query=str(920000), status='pending')
+        self.assertEqual(status, 200)
+        self.assertEqual([user['id'] for user in found['users']], [920000])
+        self.assertEqual(self.as_user('/api/admin/users', self.admin, query='Hidden Needle')[1]['total'], 0)
+        self.assertEqual(self.as_user('/api/admin/users', OWNER, query='Hidden Needle')[1]['total'], 1)
+
+    def test_paginated_users_validate_inputs_and_staff_manager_scope(self):
+        with db.transaction() as conn:
+            conn.execute('UPDATE users SET manager_id=? WHERE id=?', (self.staff_a, self.lead_a))
+        status, result = self.as_user('/api/admin/users', self.staff_a)
+        self.assertEqual(status, 200)
+        self.assertEqual([user['id'] for user in result['users']], [self.lead_a])
+        for bad in [{'page':0}, {'page':True}, {'page':1.5}, {'status':['pending']},
+                    {'role':{'x':1}}, {'query':'x'*121}]:
+            with self.subTest(bad=bad):
+                self.assertEqual(self.as_user('/api/admin/users', self.admin, **bad)[0], 400)
+        self.assertEqual(self.as_user('/api/admin/users', self.lead_a)[0], 403)
+
     def test_cross_agency_access_denied_and_local_assignment_allowed(self):
         for path, payload in [
             ('/api/admin/decision', {'user_id': self.lead_b, 'decision': 'block', 'reason': 'test'}),

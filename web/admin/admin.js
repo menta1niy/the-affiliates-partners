@@ -2,7 +2,8 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
-  const state = {users:[],pending:[],invites:[],usersTruncated:false,tab:"pending",role:"",actorId:null};
+  const state = {users:[],pending:[],invites:[],tab:"pending",role:"",actorId:null,
+    pages:{users:1,pending:1},requests:{users:0,pending:0}};
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
@@ -147,16 +148,26 @@
     });
     table.append(body);container.append(table);
   }
-  function renderUsers(){
-    const query=$("user-query").value.trim().toLowerCase();
-    const filter=$("user-filter").value;
-    const roleFilter=$("role-filter").value;
-    const users=state.users.filter(user=>{
-      const haystack=[user.internal_id,user.id,user.user_id,user.first_name,user.last_name,user.username,user.name,user.role,user.manager_id,user.agency_id,user.referrer_id,user.introduced_by_id,user.source].join(" ").toLowerCase();
-      return (!filter || statusOf(user)===filter) && (!roleFilter || roleOf(user)===roleFilter) && (!query || haystack.includes(query));
-    });
-    renderTable($("users-list"),users,"users");
-    if(state.usersTruncated)$("users-list").prepend(make("p","Показаны только последние 200 участников. Поиск и фильтры не охватывают всю базу; нужна серверная пагинация.","message"));
+  async function loadUsersPage(kind,page=state.pages[kind]){
+    const requestId=++state.requests[kind];
+    const container=$(kind==="pending"?"pending-list":"users-list");
+    container.replaceChildren(make("p","Загрузка…","muted"));
+    const filters=kind==="pending"?{status:"pending"}:{
+      query:$("user-query").value.trim(),status:$("user-filter").value,role:$("role-filter").value};
+    try{
+      const data=await api("/admin/users",{page,...filters});
+      if(requestId!==state.requests[kind])return;
+      state.pages[kind]=page;
+      const users=Array.isArray(data.users)?data.users:[];
+      state[kind]=users;
+      renderTable(container,users,kind);
+      const controls=make("div",undefined,"actions");
+      const total=Number(data.total)||0;
+      controls.append(make("span",`Страница ${page} · всего ${number(total)}`));
+      const previous=action("Назад",()=>loadUsersPage(kind,page-1));previous.disabled=page<=1;
+      const next=action("Далее",()=>loadUsersPage(kind,page+1));next.disabled=!data.has_next;
+      controls.append(previous,next);container.append(controls);
+    }catch(e){if(requestId===state.requests[kind]){container.replaceChildren(make("p",e.message,"message error"));error(e.message);}}
   }
   function renderInvites(){
     const root=$("invites-list");
@@ -209,15 +220,13 @@
     const users=Array.isArray(data.users)?data.users:(Array.isArray(data.results)?data.results:[]);
     const pending=Array.isArray(data.pending)?data.pending:users.filter(u=>statusOf(u)==="pending");
     state.users=users;state.pending=pending;
-    state.usersTruncated=data.users_truncated===true;
     state.invites=Array.isArray(data.invites)?data.invites:[];
     const totals={total:counts.total ?? counts.users ?? counts.total_users ?? Object.values(counts).reduce((sum,value)=>sum+(Number(value)||0),0),pending:counts.pending,active:counts.active,blocked:counts.blocked};
     for(const key of ["total","pending","active","blocked"])$("count-"+key).textContent=number(totals[key]);
-    renderTable($("pending-list"),pending,"pending");renderUsers();
-    if(state.usersTruncated)$("pending-list").prepend(make("p","Список заявок может быть неполным: сервер отдаёт только последних 200 участников.","message"));
+    renderTable($("pending-list"),pending,"pending");renderTable($("users-list"),users,"users");
     renderInvites();
   }
-  async function loadDashboard(){const data=await api("/admin/dashboard");renderDashboard(data);}
+  async function loadDashboard(){const data=await api("/admin/dashboard");renderDashboard(data);await Promise.all([loadUsersPage("pending"),loadUsersPage("users")]);}
   async function loadAudit(){
     const root=$("audit-list");root.replaceChildren();
     try {
@@ -254,7 +263,15 @@
     }catch(err){error(err.message);}finally{submit.disabled=false;}
   });
   document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>switchTab(button.dataset.tab)));
-  $("user-query").addEventListener("input",renderUsers);$("user-filter").addEventListener("change",renderUsers);$("role-filter").addEventListener("change",renderUsers);
+  let searchDelay;
+  $("user-query").addEventListener("input",()=>{
+    clearTimeout(searchDelay);
+    ++state.requests.users;
+    $("users-list").replaceChildren(make("p","Поиск…","muted"));
+    searchDelay=setTimeout(()=>loadUsersPage("users",1),220);
+  });
+  $("user-filter").addEventListener("change",()=>loadUsersPage("users",1));
+  $("role-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   async function start(){
     try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");}catch{}

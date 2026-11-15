@@ -601,6 +601,50 @@ def dashboard(actor, owner_id):
                 "pending": [user for user in users if user["status"] == "pending"], "invites": invites, "audit": [dict(x) for x in events]}
 
 
+def admin_users_page(actor, owner_id, *, page=1, status="", role="", query=""):
+    """Server-side admin search, with tenant and manager scoping in every query."""
+    if type(page) is not int or not 1 <= page <= 100000:
+        raise Problem(400, "Некорректная страница")
+    if not isinstance(status, str) or (status and status not in STATUSES):
+        raise Problem(400, "Некорректный статус")
+    if not isinstance(role, str) or (role and role not in ROLES):
+        raise Problem(400, "Некорректная роль")
+    if not isinstance(query, str) or len(query) > 120:
+        raise Problem(400, "Некорректный поиск")
+    initialize()
+    with transaction() as conn:
+        staff = require_staff(conn, actor, owner_id)
+        agency = admin_agency(staff)
+        conditions, params = [], []
+        if agency is not None:
+            conditions.append("agency_id=?")
+            params.append(agency)
+        # Staff must never enumerate other managers' participants within the
+        # same agency, including when agency_id is present on their profile.
+        if staff["role"] == "staff":
+            conditions.extend(("manager_id=?", "role IN ('lead','referrer')"))
+            params.append(actor)
+        if status:
+            conditions.append("status=?")
+            params.append(status)
+        if role:
+            conditions.append("role=?")
+            params.append(role)
+        if query.strip():
+            escaped = query.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            terms = ("CAST(id AS TEXT)", "CAST(internal_id AS TEXT)", "LOWER(COALESCE(first_name,''))",
+                     "LOWER(COALESCE(last_name,''))", "LOWER(COALESCE(username,''))")
+            conditions.append("(" + " OR ".join(f"{term} LIKE ? ESCAPE '\\'" for term in terms) + ")")
+            params.extend([f"%{escaped}%"] * len(terms))
+        where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        total = conn.execute("SELECT count(*) FROM users" + where, tuple(params)).fetchone()[0]
+        limit = 50
+        rows = conn.execute("SELECT * FROM users" + where + " ORDER BY registered_at DESC,id DESC LIMIT ? OFFSET ?",
+                            tuple(params) + (limit, (page - 1) * limit)).fetchall()
+        return {"users": [public_user(row) for row in rows], "page": page, "page_size": limit,
+                "total": total, "has_next": page * limit < total}
+
+
 def admin_participant_detail(actor, owner_id, target_id):
     """Read-only participant snapshot; every query is bound to an authorized Telegram ID."""
     initialize()

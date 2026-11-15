@@ -109,7 +109,7 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
             finally:
                 browser.close()
 
-    def test_truncation_warning_remains_after_filter(self):
+    def test_server_search_and_paging_cover_older_participants(self):
         with db.transaction() as conn:
             conn.executemany(
                 "INSERT INTO users(id,first_name,role,status,agency_id,registered_at,updated_at) "
@@ -123,10 +123,16 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                 url = self.base + '/partners/admin/#tgWebAppData=' + __import__('urllib.parse', fromlist=['quote']).quote(init_data(self.admin), safe='')
                 page.goto(url, wait_until='domcontentloaded')
                 page.locator('[data-tab="users"]').click()
-                warning = page.locator('#users-list .message')
-                warning.get_by_text('Поиск и фильтры не охватывают всю базу', exact=False).wait_for()
+                users = page.locator('#users-list')
+                users.get_by_text('Страница 1 · всего', exact=False).wait_for()
+                users.get_by_role('button', name='Далее').click()
+                users.get_by_text('Страница 2 · всего', exact=False).wait_for()
+                page.locator('#user-query').fill('910000')
+                users.get_by_text('Страница 1 · всего', exact=False).wait_for()
+                self.assertIn('910000', users.inner_text())
+                self.assertNotIn('910001', users.inner_text())
                 page.locator('#user-query').fill('nonexistent')
-                self.assertTrue(warning.is_visible())
-                self.assertTrue(page.locator('#pending-list .message').count())
+                users.get_by_text('Страница 1 · всего 0').wait_for()
+                self.assertEqual(users.locator('tbody tr').count(), 0)
             finally:
                 browser.close()

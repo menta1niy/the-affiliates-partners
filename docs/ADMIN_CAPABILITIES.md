@@ -6,7 +6,7 @@ evidence of live Telegram end-to-end acceptance.
 
 | Activity | Partners admin UI/API | Operational limitation |
 | --- | --- | --- |
-| View participant counts, pending requests and statuses | Present | Dashboard returns up to 200 most recently registered users; counts cover the scope, but on-screen search and pending queue do not cover older rows |
+| View participant counts, pending requests and statuses | Present | `/api/admin/users` returns 50 users per page, with server-side name/ID/username search and status/role filters; pending requests are paginated separately |
 | Approve, reject, block and unblock | Present, server-authorized | Reject/block require a reason; staff permissions are narrower |
 | Change participant roles/manager | Present, server-authorized | Owner-only admin assignment; manager hierarchy validated by backend |
 | Create/revoke invitations, agency assignment | Present | Revoke and share availability checked on server |
@@ -19,19 +19,23 @@ evidence of live Telegram end-to-end acceptance.
 ## Stage 4 local improvements
 
 - A stale async response must never overwrite a newly opened participant card.
-- When the dashboard exceeds its 200-user response cap, the UI must explicitly
-  disclose that the on-screen list, filters and pending queue are incomplete.
-  The warning persists after filtering. Server-side pagination **remains
-  necessary** for operational use beyond 200 participants.
+- The historical dashboard response retains its 200-user cap for compatible
+  summary consumers. The user and pending screens now use a distinct
+  `/api/admin/users` endpoint with 50-row pages and SQL-level tenant/manager
+  restrictions on every page. Search and filters cover older users, not just
+  the first dashboard response. A typing indicator prevents clicking stale
+  results during asynchronous searches.
 - Smoke tests cover agency isolation, read-only card data, desktop/mobile
-  rendering, stale-request switching and the truncated-dashboard warning.
+  rendering, stale-request switching, cross-agency paging, manager scope,
+  malformed filters and browser-driven search across more than 200 users.
 - The browser test server now serves `telegram-layout.js` as the production
   static bundle does, rather than emitting a misleading 404 during tests.
 
 ## Remaining acceptance requirements
 
-1. Implement server-side pagination (including search, status and role filters)
-   for users and pending requests, retaining agency/manager scope on each page.
+1. Deploy and validate the new server-side pagination together with the updated
+   admin static bundle; **do not deploy the HTML/JS alone** because older API
+   versions lack `/api/admin/users`.
 2. Verify the complete CRM offer-management UI and its permission model; do not
    label read-only offer snapshots in Partners as editable bank offers.
 3. Complete CRM owner/Team initialization and CRM↔Partners signed event flows.
