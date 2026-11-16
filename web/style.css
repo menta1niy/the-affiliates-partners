@@ -727,6 +727,12 @@ dialog select,dialog input { max-width:100%; }
   gap:0;
   padding-top:0;
 }
+/* Telegram fullscreen: the sidebar/layout must not overwrite safe-area
+   padding provided by telegram-layout.js for the shared .shell. */
+.tg-fullscreen .admin-control .admin-layout {
+  padding-top:max(env(safe-area-inset-top,0px),var(--tg-safe-top),var(--tg-content-top));
+  padding-bottom:max(env(safe-area-inset-bottom,0px),var(--tg-safe-bottom),var(--tg-content-bottom));
+}
 .admin-control .admin-sidebar {
   position:sticky;top:0;align-self:start;height:100dvh;
   display:flex;flex-direction:column;gap:0;
