@@ -47,8 +47,18 @@
       const data=await api("/admin/participant",{user_id:id});
       if(!dialog.open || requestId!==participantRequestId)return;
       content.replaceChildren();const person=data.user || {};
-      content.append(make("h2",personName(person)));
-      [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(content,key,value));
+      const profileHeader=make("div",undefined,"admin-profile-header");
+      const identity=make("div",undefined,"admin-profile-identity");
+      const avatar=make("span",(personName(person).trim().slice(0,1)||"—").toUpperCase(),"admin-profile-avatar");
+      const heading=make("div");heading.append(make("span","TELEGRAM PARTICIPANT","admin-profile-eyebrow"),make("h2",personName(person)));
+      if(person.username)heading.append(make("span","@"+person.username,"admin-profile-handle"));
+      identity.append(avatar,heading);
+      const statusBadge=make("span",statuses[person.status]||person.status||"—","pill");
+      statusBadge.dataset.status=person.status||"pending";
+      profileHeader.append(identity,statusBadge);content.append(profileHeader);
+      const meta=make("div",undefined,"admin-profile-meta");
+      [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(meta,key,value));
+      content.append(meta);
       if(data.crm_lead_id){
         detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
         detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
@@ -56,17 +66,24 @@
         detailRows(content,"Подтверждённые выплаты CRM",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
       }
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
-        const section=make("section",undefined,"panel");section.append(make("h3","Управление офферами и статусами"));
+        const section=make("section",undefined,"panel admin-profile-assignments");section.append(make("span","ОФФЕРЫ / РУЧНЫЕ СТАТУСЫ","section-kicker"),make("h3","Управление назначениями"));
         const stats=data.manual?.statistics||{};
-        section.append(make("p",`Назначено: ${stats.total||0} · В работе: ${stats.in_progress||0} · Завершено: ${stats.completed||0}`,"muted"));
+        const summary=make("div",undefined,"admin-profile-stats");
+        for(const [name,count] of [["Назначено",stats.total],["В работе",stats.in_progress],["Завершено",stats.completed]]){
+          const cell=make("div",undefined,"admin-profile-stat");cell.append(make("span",name),make("strong",number(count??0)));summary.append(cell);
+        }
+        section.append(summary);
         const assignments=Array.isArray(data.manual?.offers)?data.manual.offers:[];
         for(const offer of assignments){
-          const item=make("div",undefined,"participant-detail-item");
-          item.append(make("strong",offer.name),make("p",`${offer.category} · ${offer.payout_rub} ₽ · Холд ${offer.hold_days} дн. · ${offer.target_action}`));
+          const item=make("div",undefined,"participant-detail-item admin-assignment");
+          item.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("strong",offer.name),make("p",`${offer.payout_rub} ₽ за целевое действие · Холд ${offer.hold_days} дн. · ${offer.target_action}`));
           const select=make("select");
+          select.setAttribute("aria-label","Статус оффера "+offer.name);
           for(const [key,label] of Object.entries(manualStages)){const option=make("option",label);option.value=key;select.append(option);}select.value=offer.stage;
           const note=make("input");note.placeholder="Комментарий для участника";note.maxLength=300;note.value=offer.note||"";
-          item.append(select,note,action("Сохранить статус",async()=>{
+          note.setAttribute("aria-label","Комментарий к офферу "+offer.name);
+          const buttons=make("div",undefined,"admin-assignment-actions");
+          buttons.append(action("Сохранить статус",async()=>{
             await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,stage:select.value,note:note.value});
             notice("Статус обновлён");await openParticipant(person);
           },"primary"),action("Убрать оффер",async()=>{
@@ -74,16 +91,17 @@
             await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,enabled:false,note:""});
             await openParticipant(person);
           },"danger"));
+          item.append(select,note,buttons);
           section.append(item);
         }
         const available=await api("/admin/mvp/catalog");
         if(requestId!==participantRequestId || !dialog.open)return;
         const picker=make("select");picker.setAttribute("aria-label","Оффер для назначения");
         for(const offer of available.offers||[]){if(!offer.active || assignments.some(a=>a.id===offer.id))continue;const option=make("option",offer.name);option.value=offer.id;picker.append(option);}
-        if(picker.options.length){section.append(picker,action("Назначить оффер",async()=>{
+        if(picker.options.length){const assignRow=make("div",undefined,"admin-assignment-picker");assignRow.append(picker,action("Назначить оффер",async()=>{
           await api("/admin/mvp/assignment",{user_id:id,offer_id:picker.value,stage:"assigned",note:""});
           notice("Оффер назначен");await openParticipant(person);
-        },"primary"));}else section.append(make("p","Нет новых доступных офферов. Добавьте их в каталоге.","muted"));
+        },"primary"));section.append(assignRow);}else section.append(make("p","Нет новых доступных офферов. Добавьте их в каталоге.","muted"));
         if(person.status==="pending")section.append(action("Одобрить участника",async()=>{
           await api("/admin/decision",{user_id:id,decision:"approve"});notice("Участник одобрен");await loadDashboard();await openParticipant(person);
         }));
@@ -167,6 +185,7 @@
       const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
       const ids=[user.introduced_by_id?"Пригласил: "+user.introduced_by_id:"",user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Реферер: "+user.referrer_id:""].filter(Boolean);
       row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.internal_id ?? "—"),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
+      row.className="admin-data-row";
       const actions=make("td");const group=make("div",undefined,"actions");
       group.append(action("Карточка",()=>openParticipant(user)));
       const targetRole=roleOf(user);
@@ -181,7 +200,9 @@
       if(permitted && state.role!=="staff")group.append(action("Роль / менеджер",()=>assign(user)));
       if(permitted && state.role==="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
       if(permitted && statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
-      actions.append(group);row.append(actions);body.append(row);
+      actions.append(group);row.append(actions);
+      row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Участник","Внутренний ID","Telegram ID","Статус","Роль","Источник","Менеджер","Действия"][index]);
+      body.append(row);
     });
     table.append(body);container.append(table);
   }
@@ -248,6 +269,8 @@
         }));
       }
       row.append(cell);
+      row.className="admin-data-row";
+      row.querySelectorAll("td").forEach((field,index)=>field.dataset.label=["Кандидат","Источник","Код","Ответственный","Состояние","Ссылка"][index]);
       body.append(row);
     });
     table.append(body);root.append(table);
@@ -280,10 +303,13 @@
   }
   async function openOfferCatalog(){
     let dialog=$("mvp-catalog-dialog");
-    if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel";dialog.style.cssText="width:min(620px,94vw);max-height:90vh;overflow:auto;border-radius:16px";document.body.append(dialog);}
+    if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel admin-catalog-dialog";document.body.append(dialog);}
     dialog.replaceChildren();
-    const close=action("Закрыть",()=>dialog.close());dialog.append(close,make("h2","Каталог офферов"));
-    const list=make("div");dialog.append(list);
+    const top=make("div",undefined,"admin-dialog-toolbar");
+    top.append(make("span","КАТАЛОГ / CONTROL","section-kicker"),action("Закрыть",()=>dialog.close()));
+    dialog.append(top,make("h2","Каталог офферов"));
+    dialog.append(make("p","Параметры и условия банковских предложений. Указанная ставка не является подтверждённым начислением.","muted"));
+    const list=make("div",undefined,"admin-catalog-list");dialog.append(list);
     const fields=[["name","Название","text"],["category","Категория","text"],["target_action","Целевое действие","text"],["payout_rub","Оплата, ₽","number"],["hold_days","Холд, дней","number"],["instructions","Инструкция","text"],["referral_url","HTTPS-ссылка","url"]];
     const form=make("form");form.className="form-grid";
     const inputs={};let editingId=null;
@@ -297,8 +323,30 @@
       if(editingId)payload.offer_id=editingId;
       await api("/admin/mvp/offer",payload);editingId=null;heading.textContent="Добавить оффер";form.reset();inputs.payout_rub.value="0";inputs.hold_days.value="0";await reload();notice("Оффер сохранён");
     }catch(err){error(err.message);}finally{save.disabled=false;}});
-    dialog.append(form);
-    async function reload(){list.replaceChildren(make("p","Загрузка…"));const data=await api("/admin/mvp/catalog");list.replaceChildren();for(const offer of data.offers||[]){const item=make("div",undefined,"participant-detail-item");item.append(make("strong",offer.name),make("p",`${offer.category} · ${offer.payout_rub} ₽ · ${offer.hold_days} дн. · ${offer.active?"Доступен":"Отключён"}`));item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;form.scrollIntoView({behavior:"smooth"});}));list.append(item);}}
+    const canEdit=state.role==="owner";
+    if(canEdit){form.classList.add("admin-catalog-form");dialog.append(form);}
+    else dialog.append(make("p","Для вашей роли доступен просмотр каталога. Изменение общего каталога выполняет владелец.","message"));
+    async function reload(){
+      list.replaceChildren(make("p","Загрузка…"));
+      const data=await api("/admin/mvp/catalog");list.replaceChildren();
+      const offers=Array.isArray(data.offers)?data.offers:[];
+      if(!offers.length){list.append(make("p","Офферы пока не добавлены.","empty"));return;}
+      for(const offer of offers){
+        const item=make("article",undefined,"admin-catalog-card");
+        const meta=make("div",undefined,"admin-catalog-card-heading");
+        const name=make("div");name.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("h3",offer.name));
+        const availability=make("span",offer.active?"Доступен":"Отключён","pill");
+        availability.dataset.status=offer.active?"active":"blocked";meta.append(name,availability);
+        item.append(meta);
+        const terms=make("div",undefined,"admin-catalog-terms");
+        for(const [key,value] of [["СТАВКА",number(offer.payout_rub)+" ₽"],["ХОЛД",(offer.hold_days??"—")+" дн."],["ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action||"—"]]){
+          const row=make("div");row.append(make("span",key),make("strong",value));terms.append(row);
+        }
+        item.append(terms);
+        if(canEdit)item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;form.scrollIntoView({behavior:"smooth"});}));
+        list.append(item);
+      }
+    }
     dialog.showModal();await reload();
   }
   function switchTab(tab){
@@ -333,7 +381,10 @@
   $("user-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("role-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
-  const catalogButton=action("Каталог офферов",openOfferCatalog);catalogButton.id="mvp-catalog-open";$("reload").before(catalogButton);
+  const catalogButton=$("mvp-catalog-anchor");
+  catalogButton.id="mvp-catalog-open";
+  catalogButton.addEventListener("click",()=>{error("");openOfferCatalog().catch(e=>error(e.message));});
+  $("admin-primary-action").addEventListener("click",()=>{switchTab("pending");document.querySelector('[data-panel="pending"]').scrollIntoView({behavior:"smooth",block:"start"});});
   async function start(){
     try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");}catch{}
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
@@ -347,7 +398,7 @@
       if(!["owner","admin","staff"].includes(role) || (status && !["active","approved"].includes(status))){
         show("no-access",true);return;
       }
-      await loadDashboard();show("admin-app",true);
+      await loadDashboard();show("admin-app",true);document.body.classList.add("admin-authenticated");
     }catch(e){show("no-access",true);$("no-access-message").textContent=e.message;}
   }
   start();

@@ -1,8 +1,141 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#080909"><meta name="referrer" content="no-referrer"><title>The Affiliates · Управление</title><link rel="stylesheet" href="/partners/style.css"><script src="https://telegram.org/js/telegram-web-app.js"></script><script defer src="/partners/telegram-layout.js"></script><script defer src="/partners/admin/admin.js"></script></head>
-<body><div class="shell"><header class="top"><a class="brand" href="/partners/"><span class="mark">a<span>.</span></span><span>THE AFFILIATES<small>PARTNERS / ADMIN</small></span></a><a class="btn ghost" href="/partners/">Кабинет ↗</a></header><main><div class="eyebrow">THE AFFILIATES / CONTROL</div><h1>Управление партнёрами</h1><p class="muted">Регистрация, модерация, приглашения и распределение ролей.</p><div id="admin-error" class="message error" role="alert" hidden></div><div id="admin-notice" class="message" role="status" hidden></div><section id="no-access" class="panel" hidden><h2>Доступ ограничен</h2><p id="no-access-message">Панель доступна только уполномоченным пользователям.</p></section>
-<div id="admin-app" hidden><div class="mini-grid" id="metrics"><div class="metric"><span>ВСЕГО УЧАСТНИКОВ</span><strong id="count-total">—</strong></div><div class="metric"><span>ОЖИДАЮТ</span><strong id="count-pending">—</strong></div><div class="metric"><span>АКТИВНЫЕ</span><strong id="count-active">—</strong></div><div class="metric"><span>ЗАБЛОКИРОВАННЫЕ</span><strong id="count-blocked">—</strong></div></div><nav class="admin-tabs" aria-label="Разделы администрирования"><button type="button" class="btn ghost" data-tab="pending" aria-selected="true">Заявки</button><button type="button" class="btn ghost" data-tab="users" aria-selected="false">Участники</button><button type="button" class="btn ghost" data-tab="invitations" aria-selected="false">Приглашения</button><button type="button" class="btn ghost" data-tab="audit" aria-selected="false">Журнал действий</button><button type="button" id="reload" class="btn ghost">Обновить ↻</button></nav>
-<section data-panel="pending" class="panel"><div class="section-kicker">МОДЕРАЦИЯ</div><h2>Ожидают решения</h2><p>Для отказа или блокировки укажите причину. Решение сохраняется на сервере.</p><div id="pending-list" class="table-wrap" aria-live="polite"></div></section>
-<section data-panel="users" class="panel" hidden><div class="section-kicker">УЧАСТНИКИ</div><h2>Все пользователи</h2><div class="toolbar"><input id="user-query" type="search" placeholder="Поиск по имени, Telegram ID, username" aria-label="Поиск участников"><select id="user-filter" aria-label="Фильтр по статусу"><option value="">Все статусы</option><option value="pending">На рассмотрении</option><option value="active">Активные</option><option value="rejected">Отклонённые</option><option value="blocked">Заблокированные</option></select><select id="role-filter" aria-label="Фильтр по роли"><option value="">Все роли</option><option value="lead">Лид</option><option value="referrer">Реферер</option><option value="staff">Сотрудник</option><option value="admin">Администратор</option><option value="owner">Владелец</option></select></div><div id="users-list" class="table-wrap" aria-live="polite"></div></section>
-<section data-panel="invitations" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Создать приглашение</h2><p>Код для регистрации нового участника. При необходимости закрепите приглашение за ответственным сотрудником.</p><form id="invite-form" class="form-grid"><div><label for="candidate-label">Имя или метка кандидата (необязательно)</label><input id="candidate-label" maxlength="120" placeholder="Например: кандидат из Telegram"></div><div><label for="assignee">Telegram ID ответственного (необязательно)</label><input id="assignee" inputmode="numeric" pattern="[0-9]*" placeholder="Без назначения"></div><button class="btn primary" id="invite-submit" type="submit">Сгенерировать приглашение</button></form><div id="invite-result" class="message" role="status" hidden></div><hr class="divider"><h3>Ранее созданные приглашения</h3><div id="invites-list" class="table-wrap"></div><hr class="divider"><h3>Иерархия ответственных</h3><p>Назначайте менеджеров через карточку пользователя. Проверку циклических назначений выполняет сервер.</p></section>
-<section data-panel="audit" class="panel" hidden><div class="section-kicker">КОНТРОЛЬ ДЕЙСТВИЙ</div><h2>Журнал изменений</h2><div id="audit-list" aria-live="polite">Загружаем…</div></section>
-</div><dialog id="participant-detail" aria-label="Карточка участника" style="max-width:min(750px,95vw);max-height:85vh;overflow:auto;border-radius:16px;padding:24px"><form method="dialog" style="text-align:right"><button class="btn ghost" type="submit">Закрыть</button></form><div id="participant-detail-content" aria-live="polite"></div></dialog></main><footer>THE AFFILIATES <span>PARTNERS / ADMINISTRATION</span></footer></div></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#080909">
+  <meta name="referrer" content="no-referrer">
+  <title>The Affiliates · Control Center</title>
+  <link rel="stylesheet" href="/partners/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="/partners/telegram-layout.js"></script>
+  <script defer src="/partners/admin/admin.js"></script>
+</head>
+<body class="admin-control">
+  <div class="admin-layout shell">
+    <header class="top admin-mobile-header">
+      <a class="brand" href="/partners/" aria-label="The Affiliates Partners">
+        <span class="mark">a<span>.</span></span><span>THE AFFILIATES<small>CONTROL CENTER</small></span>
+      </a>
+      <a class="btn ghost admin-back-link" href="/partners/">Кабинет ↗</a>
+    </header>
+
+    <aside class="admin-sidebar" aria-label="Панель навигации">
+      <a class="brand admin-sidebar-brand" href="/partners/" aria-label="The Affiliates Partners">
+        <span class="mark">a<span>.</span></span><span>THE AFFILIATES<small>PARTNERS / CONTROL</small></span>
+      </a>
+      <div class="admin-sidebar-overline">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <nav class="admin-tabs" aria-label="Разделы администрирования">
+        <button type="button" class="btn ghost" data-tab="pending" aria-selected="true"><span aria-hidden="true">◷</span> Заявки</button>
+        <button type="button" class="btn ghost" data-tab="users" aria-selected="false"><span aria-hidden="true">▦</span> Участники</button>
+        <button type="button" class="btn ghost" id="mvp-catalog-anchor" hidden><span aria-hidden="true">◇</span> Каталог офферов</button>
+        <button type="button" class="btn ghost" data-tab="invitations" aria-selected="false"><span aria-hidden="true">↗</span> Приглашения</button>
+        <button type="button" class="btn ghost" data-tab="audit" aria-selected="false"><span aria-hidden="true">≡</span> Журнал действий</button>
+      </nav>
+      <div class="admin-sidebar-footer">
+        <div class="admin-sidebar-divider"></div>
+        <div class="admin-sidebar-caption">THE AFFILIATES / SECURE ACCESS</div>
+        <a class="btn ghost" href="/partners/">Личный кабинет ↗</a>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="admin-topline">
+        <div class="eyebrow">THE AFFILIATES / CONTROL CENTER <span class="admin-topline-index">— 01</span></div>
+        <span class="admin-online-label"><span aria-hidden="true"></span> УПРАВЛЕНИЕ</span>
+      </div>
+
+      <section class="admin-hero" aria-labelledby="admin-title">
+        <div class="admin-hero-copy">
+          <div class="section-kicker">ПАРТНЁРСКАЯ ЭКОСИСТЕМА</div>
+          <h1 id="admin-title">УПРАВЛЯЙ.<br><em>КОНТРОЛИРУЙ.</em></h1>
+          <p>Участники, банковские офферы и статусы — в единой системе.</p>
+          <div class="admin-hero-actions">
+            <button type="button" id="admin-primary-action" class="btn primary">Открыть заявки ↗</button>
+            <span class="admin-hero-note">Все данные поступают из Partners API</span>
+          </div>
+        </div>
+        <div class="admin-hero-art" aria-hidden="true">
+          <svg viewBox="0 0 340 300" focusable="false">
+            <defs><linearGradient id="admin-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".65"/><stop offset=".65" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity=".45"/></linearGradient></defs>
+            <g fill="none" stroke="url(#admin-metal)" stroke-width=".8">
+              <path d="M170 20L315 100 315 207 170 286 25 207 25 100Z"/><path d="M170 20V286M25 100L315 207M315 100L25 207M170 20L25 207M170 20L315 207M25 100L170 286M315 100L170 286"/>
+              <circle cx="170" cy="154" r="93"/><circle cx="170" cy="154" r="63"/><path d="M77 154H263M170 61V247M104 88L236 220M236 88L104 220"/>
+            </g>
+            <g fill="#fff"><circle cx="170" cy="20" r="2"/><circle cx="315" cy="100" r="2"/><circle cx="170" cy="154" r="2.5"/></g>
+          </svg>
+        </div>
+      </section>
+
+      <div id="admin-error" class="message error" role="alert" hidden></div>
+      <div id="admin-notice" class="message" role="status" hidden></div>
+      <section id="no-access" class="panel admin-access-state" hidden>
+        <div class="section-kicker">ДОСТУП</div>
+        <h2>Доступ ограничен</h2>
+        <p id="no-access-message">Панель доступна только уполномоченным пользователям.</p>
+      </section>
+
+      <div id="admin-app" hidden>
+        <section class="admin-overview" aria-labelledby="admin-overview-title">
+          <div class="admin-section-title">
+            <div><div class="section-kicker">01 / ОБЗОР</div><h2 id="admin-overview-title">Обзор платформы<span>.</span></h2></div>
+            <button id="reload" type="button" class="btn ghost">Обновить ↻</button>
+          </div>
+          <div class="mini-grid admin-metrics" id="metrics">
+            <div class="metric"><span>ВСЕГО УЧАСТНИКОВ</span><strong id="count-total">—</strong><small>Зарегистрировано</small></div>
+            <div class="metric"><span>ОЖИДАЮТ</span><strong id="count-pending">—</strong><small>На рассмотрении</small></div>
+            <div class="metric"><span>АКТИВНЫЕ</span><strong id="count-active">—</strong><small>Доступ подтверждён</small></div>
+            <div class="metric"><span>ЗАБЛОКИРОВАННЫЕ</span><strong id="count-blocked">—</strong><small>Доступ закрыт</small></div>
+          </div>
+        </section>
+
+        <div class="admin-workspace-heading">
+          <div class="section-kicker">02 / РАБОЧАЯ ОБЛАСТЬ</div>
+          <span class="admin-workspace-hint">Управление на основе прав вашей роли</span>
+        </div>
+        <section data-panel="pending" class="panel admin-work-panel">
+          <div class="admin-section-title"><div><div class="section-kicker">МОДЕРАЦИЯ</div><h2>Ожидают решения<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">01</span></div>
+          <p>Одобрение открывает доступ. Для отказа или блокировки необходимо указать причину.</p>
+          <div id="pending-list" class="table-wrap admin-records" aria-live="polite"></div>
+        </section>
+        <section data-panel="users" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">УЧАСТНИКИ</div><h2>Все пользователи<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">02</span></div>
+          <div class="toolbar admin-filters">
+            <input id="user-query" type="search" placeholder="Имя, username или Telegram ID" aria-label="Поиск участников">
+            <select id="user-filter" aria-label="Фильтр по статусу">
+              <option value="">Все статусы</option><option value="pending">На рассмотрении</option><option value="active">Активные</option><option value="rejected">Отклонённые</option><option value="blocked">Заблокированные</option>
+            </select>
+            <select id="role-filter" aria-label="Фильтр по роли">
+              <option value="">Все роли</option><option value="lead">Лид</option><option value="referrer">Реферер</option><option value="staff">Сотрудник</option><option value="admin">Администратор</option><option value="owner">Владелец</option>
+            </select>
+          </div>
+          <div id="users-list" class="table-wrap admin-records" aria-live="polite"></div>
+        </section>
+        <section data-panel="invitations" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Создать приглашение<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">03</span></div>
+          <p>Персональная ссылка регистрации. При необходимости закрепите кандидата за сотрудником.</p>
+          <form id="invite-form" class="form-grid admin-invite-form">
+            <div><label for="candidate-label">Имя или метка кандидата (необязательно)</label><input id="candidate-label" maxlength="120" placeholder="Например: кандидат из Telegram"></div>
+            <div><label for="assignee">Telegram ID ответственного (необязательно)</label><input id="assignee" inputmode="numeric" pattern="[0-9]*" placeholder="Без назначения"></div>
+            <button class="btn primary" id="invite-submit" type="submit">Сгенерировать приглашение ↗</button>
+          </form>
+          <div id="invite-result" class="message" role="status" hidden></div>
+          <hr class="divider"><h3>Ранее созданные приглашения</h3>
+          <div id="invites-list" class="table-wrap admin-records"></div>
+          <hr class="divider"><h3>Иерархия ответственных</h3>
+          <p>Назначайте менеджеров через карточку пользователя. Проверку циклических назначений выполняет сервер.</p>
+        </section>
+        <section data-panel="audit" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">КОНТРОЛЬ ДЕЙСТВИЙ</div><h2>Журнал изменений<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">04</span></div>
+          <div id="audit-list" aria-live="polite">Загружаем…</div>
+        </section>
+      </div>
+      <dialog id="participant-detail" class="admin-profile-dialog" aria-label="Карточка участника">
+        <div class="admin-dialog-toolbar"><span class="section-kicker">ПРОФИЛЬ УЧАСТНИКА / CONTROL</span><form method="dialog"><button class="btn ghost" type="submit">Закрыть ✕</button></form></div>
+        <div id="participant-detail-content" aria-live="polite"></div>
+      </dialog>
+      <footer>THE AFFILIATES <span>PARTNERS / ADMINISTRATION</span></footer>
+    </main>
+  </div>
+</body>
+</html>
