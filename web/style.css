@@ -224,3 +224,232 @@ dialog::backdrop { background:rgba(0,0,0,.79); }
 @media (prefers-reduced-motion:reduce) {
   *,*:before,*:after { scroll-behavior:auto!important;transition:none!important;animation:none!important; }
 }
+
+/* Core Components v3 — shared, composable surfaces and interaction states.
+   Screen composition and navigation are intentionally unchanged in this stage. */
+:root {
+  --control-height: 48px;
+  --control-height-compact: 44px;
+  --control-duration: 160ms;
+  --control-ease: cubic-bezier(.2,.75,.3,1);
+  --divider: rgba(255,255,255,.085);
+  --glass-stroke: rgba(255,255,255,.13);
+  --glass-stroke-active: rgba(255,255,255,.38);
+}
+
+/* A restrained edge highlight, not a permanent glow on every component. */
+.panel,.cards .panel,.offer-item,.metric,.owner-preview-card,.participant-detail-item {
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(165deg,rgba(255,255,255,.036),rgba(255,255,255,0) 65%),var(--color-surface);
+  box-shadow: var(--glow-edge),0 10px 26px rgba(0,0,0,.16);
+  border-radius: var(--radius-card);
+}
+.panel,.cards .panel,.offer-item,.metric,.owner-preview-card {
+  min-width:0;
+}
+.panel:focus-within,.offer-item:focus-within,.participant-detail-item:focus-within {
+  border-color:var(--glass-stroke-active);
+}
+.participant-detail-item {
+  padding:var(--space-4);
+  margin:var(--space-3) 0;
+  overflow-wrap:anywhere;
+}
+.participant-detail-item p { margin:var(--space-2) 0;line-height:1.55; }
+.participant-detail-item strong { font-weight:700; }
+.metric strong { color:var(--color-text);line-height:1.12; }
+.metric span { letter-spacing:.075em;line-height:1.4; }
+.data-row,.history-entry,.audit-entry,th,td {
+  border-color:var(--divider);
+}
+.data-row strong,td,.participant-detail-item { overflow-wrap:anywhere; }
+
+/* Primary: one dominant white action per functional group.
+   Secondary and danger are graphite controls, not competing white pills. */
+.btn,button.btn,a.btn {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:var(--space-2);
+  max-width:100%;
+  min-height:var(--control-height);
+  padding:11px 17px;
+  border-radius:var(--radius-control);
+  border:1px solid var(--glass-border);
+  font-weight:700;
+  font-size:13px;
+  line-height:1.35;
+  text-align:center;
+  text-decoration:none;
+  cursor:pointer;
+  transition:background-color var(--control-duration) var(--control-ease),
+             border-color var(--control-duration) var(--control-ease),
+             box-shadow var(--control-duration) var(--control-ease),
+             transform var(--control-duration) var(--control-ease);
+  -webkit-tap-highlight-color:transparent;
+}
+.btn.primary,button.btn.primary,a.btn.primary {
+  background:var(--color-accent);
+  color:var(--color-accent-ink);
+  border-color:rgba(255,255,255,.88);
+  box-shadow:var(--glow-cta);
+}
+.btn.ghost,button.btn.ghost,a.btn.ghost {
+  color:var(--color-text);
+  background:var(--glass-quiet);
+  border-color:var(--glass-border);
+  box-shadow:var(--glow-edge);
+}
+.btn.danger,button.btn.danger {
+  color:var(--color-text);
+  background:rgba(255,255,255,.025);
+  border-style:dashed;
+  border-color:rgba(255,255,255,.32);
+  box-shadow:none;
+}
+@media (hover:hover) and (pointer:fine) {
+  .btn.primary:hover:not(:disabled) { background:#E9E9E9;box-shadow:0 0 20px rgba(255,255,255,.15),0 0 32px rgba(255,255,255,.065); }
+  .btn.ghost:hover:not(:disabled),.btn.danger:hover:not(:disabled) {
+    background:var(--glass-emphasis);
+    border-color:var(--glass-stroke-active);
+  }
+  .admin-tabs button:hover:not(:disabled) { border-color:var(--glass-stroke-active); }
+}
+.btn:active:not(:disabled) { transform:translateY(1px); }
+.btn:disabled,.btn[aria-disabled="true"] { cursor:not-allowed;opacity:.48;box-shadow:none;transform:none; }
+.actions .btn { min-height:var(--control-height-compact);padding:9px 12px;font-size:12px; }
+.btn:focus-visible,button:focus-visible,a:focus-visible {
+  outline:2px solid #FFFFFF;
+  outline-offset:3px;
+}
+
+/* Inputs use a single dark, readable field material. */
+input:not([type="checkbox"]):not([type="radio"]),select,textarea {
+  min-width:0;
+  min-height:var(--control-height);
+  padding:12px 14px;
+  color:var(--color-text);
+  font-size:14px;
+  line-height:1.5;
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-control);
+  background:var(--color-elevated);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+  transition:border-color var(--control-duration) var(--control-ease),
+             box-shadow var(--control-duration) var(--control-ease);
+}
+textarea { resize:vertical; }
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,textarea:focus {
+  border-color:rgba(255,255,255,.65);
+  box-shadow:0 0 0 3px rgba(255,255,255,.065),inset 0 1px 0 rgba(255,255,255,.06);
+}
+input::placeholder,textarea::placeholder { color:var(--color-muted);opacity:1; }
+input:disabled,select:disabled,textarea:disabled {
+  opacity:.5;
+  cursor:not-allowed;
+}
+input[readonly] { border-style:dashed; }
+input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"] {
+  border-color:rgba(255,255,255,.7);
+  border-style:dashed;
+}
+label { color:var(--color-secondary);font-weight:600; }
+label:has(input:required),label:has(select:required) { color:var(--color-text); }
+.check input[type="checkbox"] { accent-color:white; }
+.form-grid>* { min-width:0; }
+.toolbar input,.toolbar select { flex:1 1 160px; }
+
+/* Status is communicated by text, outline and shape; never just by color. */
+.tag,.pill,.owner-preview-status {
+  gap:var(--space-2);
+  padding:8px 12px;
+  border:1px solid var(--glass-border);
+  background:var(--glass-quiet);
+  color:var(--color-text);
+  border-radius:8px;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:.015em;
+  line-height:1.35;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  box-shadow:var(--glow-edge);
+}
+.pill[data-status="active"],.pill[data-status="approved"] {
+  background:var(--glass-emphasis);
+  border-style:solid;
+}
+.pill[data-status="pending"],.pill[data-status="invited"] {
+  border-style:dashed;
+  color:var(--color-secondary);
+}
+.pill[data-status="blocked"],.pill[data-status="rejected"] {
+  border-style:double;
+  border-width:2px;
+  color:var(--color-text);
+  background:var(--color-elevated);
+}
+.message {
+  padding:var(--space-4);
+  background:var(--color-elevated);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-control);
+  line-height:1.55;
+  overflow-wrap:anywhere;
+}
+.message.error { border-style:dashed; border-color:rgba(255,255,255,.46); }
+.empty { color:var(--color-secondary);line-height:1.6; }
+
+/* Tab selection: light edge, never a broad bright fill. */
+.admin-tabs { align-items:center; }
+.admin-tabs .btn {
+  background:var(--glass-quiet);
+  border:1px solid var(--glass-border);
+  color:var(--color-secondary);
+  box-shadow:none;
+  border-radius:10px;
+}
+.admin-tabs button[aria-selected="true"] {
+  background:var(--glass-emphasis);
+  color:var(--color-accent);
+  border-color:var(--glass-stroke-active);
+  box-shadow:var(--glow-edge),0 0 17px rgba(255,255,255,.035);
+}
+
+/* Both static and JS-generated dialogs inherit one shared glass vocabulary. */
+dialog,#participant-detail,#mvp-catalog-dialog {
+  width:min(100% - 24px,750px);
+  max-height:min(85dvh,850px);
+  padding:var(--space-6);
+  overflow:auto;
+  overscroll-behavior:contain;
+  color:var(--color-text);
+  background:linear-gradient(160deg,rgba(255,255,255,.04),transparent 62%),var(--color-surface) !important;
+  border:1px solid var(--glass-stroke) !important;
+  border-radius:var(--radius-card);
+  box-shadow:var(--glow-edge),0 26px 80px rgba(0,0,0,.57);
+}
+dialog::backdrop { background:rgba(0,0,0,.82); }
+dialog h2,dialog h3 { overflow-wrap:anywhere; }
+dialog .form-grid,dialog .actions { min-width:0; }
+dialog select,dialog input { max-width:100%; }
+@media (max-width:740px) {
+  dialog,#participant-detail,#mvp-catalog-dialog {
+    width:calc(100vw - 20px);
+    max-width:calc(100vw - 20px);
+    max-height:min(84dvh,850px);
+    padding:var(--space-4);
+  }
+  .actions .btn { flex:0 1 auto; }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .tag,.pill,.admin-tabs .btn,.owner-preview-status,dialog,#participant-detail,#mvp-catalog-dialog {
+    background:var(--color-surface) !important;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .btn,input,select,textarea { transition:none!important;transform:none!important; }
+}

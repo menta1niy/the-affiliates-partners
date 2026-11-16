@@ -35,7 +35,7 @@
     if (className) el.className=className;
     return el;
   }
-  function action(label,fn){const button=make("button",label,"btn ghost");button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
+  function action(label,fn,variant="ghost"){const button=make("button",label,"btn "+variant);button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
   async function openParticipant(user){
@@ -69,11 +69,11 @@
           item.append(select,note,action("Сохранить статус",async()=>{
             await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,stage:select.value,note:note.value});
             notice("Статус обновлён");await openParticipant(person);
-          }),action("Убрать оффер",async()=>{
+          },"primary"),action("Убрать оффер",async()=>{
             if(!window.confirm("Убрать назначение оффера?"))return;
             await api("/admin/mvp/assignment",{user_id:id,offer_id:offer.id,enabled:false,note:""});
             await openParticipant(person);
-          }));
+          },"danger"));
           section.append(item);
         }
         const available=await api("/admin/mvp/catalog");
@@ -83,7 +83,7 @@
         if(picker.options.length){section.append(picker,action("Назначить оффер",async()=>{
           await api("/admin/mvp/assignment",{user_id:id,offer_id:picker.value,stage:"assigned",note:""});
           notice("Оффер назначен");await openParticipant(person);
-        }));}else section.append(make("p","Нет новых доступных офферов. Добавьте их в каталоге.","muted"));
+        },"primary"));}else section.append(make("p","Нет новых доступных офферов. Добавьте их в каталоге.","muted"));
         if(person.status==="pending")section.append(action("Одобрить участника",async()=>{
           await api("/admin/decision",{user_id:id,decision:"approve"});notice("Участник одобрен");await loadDashboard();await openParticipant(person);
         }));
