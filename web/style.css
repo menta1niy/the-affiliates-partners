@@ -453,3 +453,259 @@ dialog select,dialog input { max-width:100%; }
 @media (prefers-reduced-motion:reduce) {
   .btn,input,select,textarea { transition:none!important;transform:none!important; }
 }
+
+/* Stage 4 — PARTICIPANT CABINET only. Admin CSS and functionality unchanged. */
+.participant-app {
+  --participant-font-size:14px;
+  background:var(--color-bg);
+}
+.participant-app .shell { max-width:1200px; }
+.participant-app .top { height:78px; }
+.participant-app .header-indicator {
+  display:inline-block;width:5px;height:5px;margin-left:7px;
+  border-radius:50%;background:#fff;box-shadow:0 0 9px rgba(255,255,255,.56);
+  vertical-align:middle;
+}
+.participant-app .participant-hero {
+  position:relative;min-height:380px;
+  padding:clamp(28px,4.4vw,58px);
+  border-radius:18px;
+  background:
+    radial-gradient(ellipse 58% 85% at 92% 35%,rgba(255,255,255,.075),transparent 73%),
+    linear-gradient(113deg,#181A1C 0%,#111315 69%,#141517 100%);
+  border-color:rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.19),0 24px 65px rgba(0,0,0,.27);
+  isolation:isolate;
+}
+.participant-app .participant-hero::after { display:none; }
+.participant-hero-content { position:relative;z-index:2;max-width:800px; }
+.participant-hero-noise {
+  position:absolute;inset:0;z-index:-1;opacity:.13;pointer-events:none;
+  background-image:repeating-linear-gradient(113deg,transparent 0 35px,rgba(255,255,255,.025) 35px 36px);
+}
+.participant-hero-art {
+  position:absolute;right:-3%;top:0;width:min(46%,400px);height:95%;
+  display:flex;align-items:center;justify-content:center;
+  opacity:.88;pointer-events:none;z-index:0;
+  transform:rotate(-12deg);
+  -webkit-mask-image:linear-gradient(90deg,transparent,black 27%,black 85%);
+  mask-image:linear-gradient(90deg,transparent,black 27%,black 85%);
+}
+.participant-hero-art svg {width:100%;height:100%;filter:drop-shadow(0 0 15px rgba(255,255,255,.08));}
+.participant-app .hero .eyebrow {font-size:10px;color:#BEC0C1;letter-spacing:.16em;font-weight:700;}
+.participant-app .hero-index {color:#777B7D;}
+.participant-app .hero h1 {
+  position:relative;z-index:1;
+  font-size:clamp(38px,5.1vw,70px);line-height:1.02;letter-spacing:-.064em;
+  max-width:740px;margin:40px 0 20px;font-weight:800;
+  overflow-wrap:normal;
+}
+.participant-app .hero h1 em {display:inline-block;font-style:normal;color:#B2B4B5;opacity:1;}
+.participant-app .hero p {position:relative;max-width:450px;line-height:1.6;color:#C5C6C7;font-size:14px;opacity:1;}
+.participant-app .hero-actions {position:relative;align-items:center;gap:14px;margin-top:30px;}
+.participant-app .hero-actions .tag {
+  font-size:10px;letter-spacing:.03em;
+  border-radius:8px;min-height:39px;display:inline-flex;align-items:center;
+  background:rgba(255,255,255,.05);color:#DCDCDC;
+}
+.participant-main-cta {min-width:168px;}
+.participant-app .hero-bottomline {
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding-top:18px;margin-top:37px;border-top:1px solid rgba(255,255,255,.11);
+  color:var(--color-muted);font-size:9px;letter-spacing:.13em;font-weight:700;
+}
+.participant-app .participant-refresh {
+  display:inline-flex;align-items:center;gap:9px;justify-content:center;
+  padding:4px 2px;min-height:36px;background:transparent;border:0;
+  color:var(--color-secondary);font-size:11px;letter-spacing:.015em;
+}
+.participant-refresh:focus-visible {outline:2px solid white;outline-offset:2px;}
+.participant-refresh:hover:not(:disabled) {color:white;}
+.participant-refresh:disabled {opacity:.45;cursor:wait;}
+.participant-app .participant-gate {max-width:740px;padding:30px;border-radius:16px;}
+.participant-app .participant-gate h2 {font-size:clamp(23px,3vw,32px);}
+.participant-app #register-form {max-width:540px;}
+.participant-app .participant-nav {
+  display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 30px;
+  padding:6px;border:1px solid var(--glass-border);border-radius:12px;
+  background:rgba(255,255,255,.025);width:max-content;max-width:100%;
+}
+.participant-app .participant-nav a {
+  color:var(--color-secondary);font-size:12px;font-weight:700;
+  padding:12px 18px;border-radius:8px;transition:background-color .16s,color .16s;
+}
+.participant-app .participant-nav a:hover,
+.participant-app .participant-nav a:focus-visible {
+  color:#fff;background:rgba(255,255,255,.075);
+}
+.participant-app .participant-account-heading {
+  display:flex;justify-content:space-between;align-items:center;gap:16px;
+  margin:32px 0 16px;
+}
+.participant-app .participant-account-heading h2 {font-size:clamp(25px,3.8vw,38px);margin:9px 0 0;letter-spacing:-.055em;}
+.participant-app #status-pill {flex:0 0 auto;align-self:flex-start;white-space:nowrap;}
+.participant-app .participant-account-cards {display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.participant-app .participant-account-cards .panel {margin:0;padding:22px;}
+.participant-app .participant-account-cards .panel h3 {
+  font-size:clamp(17px,2.5vw,24px);letter-spacing:-.04em;
+  margin:14px 0 9px;overflow-wrap:anywhere;
+}
+.participant-app .participant-account-cards .panel p {
+  font-size:12px;line-height:1.6;margin:0;max-width:none;
+}
+.participant-app .participant-section-heading {margin-bottom:22px;}
+.participant-app .participant-section-heading h2 {
+  font-size:clamp(28px,3.4vw,42px);line-height:1.08;margin:8px 0 0;
+  letter-spacing:-.05em;
+}
+.participant-app .heading-period {color:#929598;}
+.participant-app .participant-stats {padding-top:38px;scroll-margin-top:22px;}
+.participant-kpi-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+.participant-app .participant-kpi-grid .metric {
+  padding:22px 19px;min-height:138px;border-radius:14px;
+  background:linear-gradient(150deg,rgba(255,255,255,.055),transparent 75%),var(--color-surface);
+}
+.participant-app .participant-kpi-grid .metric span {
+  display:block;color:var(--color-secondary);
+  font-size:10px;line-height:1.35;font-weight:700;letter-spacing:.12em;
+}
+.participant-app .participant-kpi-grid .metric strong {
+  font-size:clamp(34px,3.2vw,48px);line-height:1;
+  margin-top:20px;letter-spacing:-.07em;
+}
+.participant-app .participant-stats-note {
+  margin:13px 0 0;color:var(--color-muted);font-size:11px;line-height:1.6;
+}
+.participant-app #offers-section,
+.participant-app #profile-section {scroll-margin-top:18px;}
+.participant-app .participant-offers {margin-top:36px;padding:30px;}
+.participant-app .participant-offers #offers-description {margin:0 0 24px;max-width:700px;font-size:12px;line-height:1.65;}
+.participant-app .participant-offers .offer-list {gap:13px;}
+.participant-app .participant-offers .offer-item {
+  padding:24px;border-radius:14px;
+  background:linear-gradient(150deg,rgba(255,255,255,.055),transparent 65%),#17191B;
+  border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px rgba(255,255,255,.10);
+}
+.participant-app .participant-offer-top {
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+}
+.participant-app .participant-offer-heading {min-width:0;}
+.participant-app .participant-offer-category {
+  display:block;margin-bottom:8px;
+  color:#B0B2B4;font-size:10px;font-weight:700;letter-spacing:.10em;
+  text-transform:none;overflow-wrap:anywhere;
+}
+.participant-app .participant-offer-top h3 {
+  margin:0;font-size:clamp(19px,2.4vw,25px);line-height:1.22;
+  letter-spacing:-.045em;overflow-wrap:anywhere;
+}
+.participant-app .participant-offer-status {
+  flex:0 0 auto;max-width:47%;
+  font-size:10px;line-height:1.4;letter-spacing:0;text-align:center;
+  padding:8px 10px;white-space:normal;
+}
+.participant-app .participant-offer-details {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;
+  margin-top:22px;
+}
+.participant-app .participant-offer-detail {
+  display:flex;flex-direction:column;gap:7px;padding:13px 14px;
+  min-width:0;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.075);
+  border-radius:10px;overflow-wrap:anywhere;
+}
+.participant-app .participant-offer-detail span {
+  color:#929598;font-size:9px;letter-spacing:.11em;font-weight:700;
+}
+.participant-app .participant-offer-detail strong {
+  font-size:14px;line-height:1.35;font-weight:700;color:#F7F7F5;
+}
+.participant-app .participant-offer-payment strong {font-size:clamp(22px,3vw,28px);letter-spacing:-.045em;}
+.participant-app .participant-offer-target {margin-top:10px;background:transparent;padding:13px 0;border:0;border-bottom:1px solid rgba(255,255,255,.095);border-radius:0;}
+.participant-app .participant-offer-target strong {font-size:13px;}
+.participant-app .participant-offer-disclosure {margin-top:12px;}
+.participant-app .participant-offer-disclosure summary {
+  color:#F7F7F5;font-size:12px;font-weight:700;
+  list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  padding:13px 0;min-height:44px;gap:12px;
+}
+.participant-app .participant-offer-disclosure summary::-webkit-details-marker {display:none;}
+.participant-app .participant-offer-disclosure summary::after {
+  content:"+";font-size:20px;font-weight:500;color:#C1C3C4;
+}
+.participant-app .participant-offer-disclosure[open] summary::after {content:"−";}
+.participant-app .participant-offer-disclosure p {
+  white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:12px;line-height:1.7;color:#D6D7D8;margin:0 0 10px;
+}
+.participant-app .participant-offer-note {padding:12px;border-radius:8px;background:rgba(255,255,255,.045);}
+.participant-app .participant-offer-link {margin-top:14px;width:max-content;}
+.participant-app .participant-empty {
+  padding:24px;text-align:center;line-height:1.6;
+  color:var(--color-secondary);
+  background:rgba(255,255,255,.025);border:1px dashed rgba(255,255,255,.16);
+  border-radius:12px;font-size:13px;
+}
+.participant-app .participant-legacy-section {margin-top:18px;}
+.participant-app .participant-profile {padding:28px 30px;margin-top:22px;}
+.participant-app .participant-profile-top {
+  display:flex;align-items:center;gap:16px;padding:18px 0 24px;
+  border-bottom:1px solid var(--divider);
+}
+.participant-app .participant-avatar {
+  width:60px;height:60px;flex:0 0 60px;
+  display:grid;place-items:center;border-radius:14px;background:#F1F1EE;
+  color:#080909;font-weight:800;font-size:30px;
+  box-shadow:var(--glow-edge),0 0 22px rgba(255,255,255,.06);
+}
+.participant-app .participant-profile-top>div:last-child {min-width:0;display:grid;gap:3px;}
+.participant-app .participant-profile-label {font-size:9px;letter-spacing:.11em;font-weight:700;color:var(--color-muted);}
+.participant-app #profile-name {font-size:21px;line-height:1.25;overflow-wrap:anywhere;}
+.participant-app #profile-username {font-size:12px;overflow-wrap:anywhere;}
+.participant-app .participant-profile .data-row {min-height:46px;align-items:center;}
+.participant-app .participant-profile .data-row strong {font-variant-numeric:tabular-nums;}
+.participant-app #admin-link {margin-top:22px;}
+@media (max-width:740px) {
+  .participant-app .top {height:68px;}
+  .participant-app .header-label {font-size:9px;}
+  .participant-app main {padding-top:20px;}
+  .participant-app .participant-hero {padding:28px 22px 18px;min-height:0;border-radius:15px;}
+  .participant-app .participant-hero-art {width:62%;right:-29%;top:-20%;height:75%;opacity:.42;}
+  .participant-app .hero h1 {font-size:clamp(30px,8.2vw,49px);line-height:1.06;margin:28px 0 15px;}
+  .participant-app .hero p {font-size:12px;line-height:1.65;max-width:310px;}
+  .participant-app .hero-actions {flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px;margin-top:21px;}
+  .participant-app .participant-main-cta {min-width:0;}
+  .participant-app .hero-actions .tag {font-size:10px;max-width:100%;}
+  .participant-app .hero-bottomline {margin-top:28px;font-size:8px;letter-spacing:.055em;}
+  .participant-app .participant-nav {width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:4px;margin:16px 0 25px;}
+  .participant-app .participant-nav a {padding:12px 6px;text-align:center;font-size:11px;}
+  .participant-app .participant-account-heading {align-items:flex-start;margin-top:23px;}
+  .participant-app .participant-account-heading h2 {font-size:25px;}
+  .participant-app .participant-account-cards {grid-template-columns:1fr;gap:9px;}
+  .participant-app .participant-account-cards .panel {padding:17px 18px;}
+  .participant-app .participant-account-cards .panel h3 {font-size:19px;margin-top:10px;}
+  .participant-app .participant-stats {padding-top:27px;}
+  .participant-app .participant-section-heading {margin-bottom:18px;}
+  .participant-app .participant-section-heading h2 {font-size:30px;}
+  .participant-app .participant-kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+  .participant-app .participant-kpi-grid .metric {min-height:112px;padding:16px;}
+  .participant-app .participant-kpi-grid .metric strong {font-size:34px;margin-top:17px;}
+  .participant-app .participant-kpi-grid .metric span {font-size:9px;}
+  .participant-app .participant-offers {margin-top:26px;padding:19px 17px;}
+  .participant-app .participant-offers .offer-item {padding:17px;}
+  .participant-app .participant-offer-top {gap:7px;}
+  .participant-app .participant-offer-status {font-size:9px;max-width:49%;}
+  .participant-app .participant-offer-details {gap:8px;}
+  .participant-app .participant-offer-detail {padding:12px 10px;}
+  .participant-app .participant-offer-payment strong {font-size:23px;}
+  .participant-app .participant-profile {padding:20px 18px;}
+}
+@media (max-width:350px) {
+  .participant-app .hero h1 {font-size:29px;letter-spacing:-.06em;}
+  .participant-app .hero-bottomline span {font-size:7px;}
+  .participant-app .participant-account-heading {flex-direction:column;}
+  .participant-app .participant-offer-top {flex-direction:column;}
+  .participant-app .participant-offer-status {max-width:100%;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .participant-app .participant-nav a {transition:none;}
+}

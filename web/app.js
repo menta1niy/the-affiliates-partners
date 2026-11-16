@@ -54,7 +54,7 @@
   function offerMessage(message) {
     const el = $("offers");
     el.replaceChildren();
-    const paragraph=document.createElement("p");paragraph.className="muted";paragraph.textContent=message;el.append(paragraph);
+    const paragraph=document.createElement("p");paragraph.className="participant-empty";paragraph.textContent=message;el.append(paragraph);
   }
   function taskNotice(message) {
     const element = $("task-notice");
@@ -168,35 +168,73 @@
     });
   }
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"Отправлено на проверку",completed:"Завершено (отметка администратора)",rejected:"Отклонено"};
+  function updateParticipantKpis(offers,stats){
+    const stages={in_progress:0,submitted:0,completed:0};
+    for(const offer of offers){
+      if(offer && Object.prototype.hasOwnProperty.call(stages,offer.stage))stages[offer.stage]++;
+    }
+    // The overview returns all assignments. Derive split counters from this
+    // single authorized payload; backend in_progress includes submitted.
+    const total=Number(stats?.total);
+    const assigned=Number.isSafeInteger(total) && total>=0 && total===offers.length ? total : offers.length;
+    text("kpi-total",assigned);
+    text("kpi-in-progress",stages.in_progress);
+    text("kpi-submitted",stages.submitted);
+    text("kpi-completed",stages.completed);
+  }
+  function resetParticipantKpis(){
+    for(const id of ["kpi-total","kpi-in-progress","kpi-submitted","kpi-completed"])text(id,"—");
+  }
+  function offerDetail(label,value,className=""){
+    const wrapper=document.createElement("div");
+    wrapper.className="participant-offer-detail"+(className?" "+className:"");
+    const name=document.createElement("span");name.textContent=label;
+    const content=document.createElement("strong");content.textContent=value==null||value===""?"—":String(value);
+    wrapper.append(name,content);return wrapper;
+  }
   async function loadManualOverview(){
     const request=++offersRequest;
+    resetParticipantKpis();
     offerMessage("Загружаем ваши офферы…");
     try{
       const result=await api("/mvp/overview");
       if(request!==offersRequest)return;
       const root=$("offers");root.replaceChildren();
       const stats=result.statistics||{};
-      const summary=document.createElement("p");summary.className="muted";
-      summary.textContent=`Всего назначено: ${stats.total||0} · В работе: ${stats.in_progress||0} · Завершено: ${stats.completed||0}`;
-      root.append(summary);
       const offers=Array.isArray(result.offers)?result.offers:[];
-      if(!offers.length){root.append(document.createTextNode("Офферы пока не назначены администратором."));return;}
+      updateParticipantKpis(offers,stats);
+      if(!offers.length){offerMessage("Здесь появятся предложения, которые назначит вам администратор.");return;}
       const list=document.createElement("div");list.className="offer-list";
       for(const offer of offers){
+        if(!offer||typeof offer!=="object")continue;
         const item=document.createElement("article");item.className="offer-item";
-        const h=document.createElement("h3");h.textContent=offer.name;
-        const info=document.createElement("p");info.textContent=`Категория: ${offer.category} · Оплата за целевое действие: ${offer.payout_rub} ₽ · Холд: ${offer.hold_days} дн.`;
-        const target=document.createElement("p");target.textContent="Целевое действие: "+offer.target_action;
-        const progress=document.createElement("p");progress.className="muted";progress.textContent="Статус: "+(manualStages[offer.stage]||offer.stage);
-        item.append(h,info,target,progress);
-        if(offer.instructions){const instructions=document.createElement("p");instructions.textContent=offer.instructions;item.append(instructions);}
-        if(offer.note){const note=document.createElement("p");note.textContent="Комментарий администратора: "+offer.note;item.append(note);}
+        const top=document.createElement("div");top.className="participant-offer-top";
+        const heading=document.createElement("div");heading.className="participant-offer-heading";
+        const category=document.createElement("span");category.className="participant-offer-category";category.textContent=offer.category||"Банковский оффер";
+        const h=document.createElement("h3");h.textContent=offer.name||"Предложение";
+        heading.append(category,h);
+        const progress=document.createElement("span");progress.className="pill participant-offer-status";progress.dataset.status=offer.stage||"assigned";
+        progress.textContent=offer.stage==="completed"?"Завершено":offer.stage==="submitted"?"На проверке":manualStages[offer.stage]||offer.stage||"Назначено";
+        if(offer.stage==="completed")progress.title="Ручная отметка администратора — не банковское подтверждение";
+        top.append(heading,progress);
+        const values=document.createElement("div");values.className="participant-offer-details";
+        const payout=Number(offer.payout_rub);
+        const payment=Number.isFinite(payout)&&payout>=0?new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(payout)+" ₽":"—";
+        values.append(offerDetail("УСЛОВИЯ ОПЛАТЫ",payment,"participant-offer-payment"),offerDetail("ХОЛД",`Холд: ${offer.hold_days??"—"} дн.`));
+        item.append(top,values,offerDetail("ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action,"participant-offer-target"));
+        if(offer.instructions||offer.note){
+          const details=document.createElement("details");details.className="participant-offer-disclosure";
+          const summary=document.createElement("summary");summary.textContent="Условия и инструкция";details.append(summary);
+          if(offer.instructions){const instructions=document.createElement("p");instructions.className="participant-offer-instructions";instructions.textContent=offer.instructions;details.append(instructions);}
+          if(offer.note){const note=document.createElement("p");note.className="participant-offer-note";note.textContent="Комментарий администратора: "+offer.note;details.append(note);}
+          item.append(details);
+        }
         const url=safeHttpsUrl(offer.referral_url);
-        if(url){const link=document.createElement("a");link.className="btn ghost";link.textContent="Открыть предложение ↗";link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";item.append(link);}
+        if(url){const link=document.createElement("a");link.className="btn ghost participant-offer-link";link.textContent="Открыть оффер ↗";link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";item.append(link);}
         list.append(item);
       }
       root.append(list);
-    }catch(e){if(request===offersRequest)offerMessage("Не удалось получить офферы: "+e.message);}
+    }catch(e){if(request===offersRequest){resetParticipantKpis();offerMessage("Не удалось получить офферы: "+e.message+". Обновите данные для повторной попытки.");}}
   }
   async function loadTasks(){
     const request=++offersRequest;
@@ -242,6 +280,12 @@
     const role = session.role || user.role || "user";
     const rawStatus = session.status || user.status || (session.registered === false ? "unregistered" : "unregistered");
     const state = statusInfo(rawStatus);
+    const active=["approved","active"].includes(state.key);
+    show("participant-nav",active && session.open_registration===true);
+    show("stats-section",active && session.open_registration===true);
+    show("hero-cta",active || (unregisteredStatus(state.key) && session.open_registration===true));
+    $("hero-cta").href=active?"#offers-section":"#register-panel";
+    $("hero-cta").firstChild.textContent=active?"Мои офферы ":"Подать заявку ";
     show("connect",false);show("account",true);
     const unregistered = ["invited","unregistered","new","not_registered"].includes(state.key);
     show("register-panel",unregistered);
@@ -250,9 +294,14 @@
     text("registration-instructions",session.open_registration===true ? "Подтвердите согласие и отправьте заявку. Администратор увидит ваш Telegram ID и username." : verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
-    text("status-description",state.description);
+    text("status-description",unregistered && session.open_registration===true
+      ? "Вы можете подать заявку через Telegram. Администратор рассмотрит её перед открытием доступа к офферам."
+      : state.description);
     $("status-pill").dataset.status=state.key;
-    text("profile-name",[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username);
+    const displayName=[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username || "Участник";
+    text("profile-name",displayName);
+    text("profile-avatar",displayName.trim().slice(0,1).toUpperCase());
+    text("profile-username",user.username?"@"+user.username:"Telegram");
     text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : user.internal_id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
@@ -260,20 +309,21 @@
     text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     if (["approved","active"].includes(state.key) && session.open_registration===true){
-      $("offers").closest("section").querySelector("h2").textContent="Мои офферы и статистика";
-      $("offers").closest("section").querySelector("p").textContent="Статусы ведёт администратор. Они не являются банковским подтверждением выплаты.";
+      text("offers-description","Статусы ведёт администратор. Оплата в карточке — ставка за целевое действие, не банковское начисление.");
       $("task-history").closest("section").hidden=true;
       $("crm-state").closest("section").hidden=true;
       loadManualOverview();
-    }else if (["approved","active"].includes(state.key)){loadTasks();loadCrmStatus();}
-    else {++offersRequest;++crmStatusRequest;offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
+    }else if (["approved","active"].includes(state.key)){resetParticipantKpis();loadTasks();loadCrmStatus();}
+    else {++offersRequest;++crmStatusRequest;resetParticipantKpis();offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
+  function unregisteredStatus(key){return ["invited","unregistered","new","not_registered"].includes(key);}
   async function refresh() {
     const button = $("refresh");button.disabled=true;
     error("");
     try {
       if (!initData()) {
+        show("hero-cta",false);
         taskNotice("");
         ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
@@ -285,6 +335,7 @@
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       render(session);
     } catch(e) {
+      show("hero-cta",false);
       taskNotice("");
       ++offersRequest;++crmStatusRequest;
       ++referralRequest;
