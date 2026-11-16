@@ -315,6 +315,6 @@
     } catch(e) {text("referral-message",e.message);}
   });
   $("refresh").addEventListener("click",refresh);
-  try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");} catch {}
+  try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");} catch {}
   refresh();
 })();

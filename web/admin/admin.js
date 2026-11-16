@@ -280,7 +280,7 @@
   }
   async function openOfferCatalog(){
     let dialog=$("mvp-catalog-dialog");
-    if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel";dialog.style.cssText="width:min(620px,94vw);max-height:90vh;overflow:auto;background:#0B2B26;color:#DAF1DE;border:1px solid #235347;border-radius:16px";document.body.append(dialog);}
+    if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel";dialog.style.cssText="width:min(620px,94vw);max-height:90vh;overflow:auto;border-radius:16px";document.body.append(dialog);}
     dialog.replaceChildren();
     const close=action("Закрыть",()=>dialog.close());dialog.append(close,make("h2","Каталог офферов"));
     const list=make("div");dialog.append(list);
@@ -335,7 +335,7 @@
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   const catalogButton=action("Каталог офферов",openOfferCatalog);catalogButton.id="mvp-catalog-open";$("reload").before(catalogButton);
   async function start(){
-    try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#051F20");}catch{}
+    try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");}catch{}
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
     try {
       const session=await api("/session");
