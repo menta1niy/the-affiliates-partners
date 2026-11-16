@@ -71,8 +71,11 @@ for html in (root / "web" / "index.html", root / "web" / "admin" / "index.html")
     source = html.read_text("utf-8")
     if 'href="/partners/style.css"' not in source or "theme-green.css" in source:
         raise SystemExit("Mini App must load only the consolidated stylesheet")
-if "Green identity v1" not in (root / "web" / "style.css").read_text("utf-8"):
-    raise SystemExit("Consolidated green theme is missing")
+if manifest.get("theme") != "monochrome-glass-v1":
+    raise SystemExit("Unexpected visual theme identifier")
+css = (root / "web" / "style.css").read_text("utf-8")
+if "--color-bg: #080909" not in css or "--color-accent: #FFFFFF" not in css:
+    raise SystemExit("Monochrome glass design tokens missing")
 print("VALIDATED_COMMIT", manifest["commit"])
 PY
 

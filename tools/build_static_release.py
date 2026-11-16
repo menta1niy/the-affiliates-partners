@@ -61,7 +61,7 @@ def main() -> None:
         raise SystemExit("Demo preview asset must not be in the release")
     manifest = {
         "commit": commit,
-        "theme": "minimal-green-v1",
+        "theme": "monochrome-glass-v1",
         "files": {
             p.relative_to(SOURCE).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in files
