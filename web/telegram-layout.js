@@ -4,6 +4,7 @@
   if (!app) return;
 
   const root = document.documentElement;
+  root.classList.add('tg-webapp');
   const inset = (value) => Math.max(0, Math.min(160, Number(value) || 0));
   const updateInsets = () => {
     const safe = app.safeAreaInset || {};

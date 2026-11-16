@@ -145,6 +145,33 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_telegram_ios_top_controls_do_not_cover_header_or_dialog(self):
+        # Telegram's native close/menu controls occupy roughly the first 100
+        # CSS pixels on iPhone even if its reported content inset is smaller.
+        with sync_playwright() as playwright:
+            browser=playwright.chromium.launch(headless=True)
+            try:
+                for admin in (False,True):
+                    with self.subTest(admin=admin):
+                        page=self.open_page(browser,admin=admin,width=390)
+                        header=page.locator('.admin-mobile-header' if admin else '.participant-top')
+                        box=header.bounding_box()
+                        self.assertIsNotNone(box)
+                        self.assertGreaterEqual(box['y'],112,box)
+                        if admin:
+                            page.get_by_role('button',name='Каталог офферов').click()
+                            dialog=page.locator('#mvp-catalog-dialog')
+                            dialog.wait_for(state='visible')
+                            rect=dialog.bounding_box()
+                            self.assertGreaterEqual(rect['y'],112,rect)
+                            self.assertGreater(rect['height'],200,rect)
+                            self.assertLessEqual(rect['y']+rect['height'],844,rect)
+                            close=dialog.get_by_role('button',name='Закрыть')
+                            self.assertGreaterEqual(close.bounding_box()['y'],112)
+                        page.close()
+            finally:
+                browser.close()
+
     def test_reduced_motion_focus_and_navigation(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)

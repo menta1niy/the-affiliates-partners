@@ -733,6 +733,28 @@ dialog select,dialog input { max-width:100%; }
   padding-top:max(env(safe-area-inset-top,0px),var(--tg-safe-top),var(--tg-content-top));
   padding-bottom:max(env(safe-area-inset-bottom,0px),var(--tg-safe-bottom),var(--tg-content-bottom));
 }
+/* Telegram iOS renders its Close / menu overlay above the WebView.
+   contentSafeAreaInset can be 0 or under-report this control region. */
+@media (max-width:740px) {
+  .tg-webapp {
+    --tg-overlay-clearance: max(112px, calc(max(env(safe-area-inset-top,0px),var(--tg-safe-top),var(--tg-content-top)) + 56px));
+  }
+  .tg-webapp .admin-control .admin-layout,
+  .tg-webapp .participant-app .shell {
+    padding-top:var(--tg-overlay-clearance);
+  }
+  /* Dialogs are promoted to the top layer: shell padding cannot protect them. */
+  .tg-webapp dialog:is(#participant-detail,#mvp-catalog-dialog) {
+    position:fixed;
+    top:var(--tg-overlay-clearance);
+    left:0;
+    right:0;
+    bottom:auto;
+    margin:0 auto;
+    max-height:calc(100dvh - var(--tg-overlay-clearance) - max(16px, env(safe-area-inset-bottom,0px),var(--tg-content-bottom)));
+    overflow-y:auto;
+  }
+}
 .admin-control .admin-sidebar {
   position:sticky;top:0;align-self:start;height:100dvh;
   display:flex;flex-direction:column;gap:0;
