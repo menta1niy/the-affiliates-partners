@@ -1220,3 +1220,181 @@ dialog select,dialog input { max-width:100%; }
 @media (prefers-reduced-motion:reduce) {
   .admin-control .admin-tabs button {transition:none;}
 }
+
+/* Catalog editor — centered content, aligned fields and a proper glass toggle. */
+.admin-control #mvp-catalog-dialog {
+  box-sizing:border-box;
+  width:min(calc(100% - 32px),740px);
+  max-width:740px;
+  margin:auto;
+  padding:clamp(18px,3vw,30px);
+  border-radius:19px;
+}
+.admin-control #mvp-catalog-dialog .admin-dialog-toolbar {
+  min-height:42px;
+  gap:16px;
+  margin-bottom:25px;
+}
+.admin-control #mvp-catalog-dialog .admin-dialog-toolbar .btn {
+  flex-shrink:0;
+}
+.admin-control #mvp-catalog-dialog>h2 {margin:0 0 9px;}
+.admin-control #mvp-catalog-dialog>.muted {margin:0 0 23px;}
+.admin-control #mvp-catalog-dialog .admin-catalog-list {gap:12px;}
+.admin-control #mvp-catalog-dialog .admin-catalog-card {gap:17px;}
+.admin-control #mvp-catalog-dialog .admin-catalog-form {
+  display:block;
+  margin-top:28px;
+  padding-top:27px;
+  border-top:1px solid var(--divider);
+}
+.admin-control .admin-catalog-form-heading {margin-bottom:22px;}
+.admin-control .admin-catalog-form-heading h3 {
+  margin:8px 0 0;
+  font-size:clamp(23px,3vw,29px);
+  letter-spacing:-.045em;
+}
+.admin-control .admin-catalog-field-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:18px 14px;
+}
+.admin-control .admin-catalog-field {
+  display:grid;
+  gap:9px;
+  min-width:0;
+  margin:0;
+  font-weight:650;
+  font-size:12px;
+  color:var(--color-secondary);
+}
+.admin-control .admin-catalog-field>span {line-height:1.4;}
+.admin-control .admin-catalog-field input,
+.admin-control .admin-catalog-field textarea {
+  display:block;
+  width:100%;
+  min-width:0;
+  min-height:46px;
+  margin:0;
+  border-radius:11px;
+  background:#1B1D20;
+}
+.admin-control .admin-catalog-field textarea {
+  min-height:104px;
+  resize:vertical;
+}
+.admin-control .admin-catalog-field-instructions,
+.admin-control .admin-catalog-field-target_action,
+.admin-control .admin-catalog-field-referral_url {
+  grid-column:1/-1;
+}
+.admin-control .admin-catalog-availability {
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:21px 0 0;
+  padding:16px 17px;
+  border:1px solid var(--glass-border);
+  border-radius:12px;
+  background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.015));
+  cursor:pointer;
+}
+.admin-control .admin-catalog-availability-copy {
+  min-width:0;
+  display:grid;
+  gap:5px;
+}
+.admin-control .admin-catalog-availability-copy strong {
+  color:var(--color-text);
+  font-weight:700;
+  font-size:13px;
+  line-height:1.4;
+}
+.admin-control .admin-catalog-availability-copy small {
+  color:var(--color-secondary);
+  font-size:11px;
+  font-weight:500;
+  line-height:1.45;
+}
+.admin-control .admin-catalog-availability input[type=checkbox] {
+  position:absolute;
+  width:1px;
+  height:1px;
+  min-height:0;
+  margin:0;
+  padding:0;
+  opacity:0;
+}
+.admin-control .admin-catalog-switch {
+  position:relative;
+  display:block;
+  flex:0 0 48px;
+  width:48px;
+  height:28px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;
+  background:#343639;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.24);
+  transition:background-color .16s,border-color .16s;
+}
+.admin-control .admin-catalog-switch::before {
+  content:"";
+  position:absolute;
+  width:20px;
+  height:20px;
+  top:3px;
+  left:3px;
+  border-radius:50%;
+  background:#B3B6B8;
+  transition:transform .16s,background-color .16s;
+}
+.admin-control .admin-catalog-availability input:checked + .admin-catalog-switch {
+  background:rgba(255,255,255,.24);
+  border-color:rgba(255,255,255,.56);
+}
+.admin-control .admin-catalog-availability input:checked + .admin-catalog-switch::before {
+  transform:translateX(20px);
+  background:#FFFFFF;
+  box-shadow:0 0 8px rgba(255,255,255,.18);
+}
+.admin-control .admin-catalog-availability input:focus-visible + .admin-catalog-switch {
+  outline:2px solid white;
+  outline-offset:4px;
+}
+.admin-control .admin-catalog-form-actions {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:18px;
+}
+.admin-control .admin-catalog-form-actions .btn.primary {
+  min-width:205px;
+}
+@media (max-width:740px) {
+  .admin-control #mvp-catalog-dialog {
+    width:calc(100vw - 20px);
+    max-width:calc(100vw - 20px);
+    padding:20px 17px;
+    margin:0 auto;
+  }
+  .admin-control .admin-catalog-field-grid {
+    grid-template-columns:minmax(0,1fr);
+    gap:17px;
+  }
+  .admin-control .admin-catalog-form-actions {
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .admin-control .admin-catalog-form-actions .btn {
+    width:100%;
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .admin-control .admin-catalog-switch,
+  .admin-control .admin-catalog-switch::before {
+    transition:none;
+  }
+}

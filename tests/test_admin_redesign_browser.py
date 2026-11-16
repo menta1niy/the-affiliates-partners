@@ -134,3 +134,39 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                 self.assertFalse(page.locator('#admin-app').is_visible())
             finally:
                 browser.close()
+
+    def test_catalog_editor_centered_mobile_switch_and_edit_cancel(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                for width in (320,390,768,1440):
+                    with self.subTest(width=width):
+                        page=self.open_admin(browser,width,role='owner')
+                        page.get_by_role('button',name='Каталог офферов').click()
+                        dialog=page.locator('#mvp-catalog-dialog')
+                        dialog.wait_for(state='visible')
+                        form=dialog.locator('form.admin-catalog-form')
+                        self.assertTrue(form.is_visible())
+                        toggle=form.locator('#admin-catalog-active')
+                        self.assertTrue(toggle.is_checked())
+                        toggle.uncheck()
+                        self.assertFalse(toggle.is_checked())
+                        toggle.check()
+                        grid=form.locator('.admin-catalog-field-grid')
+                        columns=grid.evaluate('node => getComputedStyle(node).gridTemplateColumns.split(" ").length')
+                        self.assertEqual(columns,1 if width<=740 else 2)
+                        self.assertEqual(form.locator('textarea[name="instructions"]').count(),1)
+                        rect=dialog.bounding_box()
+                        self.assertLessEqual(abs(rect['x']+rect['width']/2-width/2),2,rect)
+                        self.assertLessEqual(rect['x']+rect['width'],width+1,rect)
+                        self.assertFalse(form.get_by_role('button',name='Отменить редактирование').is_visible())
+                        dialog.get_by_role('button',name='Редактировать').first.click()
+                        self.assertTrue(form.get_by_role('button',name='Отменить редактирование').is_visible())
+                        self.assertEqual(form.locator('input[name="name"]').input_value(),
+                                         'Дебетовая карта Альфа Банк — длинное наименование')
+                        form.get_by_role('button',name='Отменить редактирование').click()
+                        self.assertEqual(form.locator('input[name="name"]').input_value(),'')
+                        self.assertTrue(toggle.is_checked())
+                        page.close()
+            finally:
+                browser.close()

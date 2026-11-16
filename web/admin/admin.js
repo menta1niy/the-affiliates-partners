@@ -310,21 +310,49 @@
     dialog.append(top,make("h2","Каталог офферов"));
     dialog.append(make("p","Параметры и условия банковских предложений. Указанная ставка не является подтверждённым начислением.","muted"));
     const list=make("div",undefined,"admin-catalog-list");dialog.append(list);
-    const fields=[["name","Название","text"],["category","Категория","text"],["target_action","Целевое действие","text"],["payout_rub","Оплата, ₽","number"],["hold_days","Холд, дней","number"],["instructions","Инструкция","text"],["referral_url","HTTPS-ссылка","url"]];
-    const form=make("form");form.className="form-grid";
+    const fields=[["name","Название","text"],["category","Категория","text"],["target_action","Целевое действие","text"],["payout_rub","Оплата, ₽","number"],["hold_days","Холд, дней","number"],["instructions","Инструкция","textarea"],["referral_url","HTTPS-ссылка","url"]];
+    const form=make("form");form.className="admin-catalog-form";
     const inputs={};let editingId=null;
-    const heading=make("h3","Добавить оффер");form.append(heading);
-    for(const [key,label,type] of fields){const wrap=make("label",label);const input=make("input");input.type=type;input.name=key;input.maxLength=key==="instructions"?2000:2048;if(type==="number"){input.min="0";input.step="1";}if(key==="payout_rub"||key==="hold_days")input.value="0";inputs[key]=input;wrap.append(input);form.append(wrap);}
-    const active=make("input");active.type="checkbox";active.checked=true;const activeLabel=make("label"," Доступен для назначений");activeLabel.prepend(active);form.append(activeLabel);
-    const save=make("button","Сохранить оффер","btn primary");save.type="submit";form.append(save);
+    const head=make("div",undefined,"admin-catalog-form-heading");
+    const heading=make("h3","Добавить оффер");
+    head.append(make("span","НАСТРОЙКА ПРЕДЛОЖЕНИЯ","section-kicker"),heading);
+    form.append(head);
+    const grid=make("div",undefined,"admin-catalog-field-grid");
+    for(const [key,label,type] of fields){
+      const wrap=make("label",undefined,"admin-catalog-field admin-catalog-field-"+key);
+      const title=make("span",label);
+      const input=make(type==="textarea"?"textarea":"input");
+      if(type!=="textarea")input.type=type;
+      else {input.rows=3;input.placeholder="Условия и порядок выполнения целевого действия";}
+      input.name=key;input.maxLength=key==="instructions"?2000:2048;
+      if(type==="number"){input.min="0";input.step="1";}
+      if(key==="payout_rub"||key==="hold_days")input.value="0";
+      if(key==="name"||key==="category"||key==="target_action")input.required=true;
+      if(key==="referral_url")input.placeholder="https://";
+      inputs[key]=input;wrap.append(title,input);grid.append(wrap);
+    }
+    form.append(grid);
+    const active=make("input");active.type="checkbox";active.checked=true;active.id="admin-catalog-active";
+    const activeLabel=make("label",undefined,"admin-catalog-availability");
+    activeLabel.htmlFor=active.id;
+    const activeCopy=make("span",undefined,"admin-catalog-availability-copy");
+    activeCopy.append(make("strong","Доступен для назначений"),make("small","Оффер можно назначать участникам"));
+    const toggle=make("span",undefined,"admin-catalog-switch");toggle.setAttribute("aria-hidden","true");
+    activeLabel.append(activeCopy,active,toggle);form.append(activeLabel);
+    const actions=make("div",undefined,"admin-catalog-form-actions");
+    const save=make("button","Сохранить оффер","btn primary");save.type="submit";
+    const cancel=make("button","Отменить редактирование","btn ghost");cancel.type="button";cancel.hidden=true;
+    function resetEditor(){editingId=null;heading.textContent="Добавить оффер";form.reset();inputs.payout_rub.value="0";inputs.hold_days.value="0";active.checked=true;cancel.hidden=true;save.textContent="Сохранить оффер";}
+    cancel.addEventListener("click",resetEditor);
+    actions.append(save,cancel);form.append(actions);
     form.addEventListener("submit",async e=>{e.preventDefault();save.disabled=true;try{
       const payload={};for(const [key] of fields)payload[key]=inputs[key].value.trim();
       payload.payout_rub=Number(payload.payout_rub);payload.hold_days=Number(payload.hold_days);payload.active=active.checked;
       if(editingId)payload.offer_id=editingId;
-      await api("/admin/mvp/offer",payload);editingId=null;heading.textContent="Добавить оффер";form.reset();inputs.payout_rub.value="0";inputs.hold_days.value="0";await reload();notice("Оффер сохранён");
+      await api("/admin/mvp/offer",payload);resetEditor();await reload();notice("Оффер сохранён");
     }catch(err){error(err.message);}finally{save.disabled=false;}});
     const canEdit=state.role==="owner";
-    if(canEdit){form.classList.add("admin-catalog-form");dialog.append(form);}
+    if(canEdit)dialog.append(form);
     else dialog.append(make("p","Для вашей роли доступен просмотр каталога. Изменение общего каталога выполняет владелец.","message"));
     async function reload(){
       list.replaceChildren(make("p","Загрузка…"));
@@ -343,7 +371,7 @@
           const row=make("div");row.append(make("span",key),make("strong",value));terms.append(row);
         }
         item.append(terms);
-        if(canEdit)item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;form.scrollIntoView({behavior:"smooth"});}));
+        if(canEdit)item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;cancel.hidden=false;save.textContent="Сохранить изменения";form.scrollIntoView({behavior:"smooth",block:"start"});}));
         list.append(item);
       }
     }
