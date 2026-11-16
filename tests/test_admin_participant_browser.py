@@ -20,13 +20,14 @@ class BrowserHandler(Handler):
     def do_GET(self):
         files = {'/partners/admin/': 'web/admin/index.html', '/partners/admin/admin.js': 'web/admin/admin.js',
                  '/partners/': 'web/index.html', '/partners/app.js': 'web/app.js',
-                 '/partners/style.css': 'web/style.css', '/partners/telegram-layout.js': 'web/telegram-layout.js'}
+                 '/partners/style.css': 'web/style.css', '/partners/telegram-layout.js': 'web/telegram-layout.js',
+                 '/partners/ap-mark.png': 'web/ap-mark.png'}
         target = files.get(self.path)
         if not target:
             return super().do_GET()
         data = (ROOT / target).read_bytes()
         self.send_response(200)
-        self.send_header('Content-Type', 'text/javascript' if target.endswith('.js') else 'text/css' if target.endswith('.css') else 'text/html')
+        self.send_header('Content-Type', 'image/png' if target.endswith('.png') else 'text/javascript' if target.endswith('.js') else 'text/css' if target.endswith('.css') else 'text/html')
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
         self.wfile.write(data)
