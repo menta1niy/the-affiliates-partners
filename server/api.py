@@ -211,12 +211,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, result)
         except db.Problem as exc:
             return self.send_json(exc.code, {"error": str(exc)})
+        except (ValueError, TypeError, OverflowError):
+            return self.send_json(400, {"error": "Некорректные данные"})
         except Exception as exc:
             if storage_error(exc):
                 return self.send_json(503, {"error": "Хранилище временно недоступно"})
             raise
-        except (ValueError, TypeError, OverflowError):
-            return self.send_json(400, {"error": "Некорректные данные"})
 
 
 def main():

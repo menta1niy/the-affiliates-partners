@@ -78,6 +78,15 @@ class StandaloneMvpTests(HttpHarness):
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,user_id=ALICE,offer_id=offer,stage='paid',note='')[0],400)
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,user_id=ALICE,offer_id=offer,stage='assigned',note='')[0],200)
 
+    def test_malformed_assignment_stage_is_client_error_not_server_failure(self):
+        self.register_open_user(ALICE)
+        offer = self.create_offer()
+        for malformed in ([], {}, None, 10):
+            with self.subTest(stage=malformed):
+                status, response = self.as_user('/api/admin/mvp/assignment', OWNER,
+                    user_id=ALICE, offer_id=offer, stage=malformed)
+                self.assertEqual(status, 400, response)
+
 
 if __name__=='__main__':
     unittest.main()

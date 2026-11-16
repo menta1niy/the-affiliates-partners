@@ -129,7 +129,7 @@ def assignment(actor, owner_id, data):
     if not isinstance(offer_id, str) or not OFFER_ID.fullmatch(offer_id):
         raise db.Problem(400, "Некорректный оффер")
     stage = data.get("stage", "assigned")
-    if stage not in STAGES:
+    if not isinstance(stage, str) or stage not in STAGES:
         raise db.Problem(400, "Некорректный статус")
     note = _field(data, "note", 300, required=False)
     enabled = data.get("enabled", True)
