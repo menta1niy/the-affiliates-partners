@@ -86,6 +86,45 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_mobile_sidebars_fixed_below_modal_layer(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for admin in (False, True):
+                    for width in (320, 390, 430):
+                        with self.subTest(admin=admin, width=width):
+                            page = self.open_page(browser, admin=admin, width=width)
+                            selector = ".admin-sidebar" if admin else ".participant-nav"
+                            nav = page.locator(selector)
+                            nav.wait_for(state="visible")
+                            geometry = nav.evaluate("""node => {
+                              const rect=node.getBoundingClientRect();
+                              return {position:getComputedStyle(node).position,
+                                left:rect.left,right:rect.right,bottom:rect.bottom,
+                                width:innerWidth,height:innerHeight};
+                            }""")
+                            self.assertEqual(geometry["position"], "fixed", geometry)
+                            self.assertGreaterEqual(geometry["left"], 0, geometry)
+                            self.assertLessEqual(geometry["right"], geometry["width"], geometry)
+                            self.assertLess(geometry["bottom"], geometry["height"], geometry)
+                            page.evaluate("scrollTo(0, document.body.scrollHeight)")
+                            after_scroll = nav.evaluate("node => node.getBoundingClientRect().bottom")
+                            self.assertAlmostEqual(after_scroll, geometry["bottom"], delta=1)
+                            if admin:
+                                page.evaluate("""() => {
+                                  const dialog=document.createElement('dialog');
+                                  dialog.id='navigation-layer-test';
+                                  dialog.textContent='Modal content';
+                                  dialog.style.cssText='width:100vw;height:100vh;max-width:none;max-height:none;margin:0;';
+                                  document.body.append(dialog);dialog.showModal();
+                                }""")
+                                self.assertTrue(page.locator("#navigation-layer-test").evaluate(
+                                    "node => node.matches(':modal')"
+                                ))
+                            page.close()
+            finally:
+                browser.close()
+
     def test_short_viewport_dialog_and_keyboard_simulation(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
