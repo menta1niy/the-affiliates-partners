@@ -81,6 +81,9 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(page.locator("#kpi-in-progress").inner_text(), "1")
                         self.assertEqual(page.locator("#kpi-submitted").inner_text(), "1")
                         self.assertEqual(page.locator("#kpi-completed").inner_text(), "1")
+                        self.assertLess(
+                            page.locator("#participant-kpis .metric").first.bounding_box()["height"], 110
+                        )
                         page.locator('#participant-nav [data-view="offers"]').click()
                         self.assertTrue(page.locator("#participant-offers-view").is_visible())
                         page.locator("#offers .offer-item").first.wait_for()
@@ -88,12 +91,15 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertIn("900 ₽", page.locator("#offers").inner_text())
                         self.assertIn("Назначено", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
+                        self.assertIn("Изучите условия оффера", first.locator(".participant-offer-next").inner_text())
+                        self.assertEqual(first.locator(".participant-offer-status .participant-status-symbol").count(),1)
                         self.assertEqual(first.locator(".participant-offer-instructions").count(), 0)
                         first.locator(".participant-offer-detail-button").click()
                         dialog = page.locator("#participant-offer-dialog")
                         self.assertTrue(dialog.is_visible())
                         self.assertIn("10 дн.", dialog.inner_text())
                         self.assertIn("Проверить документы", dialog.inner_text())
+                        self.assertIn("Следующий шаг", dialog.inner_text())
                         self.assertEqual(
                             dialog.locator(".participant-offer-link").get_attribute("href"),
                             "https://example.org/offer",
@@ -103,6 +109,10 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         page.locator('[data-offer-filter="submitted"]').click()
                         self.assertEqual(page.locator("#offers .offer-item").count(), 1)
                         self.assertIn("Третье предложение", page.locator("#offers").inner_text())
+                        self.assertIn("Ожидайте проверки администратором",page.locator("#offers .participant-offer-next").inner_text())
+                        self.assertEqual(page.locator("#offers .participant-offer-status").get_attribute("data-status"),"submitted")
+                        page.locator('[data-offer-filter="completed"]').click()
+                        self.assertIn("не подтверждение банковского начисления",page.locator("#offers .participant-offer-next").inner_text())
                         page.locator('[data-offer-filter="all"]').click()
                         page.locator("#offer-sort").select_option("payout_desc")
                         self.assertIn("Вторая карта",page.locator("#offers .offer-item").first.inner_text())

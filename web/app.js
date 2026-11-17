@@ -203,12 +203,34 @@
       item.append(heading,info);if(record.note){const note=document.createElement("p");note.textContent=record.note;item.append(note);}container.append(item);
     });
   }
-  const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"Отправлено на проверку",completed:"Завершено (отметка администратора)",rejected:"Отклонено"};
+  const manualStages={
+    assigned:{label:"Назначено",symbol:"○",next:"Изучите условия оффера и инструкцию перед выполнением действия."},
+    in_progress:{label:"В работе",symbol:"◷",next:"Продолжайте выполнять условия оффера. Если возник вопрос, уточните его у администратора."},
+    submitted:{label:"На проверке",symbol:"↻",next:"Ожидайте проверки администратором. Это не подтверждение результата банком."},
+    completed:{label:"Завершено",symbol:"✓",next:"Администратор отметил задание завершённым. Это не подтверждение банковского начисления или выплаты."},
+    rejected:{label:"Отклонено",symbol:"×",next:"Посмотрите комментарий администратора и уточните причину отклонения."}
+  };
   let manualOffers=[];
   let manualFilter="all";
   let manualSort="recent";
   function stageLabel(stage){
-    return stage==="completed"?"Завершено":stage==="submitted"?"На проверке":manualStages[stage]||"Назначено";
+    return (manualStages[stage]||manualStages.assigned).label;
+  }
+  function offerStatus(stage){
+    const info=manualStages[stage]||manualStages.assigned;
+    const status=document.createElement("span");status.className="pill participant-offer-status";
+    status.dataset.status=stage||"assigned";
+    const symbol=document.createElement("span");symbol.className="participant-status-symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=info.symbol;
+    const label=document.createElement("span");label.textContent=info.label;
+    status.append(symbol,label);
+    if(stage==="completed")status.title="Ручная отметка администратора — не банковское подтверждение";
+    return status;
+  }
+  function nextOfferAction(stage){
+    const row=document.createElement("p");row.className="participant-offer-next";
+    const label=document.createElement("strong");label.textContent="Следующий шаг";
+    const description=document.createElement("span");description.textContent=(manualStages[stage]||manualStages.assigned).next;
+    row.append(label,description);return row;
   }
   function offerPayment(value){
     const amount=Number(value);
@@ -235,15 +257,14 @@
     title.id="participant-offer-dialog-title";title.textContent=offer.name||"Предложение";
     const category=document.createElement("p");category.className="participant-offer-category";
     category.textContent=offer.category||"Банковское предложение";
-    const status=document.createElement("span");status.className="pill participant-offer-status";
-    status.dataset.status=offer.stage||"assigned";status.textContent=stageLabel(offer.stage);
+    const status=offerStatus(offer.stage);
     const values=document.createElement("div");values.className="participant-offer-details";
     values.append(offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment"),
       offerDetail("СРОК ПРОВЕРКИ",offer.hold_days==null?"Не указан":String(offer.hold_days)+" дн."));
     const target=offerDetail("ЧТО НУЖНО СДЕЛАТЬ",offer.target_action||"Уточните у администратора","participant-offer-target");
     const notice=document.createElement("p");notice.className="participant-offer-warning";
     notice.textContent="Указанная ставка — условие предложения, а не подтверждение начисления или выплаты. Статусы отмечает администратор.";
-    offerDialogContent.append(category,title,status,values,target,notice);
+    offerDialogContent.append(category,title,status,nextOfferAction(offer.stage),values,target,notice);
     if(offer.instructions){
       const section=document.createElement("section");section.className="participant-offer-instruction-section";
       const heading=document.createElement("h3");heading.textContent="Инструкция";
@@ -282,9 +303,7 @@
       category.textContent=offer.category||"Банковский оффер";
       const title=document.createElement("h3");title.textContent=offer.name||"Предложение";
       heading.append(category,title);
-      const status=document.createElement("span");status.className="pill participant-offer-status";
-      status.dataset.status=offer.stage||"assigned";status.textContent=stageLabel(offer.stage);
-      if(offer.stage==="completed")status.title="Ручная отметка администратора — не банковское подтверждение";
+      const status=offerStatus(offer.stage);
       top.append(heading,status);
       const summary=document.createElement("div");summary.className="participant-offer-summary";
       const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
@@ -293,7 +312,7 @@
       const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
       button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
-      item.append(top,summary,button);list.append(item);
+      item.append(top,summary,nextOfferAction(offer.stage),button);list.append(item);
     }
     root.append(list);
   }

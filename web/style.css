@@ -1515,3 +1515,48 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-offer-summary {grid-template-columns:1fr;}
   .participant-app .participant-offer-dialog-head {flex-wrap:wrap;}
 }
+
+/* Lead UX stage 3: compact progress and status language shared by cards and detail. */
+.participant-app .participant-stats {padding-top:23px;}
+.participant-app .participant-stats .participant-section-heading {margin-bottom:13px;}
+.participant-app .participant-stats .participant-section-heading h2 {font-size:clamp(23px,2.8vw,30px);}
+.participant-app .participant-kpi-grid {gap:8px;}
+.participant-app .participant-kpi-grid .metric {
+  min-height:83px;padding:14px 15px;border-radius:12px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:9px;
+}
+.participant-app .participant-kpi-grid .metric span {font-size:10px;letter-spacing:.065em;line-height:1.35;}
+.participant-app .participant-kpi-grid .metric strong {
+  font-size:clamp(25px,3vw,33px);margin:0;line-height:1.05;
+}
+.participant-app .participant-stats-note {font-size:11px;line-height:1.55;margin-top:10px;}
+.participant-app .participant-offer-status {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:rgba(255,255,255,.055);color:#EDEEEE;
+  border-color:rgba(255,255,255,.18);
+  font-size:11px;line-height:1.35;
+}
+.participant-app .participant-status-symbol {
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:800;line-height:1;min-width:14px;
+}
+.participant-app .participant-offer-status[data-status="assigned"] {border-style:dashed;color:#D1D3D5;}
+.participant-app .participant-offer-status[data-status="in_progress"] {background:rgba(255,255,255,.095);color:#fff;}
+.participant-app .participant-offer-status[data-status="submitted"] {border-color:rgba(255,255,255,.34);}
+.participant-app .participant-offer-status[data-status="completed"] {background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);}
+.participant-app .participant-offer-status[data-status="rejected"] {background:rgba(255,255,255,.025);color:#B3B6B8;border-style:dotted;}
+.participant-app .participant-offer-next {
+  display:flex;flex-direction:column;gap:5px;
+  border-left:2px solid rgba(255,255,255,.35);
+  padding:2px 0 2px 12px;margin:16px 0 0;
+  color:#BFC1C3;font-size:12px;line-height:1.55;
+}
+.participant-app .participant-offer-next strong {font-size:11px;color:#F6F6F5;font-weight:750;}
+.participant-app .participant-offer-dialog .participant-offer-next {margin:18px 0 4px;}
+@media (max-width:740px) {
+  .participant-app .participant-kpi-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .participant-app .participant-kpi-grid .metric {min-height:73px;padding:12px 14px;}
+  .participant-app .participant-kpi-grid .metric strong {font-size:27px;}
+  .participant-app .participant-kpi-grid .metric span {font-size:10px;}
+  .participant-app .participant-offer-status {font-size:11px;}
+}
