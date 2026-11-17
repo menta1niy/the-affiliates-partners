@@ -204,6 +204,105 @@
     });
   }
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"Отправлено на проверку",completed:"Завершено (отметка администратора)",rejected:"Отклонено"};
+  let manualOffers=[];
+  let manualFilter="all";
+  let manualSort="recent";
+  function stageLabel(stage){
+    return stage==="completed"?"Завершено":stage==="submitted"?"На проверке":manualStages[stage]||"Назначено";
+  }
+  function offerPayment(value){
+    const amount=Number(value);
+    return value!==null&&value!==undefined&&value!==""&&Number.isFinite(amount)&&amount>=0
+      ?new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(amount)+" ₽":"—";
+  }
+  function offerExternalLink(value){
+    const url=safeHttpsUrl(value);
+    if(!url)return null;
+    const link=document.createElement("a");
+    link.className="btn primary participant-offer-link";
+    link.textContent="Перейти к предложению ↗";
+    link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";
+    return link;
+  }
+  const offerDialog=$("participant-offer-dialog");
+  const offerDialogContent=$("participant-offer-dialog-content");
+  function closeOfferDialog(){if(offerDialog.open)offerDialog.close();}
+  $("participant-offer-close").addEventListener("click",closeOfferDialog);
+  offerDialog.addEventListener("click",event=>{if(event.target===offerDialog)closeOfferDialog();});
+  function openOfferDetail(offer){
+    offerDialogContent.replaceChildren();
+    const title=document.createElement("h2");
+    title.id="participant-offer-dialog-title";title.textContent=offer.name||"Предложение";
+    const category=document.createElement("p");category.className="participant-offer-category";
+    category.textContent=offer.category||"Банковское предложение";
+    const status=document.createElement("span");status.className="pill participant-offer-status";
+    status.dataset.status=offer.stage||"assigned";status.textContent=stageLabel(offer.stage);
+    const values=document.createElement("div");values.className="participant-offer-details";
+    values.append(offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment"),
+      offerDetail("СРОК ПРОВЕРКИ",offer.hold_days==null?"Не указан":String(offer.hold_days)+" дн."));
+    const target=offerDetail("ЧТО НУЖНО СДЕЛАТЬ",offer.target_action||"Уточните у администратора","participant-offer-target");
+    const notice=document.createElement("p");notice.className="participant-offer-warning";
+    notice.textContent="Указанная ставка — условие предложения, а не подтверждение начисления или выплаты. Статусы отмечает администратор.";
+    offerDialogContent.append(category,title,status,values,target,notice);
+    if(offer.instructions){
+      const section=document.createElement("section");section.className="participant-offer-instruction-section";
+      const heading=document.createElement("h3");heading.textContent="Инструкция";
+      const content=document.createElement("p");content.className="participant-offer-instructions";content.textContent=offer.instructions;
+      section.append(heading,content);offerDialogContent.append(section);
+    }
+    if(offer.note){
+      const section=document.createElement("section");section.className="participant-offer-instruction-section";
+      const heading=document.createElement("h3");heading.textContent="Комментарий администратора";
+      const content=document.createElement("p");content.className="participant-offer-note";content.textContent=offer.note;
+      section.append(heading,content);offerDialogContent.append(section);
+    }
+    const link=offerExternalLink(offer.referral_url);
+    if(link)offerDialogContent.append(link);
+    if(!offerDialog.open)offerDialog.showModal();
+  }
+  function renderManualOffers(){
+    const root=$("offers");root.replaceChildren();
+    let offers=manualOffers.filter(offer=>manualFilter==="all"||offer.stage===manualFilter);
+    offers=[...offers];
+    if(manualSort==="payout_desc")offers.sort((a,b)=>(Number(b.payout_rub)||0)-(Number(a.payout_rub)||0));
+    else if(manualSort==="name")offers.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ru"));
+    // Recent uses the authorized server's original assignment order.
+    text("offer-filter-count","Показано "+offers.length+" из "+manualOffers.length);
+    show("offer-filter-count",true);
+    if(!offers.length){
+      offerMessage(manualOffers.length?"По выбранному фильтру предложений нет. Выберите «Все».":"Здесь появятся предложения, которые назначит вам администратор.");
+      return;
+    }
+    const list=document.createElement("div");list.className="offer-list";
+    for(const offer of offers){
+      const item=document.createElement("article");item.className="offer-item";
+      const top=document.createElement("div");top.className="participant-offer-top";
+      const heading=document.createElement("div");heading.className="participant-offer-heading";
+      const category=document.createElement("span");category.className="participant-offer-category";
+      category.textContent=offer.category||"Банковский оффер";
+      const title=document.createElement("h3");title.textContent=offer.name||"Предложение";
+      heading.append(category,title);
+      const status=document.createElement("span");status.className="pill participant-offer-status";
+      status.dataset.status=offer.stage||"assigned";status.textContent=stageLabel(offer.stage);
+      if(offer.stage==="completed")status.title="Ручная отметка администратора — не банковское подтверждение";
+      top.append(heading,status);
+      const summary=document.createElement("div");summary.className="participant-offer-summary";
+      const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
+      const target=offerDetail("НЕОБХОДИМО",offer.target_action||"Уточните условия","participant-offer-target");
+      summary.append(payment,target);
+      const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
+      button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
+      button.addEventListener("click",()=>openOfferDetail(offer));
+      item.append(top,summary,button);list.append(item);
+    }
+    root.append(list);
+  }
+  document.querySelectorAll("[data-offer-filter]").forEach(button=>button.addEventListener("click",()=>{
+    manualFilter=button.dataset.offerFilter;
+    document.querySelectorAll("[data-offer-filter]").forEach(tab=>tab.setAttribute("aria-pressed",String(tab===button)));
+    renderManualOffers();
+  }));
+  $("offer-sort").addEventListener("change",event=>{manualSort=event.target.value;renderManualOffers();});
   function updateParticipantKpis(offers,stats){
     const stages={in_progress:0,submitted:0,completed:0};
     for(const offer of offers){
@@ -244,37 +343,10 @@
       const stats=result.statistics||{};
       const offers=Array.isArray(result.offers)?result.offers:[];
       updateParticipantKpis(offers,stats);
-      if(!offers.length){offerMessage("Здесь появятся предложения, которые назначит вам администратор.");return;}
-      const list=document.createElement("div");list.className="offer-list";
-      for(const offer of offers){
-        if(!offer||typeof offer!=="object")continue;
-        const item=document.createElement("article");item.className="offer-item";
-        const top=document.createElement("div");top.className="participant-offer-top";
-        const heading=document.createElement("div");heading.className="participant-offer-heading";
-        const category=document.createElement("span");category.className="participant-offer-category";category.textContent=offer.category||"Банковский оффер";
-        const h=document.createElement("h3");h.textContent=offer.name||"Предложение";
-        heading.append(category,h);
-        const progress=document.createElement("span");progress.className="pill participant-offer-status";progress.dataset.status=offer.stage||"assigned";
-        progress.textContent=offer.stage==="completed"?"Завершено":offer.stage==="submitted"?"На проверке":manualStages[offer.stage]||offer.stage||"Назначено";
-        if(offer.stage==="completed")progress.title="Ручная отметка администратора — не банковское подтверждение";
-        top.append(heading,progress);
-        const values=document.createElement("div");values.className="participant-offer-details";
-        const payout=Number(offer.payout_rub);
-        const payment=Number.isFinite(payout)&&payout>=0?new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(payout)+" ₽":"—";
-        values.append(offerDetail("УСЛОВИЯ ОПЛАТЫ",payment,"participant-offer-payment"),offerDetail("ХОЛД",`Холд: ${offer.hold_days??"—"} дн.`));
-        item.append(top,values,offerDetail("ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action,"participant-offer-target"));
-        if(offer.instructions||offer.note){
-          const details=document.createElement("details");details.className="participant-offer-disclosure";
-          const summary=document.createElement("summary");summary.textContent="Условия и инструкция";details.append(summary);
-          if(offer.instructions){const instructions=document.createElement("p");instructions.className="participant-offer-instructions";instructions.textContent=offer.instructions;details.append(instructions);}
-          if(offer.note){const note=document.createElement("p");note.className="participant-offer-note";note.textContent="Комментарий администратора: "+offer.note;details.append(note);}
-          item.append(details);
-        }
-        const url=safeHttpsUrl(offer.referral_url);
-        if(url){const link=document.createElement("a");link.className="btn ghost participant-offer-link";link.textContent="Открыть оффер ↗";link.href=url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";item.append(link);}
-        list.append(item);
-      }
-      root.append(list);
+      manualOffers=offers.filter(offer=>offer&&typeof offer==="object");
+      show("offer-controls",manualOffers.length>0);
+      closeOfferDialog();
+      renderManualOffers();
     }catch(e){if(request===offersRequest){resetParticipantKpis();offerMessage("Не удалось получить офферы: "+e.message+". Обновите данные для повторной попытки.");}}
   }
   async function loadTasks(){

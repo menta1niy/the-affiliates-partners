@@ -86,17 +86,26 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         page.locator("#offers .offer-item").first.wait_for()
                         self.assertEqual(page.locator("#offers .offer-item").count(), 4)
                         self.assertIn("900 ₽", page.locator("#offers").inner_text())
-                        self.assertIn("Холд: 10", page.locator("#offers").inner_text())
                         self.assertIn("Назначено", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
-                        self.assertFalse(first.locator(".participant-offer-instructions").is_visible())
-                        first.locator("summary").click()
-                        self.assertTrue(first.locator(".participant-offer-instructions").is_visible())
-                        self.assertIn("Проверить документы", first.inner_text())
+                        self.assertEqual(first.locator(".participant-offer-instructions").count(), 0)
+                        first.locator(".participant-offer-detail-button").click()
+                        dialog = page.locator("#participant-offer-dialog")
+                        self.assertTrue(dialog.is_visible())
+                        self.assertIn("10 дн.", dialog.inner_text())
+                        self.assertIn("Проверить документы", dialog.inner_text())
                         self.assertEqual(
-                            first.locator(".participant-offer-link").get_attribute("href"),
+                            dialog.locator(".participant-offer-link").get_attribute("href"),
                             "https://example.org/offer",
                         )
+                        dialog.get_by_role("button", name="Закрыть подробности").click()
+                        self.assertFalse(dialog.is_visible())
+                        page.locator('[data-offer-filter="submitted"]').click()
+                        self.assertEqual(page.locator("#offers .offer-item").count(), 1)
+                        self.assertIn("Третье предложение", page.locator("#offers").inner_text())
+                        page.locator('[data-offer-filter="all"]').click()
+                        page.locator("#offer-sort").select_option("payout_desc")
+                        self.assertIn("Вторая карта",page.locator("#offers .offer-item").first.inner_text())
                         self.assertIn("@long_telegram_username", page.locator("#profile-username").inner_text())
                         self.assertFalse(errors, errors)
                         if width <= 430:

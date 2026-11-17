@@ -111,7 +111,23 @@
         <section id="offers-section" class="panel participant-offers" aria-labelledby="offers-heading">
           <div class="participant-section-heading"><div class="section-kicker">ВАШИ ЗАДАНИЯ</div><h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2></div>
           <p id="offers-description">Статусы ведёт администратор. Оплата в карточке — условие оффера, а не фактически начисленные средства.</p>
+          <div id="offer-controls" class="participant-offer-controls" hidden>
+            <div class="participant-offer-filter" role="group" aria-label="Фильтр офферов">
+              <button type="button" data-offer-filter="all" aria-pressed="true">Все</button>
+              <button type="button" data-offer-filter="in_progress" aria-pressed="false">В работе</button>
+              <button type="button" data-offer-filter="submitted" aria-pressed="false">На проверке</button>
+              <button type="button" data-offer-filter="completed" aria-pressed="false">Завершены</button>
+            </div>
+            <label class="participant-offer-sort-label" for="offer-sort">Порядок
+              <select id="offer-sort">
+                <option value="recent">Недавно назначенные</option>
+                <option value="payout_desc">Сначала высокая ставка</option>
+                <option value="name">По названию</option>
+              </select>
+            </label>
+          </div>
           <p id="task-notice" role="status" aria-live="polite" hidden></p>
+          <p id="offer-filter-count" class="participant-offer-filter-count" role="status" hidden></p>
           <div id="offers" aria-live="polite"><p class="muted">Проверяем доступность назначений…</p></div>
         </section>
         <section class="panel participant-legacy-section"><div class="section-kicker">ВАШИ ДЕЙСТВИЯ</div><h2>История отчётов</h2><div id="task-history" aria-live="polite"><p class="muted">Загружаем историю…</p></div></section>
@@ -135,6 +151,13 @@
         </article>
         </div>
       </section>
+      <dialog id="participant-offer-dialog" class="participant-offer-dialog" aria-labelledby="participant-offer-dialog-title">
+        <div class="participant-offer-dialog-head">
+          <span class="section-kicker">ПОДРОБНОСТИ ПРЕДЛОЖЕНИЯ</span>
+          <button id="participant-offer-close" type="button" class="btn ghost" aria-label="Закрыть подробности">Закрыть ×</button>
+        </div>
+        <div id="participant-offer-dialog-content"></div>
+      </dialog>
     </main>
     <footer>THE AFFILIATES <span>PARTNERS / SECURE TELEGRAM ACCESS</span></footer>
   </div>

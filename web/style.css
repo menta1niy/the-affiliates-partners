@@ -1477,3 +1477,41 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-next-step .btn {width:100%;}
   .participant-app .participant-nav a {border:1px solid transparent;}
 }
+
+/* Participant UX stage 2: offer discovery, compact cards and detailed modal. */
+.participant-app .participant-offer-controls {display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;margin:0 0 13px;}
+.participant-app .participant-offer-controls[hidden] {display:none!important;}
+.participant-app .participant-offer-filter {display:flex;flex-wrap:wrap;gap:6px;}
+.participant-app .participant-offer-filter button {border:1px solid rgba(255,255,255,.16);background:#191B1E;color:#D2D4D5;border-radius:9px;min-height:42px;padding:10px 13px;font-size:12px;font-weight:650;}
+.participant-app .participant-offer-filter button[aria-pressed="true"] {color:#080909;background:#F3F3F1;border-color:#F3F3F1;}
+.participant-app .participant-offer-filter button:focus-visible {outline:2px solid white;outline-offset:2px;}
+.participant-app .participant-offer-sort-label {display:flex;align-items:center;gap:9px;color:#AEB2B5;font-size:12px;}
+.participant-app #offer-sort {min-height:42px;max-width:100%;padding:9px 11px;background:#1C1E21;color:white;border:1px solid rgba(255,255,255,.22);border-radius:9px;}
+.participant-app .participant-offer-filter-count {margin:5px 0 14px;color:#AEB1B3;font-size:12px;}
+.participant-app .participant-offer-summary {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:11px;margin-top:18px;}
+.participant-app .participant-offer-summary .participant-offer-target {margin:0;padding:13px 14px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.075);border-radius:10px;}
+.participant-app .participant-offer-detail-button {width:100%;margin-top:15px;min-height:47px;}
+.participant-app .participant-offer-dialog {position:fixed;box-sizing:border-box;width:min(640px,calc(100vw - 24px));max-width:640px;max-height:calc(100dvh - 48px);overflow:auto;margin:auto;padding:25px;border:1px solid rgba(255,255,255,.22);border-radius:18px;background:#121416;color:#F7F7F6;box-shadow:0 30px 100px rgba(0,0,0,.65);}
+.participant-app .participant-offer-dialog::backdrop {background:rgba(0,0,0,.78);backdrop-filter:blur(5px);}
+.participant-app .participant-offer-dialog-head {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;}
+.participant-app .participant-offer-dialog-head .btn {min-height:42px;}
+.participant-app .participant-offer-dialog h2 {margin:8px 0 14px;font-size:clamp(24px,4vw,34px);letter-spacing:-.045em;overflow-wrap:anywhere;}
+.participant-app .participant-offer-dialog .participant-offer-details {margin:22px 0 8px;}
+.participant-app .participant-offer-dialog .participant-offer-target {margin:12px 0 0;}
+.participant-app .participant-offer-warning {font-size:12px;line-height:1.6;color:#B3B6B7;margin:18px 0;}
+.participant-app .participant-offer-instruction-section {margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.13);}
+.participant-app .participant-offer-instruction-section h3 {font-size:16px;margin:0 0 11px;}
+.participant-app .participant-offer-instruction-section p {font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;}
+.participant-app .participant-offer-dialog .participant-offer-link {display:flex;width:100%;justify-content:center;margin-top:23px;min-height:48px;align-items:center;}
+@media (max-width:740px) {
+  .participant-app .participant-offer-filter {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;}
+  .participant-app .participant-offer-filter button {padding:9px 5px;}
+  .participant-app .participant-offer-sort-label {width:100%;justify-content:space-between;}
+  .participant-app .participant-offer-summary {grid-template-columns:1fr 1fr;gap:8px;}
+  .participant-app .participant-offer-dialog {max-height:calc(100dvh - max(115px,env(safe-area-inset-top,0px) + 65px) - 18px);margin:0 auto;top:max(115px,env(safe-area-inset-top,0px) + 65px);bottom:18px;padding:19px 16px;border-radius:16px;}
+  .participant-app .participant-offer-dialog-head {align-items:flex-start;}
+}
+@media (max-width:350px) {
+  .participant-app .participant-offer-summary {grid-template-columns:1fr;}
+  .participant-app .participant-offer-dialog-head {flex-wrap:wrap;}
+}
