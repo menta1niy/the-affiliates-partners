@@ -44,6 +44,7 @@ class MvpBrowserSmoke(AdminDetailBrowserSmoke):
                 detail.get_by_role('button',name='Сохранить статус').click()
                 user=browser.new_page(viewport={'width':390,'height':844})
                 user.goto(self.base+'/partners/#tgWebAppData='+quote(init_data(self.lead_a),safe=''))
+                user.locator('#participant-nav [data-view="offers"]').click()
                 user.locator('#offers').get_by_text('Тестовый банковский оффер').wait_for()
                 self.assertIn('900 ₽', user.locator('#offers').inner_text())
                 self.assertIn('Холд: 10', user.locator('#offers').inner_text())

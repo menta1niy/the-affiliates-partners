@@ -71,30 +71,32 @@
 
       <section id="account" hidden>
         <nav id="participant-nav" class="participant-nav" aria-label="Навигация по кабинету" hidden>
-          <a href="#stats-section">Статистика</a>
-          <a href="#offers-section">Мои офферы</a>
-          <a href="#profile-section">Профиль</a>
+          <a href="#home" data-view="home" aria-current="page">Главная</a>
+          <a href="#offers" data-view="offers">Офферы</a>
+          <a href="#profile" data-view="profile">Профиль</a>
         </nav>
         <section id="owner-preview" class="panel" hidden aria-label="Демонстрационные данные владельца"></section>
+        <div id="participant-home" class="participant-view">
         <section class="participant-account-heading" aria-labelledby="welcome">
-          <div><div class="section-kicker">02 / ВАШ АККАУНТ</div><h2 id="welcome">Личный кабинет</h2></div>
+          <div><div class="section-kicker">ВАШЕ РАБОЧЕЕ ПРОСТРАНСТВО</div><h2 id="welcome">Личный кабинет</h2><p class="participant-welcome-subtitle">Здесь ваши задания и их текущий прогресс.</p></div>
           <span id="status-pill" class="pill">—</span>
+        </section>
+        <section class="participant-next-step panel" aria-labelledby="participant-next-title">
+          <div class="section-kicker">ЧТО ДЕЛАТЬ ДАЛЬШЕ</div>
+          <h3 id="participant-next-title">Проверяем задания…</h3>
+          <p id="participant-next-description">Здесь появится следующий шаг.</p>
+          <a class="btn primary" href="#offers" data-go-view="offers" id="participant-next-action">Посмотреть офферы →</a>
         </section>
         <div class="participant-account-cards">
           <article class="panel participant-status-card">
-            <div class="section-kicker">ТЕКУЩИЙ СТАТУС</div>
+            <div class="section-kicker">ВАШ ДОСТУП</div>
             <h3 id="status-title">—</h3>
             <p id="status-description">Проверяем данные аккаунта.</p>
-          </article>
-          <article class="panel participant-source-card">
-            <div class="section-kicker">ИСТОЧНИК РЕГИСТРАЦИИ</div>
-            <h3 id="source-title">—</h3>
-            <p id="source-details">Данные о приглашении отсутствуют.</p>
           </article>
         </div>
 
         <section id="stats-section" class="participant-stats" aria-labelledby="stats-heading" hidden>
-          <div class="participant-section-heading"><div class="section-kicker">03 / ПЕРСОНАЛЬНАЯ СТАТИСТИКА</div><h2 id="stats-heading">Результаты<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">ВАШ ПРОГРЕСС</div><h2 id="stats-heading">Результаты<span class="heading-period">.</span></h2></div>
           <div id="participant-kpis" class="participant-kpi-grid" aria-live="polite">
             <article class="metric"><span>НАЗНАЧЕНО</span><strong id="kpi-total">—</strong></article>
             <article class="metric"><span>В РАБОТЕ</span><strong id="kpi-in-progress">—</strong></article>
@@ -103,18 +105,22 @@
           </div>
           <p class="participant-stats-note">Статусы обновляет администратор. Завершение не является банковским подтверждением или выплатой.</p>
         </section>
+        </div>
 
+        <div id="participant-offers-view" class="participant-view" hidden>
         <section id="offers-section" class="panel participant-offers" aria-labelledby="offers-heading">
-          <div class="participant-section-heading"><div class="section-kicker">04 / ДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ</div><h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">ВАШИ ЗАДАНИЯ</div><h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2></div>
           <p id="offers-description">Статусы ведёт администратор. Оплата в карточке — условие оффера, а не фактически начисленные средства.</p>
           <p id="task-notice" role="status" aria-live="polite" hidden></p>
           <div id="offers" aria-live="polite"><p class="muted">Проверяем доступность назначений…</p></div>
         </section>
         <section class="panel participant-legacy-section"><div class="section-kicker">ВАШИ ДЕЙСТВИЯ</div><h2>История отчётов</h2><div id="task-history" aria-live="polite"><p class="muted">Загружаем историю…</p></div></section>
         <section class="panel participant-legacy-section"><div class="section-kicker">ПОДТВЕРЖДЕНИЯ CRM</div><h2>Статусы заявок и выплаты</h2><p>Здесь отображаются только подтверждённые CRM сведения. Отчёт участника сам по себе не означает выполнение банковского условия или начисление.</p><div id="crm-state" aria-live="polite"><p class="muted">Загружаем статусы CRM…</p></div></section>
+        </div>
+        <div id="participant-profile-view" class="participant-view" hidden>
         <section id="referral-panel" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Пригласить участника</h2><p>Передайте персональную ссылку. Доступность приглашений определяется вашей ролью и правами на сервере.</p><div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div><p id="referral-message" role="status" class="muted"></p></section>
         <section id="profile-section" class="panel compact participant-profile">
-          <div class="participant-section-heading"><div class="section-kicker">05 / ЛИЧНЫЕ ДАННЫЕ</div><h2>Профиль<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">ВАШ АККАУНТ</div><h2>Профиль<span class="heading-period">.</span></h2></div>
           <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">TELEGRAM ACCOUNT</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>
           <div class="data-row"><span>Внутренний ID</span><strong id="profile-internal-id">—</strong></div>
           <div class="data-row"><span>Telegram ID</span><strong id="profile-id">—</strong></div>
@@ -122,6 +128,12 @@
           <div class="data-row"><span>Статус</span><strong id="profile-status">—</strong></div>
           <a id="admin-link" class="btn ghost" href="/partners/admin/" hidden>Панель управления ↗</a>
         </section>
+        <article class="panel participant-source-card">
+          <div class="section-kicker">КТО ВАС ПРИГЛАСИЛ</div>
+          <h3 id="source-title">—</h3>
+          <p id="source-details">Информация о приглашении отсутствует.</p>
+        </article>
+        </div>
       </section>
     </main>
     <footer>THE AFFILIATES <span>PARTNERS / SECURE TELEGRAM ACCESS</span></footer>

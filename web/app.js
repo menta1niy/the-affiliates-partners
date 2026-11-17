@@ -8,6 +8,42 @@
   let referralRequest = 0;
   let offersRequest = 0;
   let crmStatusRequest = 0;
+  let participantTabsEnabled = false;
+  let participantView = "home";
+  const participantViews = {home:"participant-home",offers:"participant-offers-view",profile:"participant-profile-view"};
+  function setParticipantView(view, addHistory = false) {
+    if (!participantTabsEnabled || !Object.hasOwn(participantViews, view)) return;
+    if (addHistory && view !== participantView) history.pushState({...history.state,participantView:view},"",location.href);
+    participantView = view;
+    for (const [name,id] of Object.entries(participantViews)) show(id,name===view);
+    document.querySelectorAll("#participant-nav [data-view]").forEach(link=>{
+      if(link.dataset.view===view)link.setAttribute("aria-current","page");
+      else link.removeAttribute("aria-current");
+    });
+    try { if(view==="home") tg?.BackButton?.hide(); else tg?.BackButton?.show(); } catch {}
+    window.scrollTo({top:0,behavior:"instant"});
+  }
+  function setParticipantTabsEnabled(enabled) {
+    participantTabsEnabled=enabled;
+    show("participant-nav",enabled);
+    show("participant-next-action",enabled);
+    if(enabled)setParticipantView(participantView);
+    else {
+      for(const id of Object.values(participantViews)) show(id,true);
+      try {tg?.BackButton?.hide();} catch {}
+    }
+  }
+  document.querySelectorAll("[data-view],[data-go-view]").forEach(link=>link.addEventListener("click",event=>{
+    if(!participantTabsEnabled)return;
+    event.preventDefault();setParticipantView(link.dataset.view||link.dataset.goView,true);
+  }));
+  addEventListener("popstate",event=>setParticipantView(event.state?.participantView||"home"));
+  try {tg?.BackButton?.onClick?.(()=>{if(participantTabsEnabled && participantView!=="home")history.back();});} catch {}
+  function nextStep(title,description,buttonLabel="Посмотреть офферы →"){
+    text("participant-next-title",title);
+    text("participant-next-description",description);
+    text("participant-next-action",buttonLabel);
+  }
   const actions={opened:"Открыл предложение",started:"Приступил к заданию",submitted:"Отправил заявку"};
   const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Получено",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
   function initData() {
@@ -181,6 +217,11 @@
     text("kpi-in-progress",stages.in_progress);
     text("kpi-submitted",stages.submitted);
     text("kpi-completed",stages.completed);
+    if(!offers.length)nextStep("Ожидаем ваши первые офферы","Когда администратор назначит вам предложение, оно появится в разделе «Офферы».","Перейти к офферам →");
+    else if(stages.in_progress>0)nextStep("Продолжите работу","В разделе «Офферы» есть предложения со статусом «В работе».","Открыть мои офферы →");
+    else if(offers.some(offer=>offer?.stage==="assigned"))nextStep("Изучите назначенные офферы","Откройте условия предложения и проверьте, какое действие необходимо выполнить.");
+    else if(stages.submitted>0)nextStep("Ожидайте проверки","Администратор проверяет отправленные результаты. Текущий статус можно посмотреть в офферах.");
+    else nextStep("Проверьте результаты","Все текущие предложения обработаны. Новые назначения появятся в разделе «Офферы».");
   }
   function resetParticipantKpis(){
     for(const id of ["kpi-total","kpi-in-progress","kpi-submitted","kpi-completed"])text(id,"—");
@@ -281,9 +322,12 @@
     const rawStatus = session.status || user.status || (session.registered === false ? "unregistered" : "unregistered");
     const state = statusInfo(rawStatus);
     const active=["approved","active"].includes(state.key);
-    show("participant-nav",active && session.open_registration===true);
+    const standalone = active && session.open_registration===true;
+    if(!standalone)participantView="home";
+    setParticipantTabsEnabled(standalone);
+    document.querySelector(".participant-hero").hidden=standalone;
     show("stats-section",active && session.open_registration===true);
-    show("hero-cta",active || (unregisteredStatus(state.key) && session.open_registration===true));
+    show("hero-cta",!standalone && (active || (unregisteredStatus(state.key) && session.open_registration===true)));
     $("hero-cta").href=active?"#offers-section":"#register-panel";
     $("hero-cta").firstChild.textContent=active?"Мои офферы ":"Подать заявку ";
     show("connect",false);show("account",true);
@@ -293,6 +337,7 @@
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
     text("registration-instructions",session.open_registration===true ? "Подтвердите согласие и отправьте заявку. Администратор увидит ваш Telegram ID и username." : verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
+    nextStep("Проверяем ваши офферы","Получаем актуальные назначения…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
     text("status-description",unregistered && session.open_registration===true
       ? "Вы можете подать заявку через Telegram. Администратор рассмотрит её перед открытием доступа к офферам."
@@ -306,10 +351,10 @@
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
-    text("source-details",typeof source === "object" ? [source.description,user.introduced_by_id ? "Пригласил ID: " + user.introduced_by_id : (unregistered && source.inviter_id ? "Источник подтверждён ID: " + source.inviter_id : ""),user.agency_id ? "Агентство ID: " + user.agency_id : "",user.referrer_id ? "Реферер ID: " + user.referrer_id : "",user.manager_id ? "Менеджер ID: " + user.manager_id : ""].filter(Boolean).join(" · ") || "Источник приглашения ещё не указан." : "Источник регистрации");
+    text("source-details",typeof source === "object" ? source.description || (source.inviter_id || user.introduced_by_id ? "Приглашение подтверждено." : "Дополнительная информация не указана.") : "Информация о приглашении");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     if (["approved","active"].includes(state.key) && session.open_registration===true){
-      text("offers-description","Статусы ведёт администратор. Оплата в карточке — ставка за целевое действие, не банковское начисление.");
+      text("offers-description","Здесь ваши назначенные предложения. Указанная сумма — условие оффера, а не подтверждённая выплата.");
       $("task-history").closest("section").hidden=true;
       $("crm-state").closest("section").hidden=true;
       loadManualOverview();

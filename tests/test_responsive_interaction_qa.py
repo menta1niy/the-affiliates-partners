@@ -125,6 +125,32 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_participant_three_views_and_back_navigation(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for width in (320, 390, 430, 1440):
+                    with self.subTest(width=width):
+                        page = self.open_page(browser, admin=False, width=width)
+                        nav = page.locator("#participant-nav")
+                        self.assertTrue(nav.is_visible())
+                        self.assertTrue(page.locator("#participant-home").is_visible())
+                        self.assertFalse(page.locator("#participant-offers-view").is_visible())
+                        self.assertFalse(page.locator("#participant-profile-view").is_visible())
+                        nav.locator('[data-view="offers"]').click()
+                        self.assertTrue(page.locator("#participant-offers-view").is_visible())
+                        self.assertFalse(page.locator("#participant-home").is_visible())
+                        self.assertEqual(nav.locator('[aria-current="page"]').count(), 1)
+                        nav.locator('[data-view="profile"]').click()
+                        self.assertTrue(page.locator("#participant-profile-view").is_visible())
+                        page.go_back()
+                        self.assertTrue(page.locator("#participant-offers-view").is_visible())
+                        nav.locator('[data-view="home"]').click()
+                        self.assertTrue(page.locator("#participant-home").is_visible())
+                        page.close()
+            finally:
+                browser.close()
+
     def test_short_viewport_dialog_and_keyboard_simulation(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -217,7 +243,7 @@ class ResponsiveInteractionQA(unittest.TestCase):
             try:
                 for admin in (False, True):
                     page = self.open_page(browser, admin, reduced_motion=True)
-                    target = page.locator("#reload" if admin else "#hero-cta")
+                    target = page.locator("#reload" if admin else "#participant-next-action")
                     target.focus()
                     style = target.evaluate("""node => {
                       const css=getComputedStyle(node);
