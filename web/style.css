@@ -1617,3 +1617,103 @@ dialog select,dialog input { max-width:100%; }
 @media (prefers-reduced-motion:reduce) {
   .participant-app .participant-skeleton-line {animation:none;}
 }
+
+/* Lead UX stage 5: consistent readable type, rhythm and subtle feedback. */
+.participant-app {
+  --lead-space-1:8px;
+  --lead-space-2:12px;
+  --lead-space-3:16px;
+  --lead-space-4:24px;
+  --lead-radius:14px;
+  --lead-motion:170ms;
+  --lead-ease:cubic-bezier(.2,.75,.3,1);
+}
+.participant-app #participant-home,
+.participant-app #participant-offers-view,
+.participant-app #participant-profile-view {
+  min-width:0;
+}
+.participant-app .participant-view:not([hidden]) {animation:lead-view-enter 170ms var(--lead-ease) both;}
+.participant-app .participant-section-heading {margin-bottom:var(--lead-space-3);}
+.participant-app .participant-section-heading h2 {line-height:1.18;letter-spacing:-.045em;}
+.participant-app .participant-section-heading .section-kicker,
+.participant-app .participant-offer-category,
+.participant-app .participant-profile-label,
+.participant-app .participant-technical-label {
+  font-size:11px;line-height:1.5;letter-spacing:.06em;
+}
+.participant-app .participant-welcome-subtitle,
+.participant-app .participant-next-step p,
+.participant-app .participant-offers #offers-description,
+.participant-app .participant-offer-next,
+.participant-app .participant-offer-state .participant-empty {
+  font-size:14px;line-height:1.6;
+}
+.participant-app .participant-account-cards .panel,
+.participant-app .participant-offers .offer-item,
+.participant-app .participant-next-step {
+  border-radius:var(--lead-radius);
+}
+.participant-app .participant-offers .offer-list {gap:var(--lead-space-3);}
+.participant-app .participant-offer-filter button,
+.participant-app .participant-offer-detail-button,
+.participant-app .participant-next-step .btn,
+.participant-app .participant-nav a {
+  transition:background-color var(--lead-motion) var(--lead-ease),
+    color var(--lead-motion) var(--lead-ease),
+    border-color var(--lead-motion) var(--lead-ease),
+    transform var(--lead-motion) var(--lead-ease);
+}
+.participant-app .participant-offer-filter button:active,
+.participant-app .participant-offer-detail-button:active,
+.participant-app .participant-next-step .btn:active,
+.participant-app .participant-nav a:active {transform:scale(.985);}
+.participant-app .participant-offers .offer-item {transition:border-color var(--lead-motion) var(--lead-ease);}
+.participant-app .participant-offers .offer-item:focus-within {border-color:rgba(255,255,255,.36);}
+.participant-app .participant-profile {padding:var(--lead-space-4);}
+.participant-app .participant-profile-top {padding:var(--lead-space-3) 0 var(--lead-space-4);}
+.participant-app .participant-profile-label {color:#B1B5B8;}
+.participant-app #profile-name {font-size:clamp(20px,3vw,24px);line-height:1.3;}
+.participant-app #profile-username {font-size:14px;line-height:1.5;}
+.participant-app .participant-profile .data-row {padding:12px 0;font-size:14px;line-height:1.5;}
+.participant-app .participant-technical {
+  margin-top:var(--lead-space-4);padding:var(--lead-space-3);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:12px;background:rgba(255,255,255,.025);
+}
+.participant-app .participant-technical summary {
+  cursor:pointer;font-size:14px;font-weight:700;line-height:1.5;color:#E3E5E6;
+  min-height:44px;display:list-item;align-content:center;
+}
+.participant-app .participant-technical summary:focus-visible {outline:2px solid #fff;outline-offset:2px;}
+.participant-app .participant-technical-body {padding-top:var(--lead-space-2);}
+.participant-app .participant-technical-body .data-row {font-size:13px;}
+.participant-app .participant-invite-info {
+  display:grid;gap:6px;margin-top:var(--lead-space-3);padding-top:var(--lead-space-3);
+  border-top:1px solid rgba(255,255,255,.1);
+}
+.participant-app .participant-technical-label {color:#B1B5B8;font-weight:700;}
+.participant-app .participant-invite-info strong {font-size:14px;overflow-wrap:anywhere;}
+.participant-app .participant-invite-info p {margin:0;font-size:13px;line-height:1.55;}
+@keyframes lead-view-enter {
+  from {opacity:.6;transform:translateY(4px);}
+  to {opacity:1;transform:translateY(0);}
+}
+@media (max-width:740px) {
+  .participant-app .participant-profile {padding:var(--lead-space-3);}
+  .participant-app .participant-next-step {padding:var(--lead-space-3);}
+  .participant-app .participant-offers .offer-item {padding:var(--lead-space-3);}
+  .participant-app .participant-profile-top {gap:var(--lead-space-2);}
+  .participant-app .participant-avatar {width:52px;height:52px;flex-basis:52px;font-size:25px;}
+  .participant-app .participant-nav a {font-size:12px;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .participant-app .participant-view:not([hidden]) {animation:none;}
+  .participant-app .participant-offer-filter button,
+  .participant-app .participant-offer-detail-button,
+  .participant-app .participant-next-step .btn,
+  .participant-app .participant-nav a,
+  .participant-app .participant-offers .offer-item {
+    transition:none;transform:none;
+  }
+}

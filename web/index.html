@@ -158,18 +158,23 @@
         <section id="referral-panel" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Пригласить участника</h2><p>Передайте персональную ссылку. Доступность приглашений определяется вашей ролью и правами на сервере.</p><div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div><p id="referral-message" role="status" class="muted"></p></section>
         <section id="profile-section" class="panel compact participant-profile">
           <div class="participant-section-heading"><div class="section-kicker">ВАШ АККАУНТ</div><h2>Профиль<span class="heading-period">.</span></h2></div>
-          <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">TELEGRAM ACCOUNT</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>
-          <div class="data-row"><span>Внутренний ID</span><strong id="profile-internal-id">—</strong></div>
-          <div class="data-row"><span>Telegram ID</span><strong id="profile-id">—</strong></div>
+          <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">АККАУНТ TELEGRAM</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>
           <div class="data-row"><span>Роль</span><strong id="profile-role">—</strong></div>
           <div class="data-row"><span>Статус</span><strong id="profile-status">—</strong></div>
           <a id="admin-link" class="btn ghost" href="/partners/admin/" hidden>Панель управления ↗</a>
+          <details class="participant-technical">
+            <summary>Техническая информация</summary>
+            <div class="participant-technical-body">
+              <div class="data-row"><span>Внутренний ID</span><strong id="profile-internal-id">—</strong></div>
+              <div class="data-row"><span>Telegram ID</span><strong id="profile-id">—</strong></div>
+              <div class="participant-invite-info">
+                <span class="participant-technical-label">ПРИГЛАШЕНИЕ</span>
+                <strong id="source-title">—</strong>
+                <p id="source-details">Информация о приглашении отсутствует.</p>
+              </div>
+            </div>
+          </details>
         </section>
-        <article class="panel participant-source-card">
-          <div class="section-kicker">КТО ВАС ПРИГЛАСИЛ</div>
-          <h3 id="source-title">—</h3>
-          <p id="source-details">Информация о приглашении отсутствует.</p>
-        </article>
         </div>
       </section>
       <dialog id="participant-offer-dialog" class="participant-offer-dialog" aria-labelledby="participant-offer-dialog-title">

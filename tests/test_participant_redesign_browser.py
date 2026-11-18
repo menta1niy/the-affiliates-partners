@@ -134,6 +134,15 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         page.locator('[data-offer-filter="all"]').click()
                         page.locator("#offer-sort").select_option("payout_desc")
                         self.assertIn("Вторая карта",page.locator("#offers .offer-item").first.inner_text())
+                        page.locator('#participant-nav [data-view="profile"]').click()
+                        profile = page.locator("#profile-section")
+                        self.assertTrue(profile.is_visible())
+                        self.assertIn("Участник",profile.inner_text())
+                        self.assertFalse(profile.locator("#profile-id").is_visible())
+                        profile.locator(".participant-technical summary").click()
+                        self.assertTrue(profile.locator("#profile-id").is_visible())
+                        self.assertEqual(profile.locator("#profile-id").inner_text(),"881031")
+                        self.assertIn("ПРИГЛАШЕНИЕ",profile.inner_text())
                         self.assertIn("@long_telegram_username", page.locator("#profile-username").inner_text())
                         self.assertFalse(errors, errors)
                         if width <= 430:
@@ -142,6 +151,34 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                               scroll: document.documentElement.scrollWidth
                             })""")
                             self.assertLessEqual(sizes["scroll"], sizes["viewport"] + 1, sizes)
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_profile_motion_preferences(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for reduced in (False, True):
+                    with self.subTest(reduced_motion=reduced):
+                        page = browser.new_page(
+                            viewport={"width":390,"height":844},
+                            reduced_motion="reduce" if reduced else "no-preference",
+                        )
+                        page.add_init_script(FIXTURE)
+                        page.goto(self.base + "/partners/#tgWebAppData=ui-fixture&state=active")
+                        page.locator("#participant-nav").wait_for(state="visible")
+                        page.locator('#participant-nav [data-view="profile"]').click()
+                        values = page.evaluate("""() => ({
+                          animation: getComputedStyle(document.querySelector('#participant-profile-view')).animationName,
+                          font: parseFloat(getComputedStyle(document.querySelector('#profile-username')).fontSize),
+                          summary: document.querySelector('.participant-technical summary').getBoundingClientRect().height,
+                          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+                        })""")
+                        self.assertEqual(values["animation"] == "none",reduced)
+                        self.assertGreaterEqual(values["font"],14)
+                        self.assertGreaterEqual(values["summary"],44)
+                        self.assertFalse(values["overflow"])
                         page.close()
             finally:
                 browser.close()
