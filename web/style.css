@@ -1717,3 +1717,29 @@ dialog select,dialog input { max-width:100%; }
     transition:none;transform:none;
   }
 }
+
+/* Final mobile UX audit: keep the offer dialog's close control usable on short screens. */
+.participant-app .participant-offer-dialog-head {
+  position:sticky;top:-25px;z-index:2;
+  padding:9px 0 12px;margin-top:-9px;
+  background:#121416;
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+.participant-app #participant-offer-close {
+  display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;
+  gap:7px;white-space:nowrap;min-height:44px;min-width:44px;
+}
+.participant-app .participant-offer-close-mark {font-size:19px;line-height:1;}
+@media (max-width:740px) {
+  .participant-app .participant-offer-dialog-head {
+    top:-19px;flex-wrap:nowrap;gap:8px;
+  }
+  .participant-app .participant-offer-dialog-head .section-kicker {
+    max-width:calc(100% - 60px);
+    font-size:10px;line-height:1.45;
+  }
+  .participant-app #participant-offer-close {
+    width:44px;height:44px;padding:0;border-radius:12px;
+  }
+  .participant-app .participant-offer-close-label {display:none;}
+}
