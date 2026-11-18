@@ -59,14 +59,26 @@
         <a class="btn primary" href="https://t.me/affialite_partners_bot" target="_blank" rel="noopener noreferrer">Открыть Telegram-бота ↗</a>
       </section>
       <section id="register-panel" class="panel participant-gate" hidden>
-        <div class="section-kicker">01 / ДОСТУП К ПЛАТФОРМЕ</div>
-        <h2>Стать участником</h2>
+        <div class="section-kicker">НАЧАЛО РАБОТЫ</div>
+        <h2>Подать заявку на участие</h2>
         <p id="registration-instructions">Для регистрации откройте приложение через Telegram.</p>
+        <ol class="participant-onboarding-steps">
+          <li>Проверьте данные Telegram и согласие на их обработку.</li>
+          <li>Отправьте заявку администратору.</li>
+          <li>После одобрения здесь появятся назначенные вам офферы.</li>
+        </ol>
         <form id="register-form" hidden>
           <label class="check"><input type="checkbox" id="consent" required><span>Согласен(на) на обработку данных Telegram, необходимых для регистрации и проверки заявки.</span></label>
           <button id="register-submit" class="btn primary" type="submit">Отправить заявку ↗</button>
         </form>
         <p id="registration-message" class="muted" role="status"></p>
+      </section>
+      <section id="pending-panel" class="panel participant-gate participant-pending" hidden aria-labelledby="pending-title">
+        <div class="section-kicker">ЗАЯВКА ОТПРАВЛЕНА</div>
+        <h2 id="pending-title">Ожидайте подтверждения</h2>
+        <p>Заявка находится на рассмотрении администратора. Пока доступ к офферам закрыт. Когда заявку одобрят, назначенные предложения появятся в вашем кабинете.</p>
+        <p class="participant-pending-note">Срок рассмотрения не установлен. Проверить текущий статус можно кнопкой ниже.</p>
+        <button id="pending-refresh" class="btn primary" type="button">Проверить статус ↻</button>
       </section>
 
       <section id="account" hidden>
@@ -111,6 +123,15 @@
         <section id="offers-section" class="panel participant-offers" aria-labelledby="offers-heading">
           <div class="participant-section-heading"><div class="section-kicker">ВАШИ ЗАДАНИЯ</div><h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2></div>
           <p id="offers-description">Статусы ведёт администратор. Оплата в карточке — условие оффера, а не фактически начисленные средства.</p>
+          <details class="participant-help">
+            <summary>Как работают офферы и статусы?</summary>
+            <div class="participant-help-body">
+              <p><strong>Оффер</strong> — назначенное вам предложение с условиями выполнения. Откройте «Подробнее», чтобы прочитать инструкцию.</p>
+              <p><strong>На проверке</strong> означает, что администратор рассматривает результат, а не что банк его подтвердил.</p>
+              <p><strong>Срок проверки (холд)</strong> — указанный в условиях период ожидания. Он не гарантирует дату выплаты.</p>
+              <p><strong>Завершено</strong> — ручная отметка администратора, не подтверждение банковского начисления или оплаты.</p>
+            </div>
+          </details>
           <div id="offer-controls" class="participant-offer-controls" hidden>
             <div class="participant-offer-filter" role="group" aria-label="Фильтр офферов">
               <button type="button" data-offer-filter="all" aria-pressed="true">Все</button>

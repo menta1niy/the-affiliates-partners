@@ -1560,3 +1560,60 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-kpi-grid .metric span {font-size:10px;}
   .participant-app .participant-offer-status {font-size:11px;}
 }
+
+/* Stage 4: clear onboarding and resilient offer states. */
+.participant-app .participant-onboarding-steps {
+  margin:19px 0 22px;padding-left:24px;display:grid;gap:10px;
+  color:#D2D4D6;font-size:13px;line-height:1.65;
+}
+.participant-app .participant-onboarding-steps li::marker {font-weight:800;color:#F5F5F5;}
+.participant-app .participant-pending {
+  border-color:rgba(255,255,255,.25);
+  background:linear-gradient(135deg,rgba(255,255,255,.065),transparent 80%),#17191B;
+}
+.participant-app .participant-pending .participant-pending-note {font-size:12px;color:#BBC0C3;}
+.participant-app .participant-pending .btn {margin-top:8px;min-height:46px;}
+.participant-app .participant-help {
+  margin:0 0 18px;padding:14px 16px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.03);
+}
+.participant-app .participant-help summary {font-size:13px;font-weight:750;cursor:pointer;line-height:1.5;}
+.participant-app .participant-help summary:focus-visible {outline:2px solid white;outline-offset:3px;}
+.participant-app .participant-help-body {padding-top:8px;}
+.participant-app .participant-help-body p {font-size:12px;line-height:1.7;margin:12px 0;}
+.participant-app .participant-help-body strong {color:#FFFFFF;}
+.participant-app .participant-offer-state {
+  display:flex;flex-direction:column;align-items:flex-start;gap:9px;
+  min-height:175px;padding:23px;border:1px dashed rgba(255,255,255,.22);
+  border-radius:14px;background:rgba(255,255,255,.025);
+}
+.participant-app .participant-offer-state .participant-state-mark {
+  display:grid;place-items:center;width:31px;height:31px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.25);font-size:18px;font-weight:700;color:#EDEEEE;
+}
+.participant-app .participant-offer-state h3 {margin:2px 0 0;font-size:20px;letter-spacing:-.035em;}
+.participant-app .participant-offer-state .participant-empty {margin:0;font-size:13px;line-height:1.6;color:#B9BCBE;}
+.participant-app .participant-offer-state .btn {margin-top:8px;min-height:44px;}
+.participant-app .participant-offer-state-error {border-style:solid;}
+.participant-app .participant-offer-skeletons {display:grid;gap:12px;}
+.participant-app .participant-offer-skeletons > p {font-size:12px;margin:0 0 2px;}
+.participant-app .participant-offer-skeleton {
+  min-height:123px;border-radius:14px;border:1px solid rgba(255,255,255,.10);
+  background:#181A1D;padding:22px;display:grid;align-content:center;gap:16px;
+}
+.participant-app .participant-skeleton-line {
+  display:block;height:14px;width:58%;border-radius:6px;
+  background:linear-gradient(100deg,rgba(255,255,255,.055) 20%,rgba(255,255,255,.12) 48%,rgba(255,255,255,.055) 75%);
+  background-size:220% 100%;animation:participant-shimmer 1.6s ease-in-out infinite;
+}
+.participant-app .participant-skeleton-line:nth-child(2) {width:85%;height:20px;}
+.participant-app .participant-skeleton-line:nth-child(3) {width:42%;}
+@keyframes participant-shimmer {to {background-position-x:-220%;}}
+@media (max-width:740px) {
+  .participant-app .participant-offer-state {padding:19px;min-height:160px;}
+  .participant-app .participant-offer-state .btn {width:100%;}
+  .participant-app .participant-onboarding-steps {font-size:13px;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .participant-app .participant-skeleton-line {animation:none;}
+}

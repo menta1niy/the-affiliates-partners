@@ -87,10 +87,34 @@
       show("referral-panel",true);
     } catch { /* Server decides whether this role can invite. */ }
   }
-  function offerMessage(message) {
+  function offerMessage(message, kind = "empty", retry = null) {
     const el = $("offers");
     el.replaceChildren();
-    const paragraph=document.createElement("p");paragraph.className="participant-empty";paragraph.textContent=message;el.append(paragraph);
+    const panel=document.createElement("div");panel.className="participant-offer-state participant-offer-state-"+kind;
+    const mark=document.createElement("span");mark.className="participant-state-mark";mark.setAttribute("aria-hidden","true");
+    mark.textContent=kind==="error"?"!":"○";
+    const heading=document.createElement("h3");
+    heading.textContent=kind==="error"?"Не удалось загрузить офферы":kind==="filtered"?"По этому фильтру пока пусто":"Офферы пока не назначены";
+    const paragraph=document.createElement("p");paragraph.className="participant-empty";paragraph.textContent=message;
+    panel.append(mark,heading,paragraph);
+    if(typeof retry==="function"){
+      const button=document.createElement("button");button.type="button";button.className="btn primary";button.textContent=kind==="filtered"?"Показать все":"Повторить попытку";
+      button.addEventListener("click",retry);panel.append(button);
+    }
+    el.append(panel);
+  }
+  function offerLoading(){
+    const el=$("offers");el.replaceChildren();
+    const list=document.createElement("div");list.className="participant-offer-skeletons";
+    list.setAttribute("role","status");list.setAttribute("aria-label","Загружаем ваши офферы");
+    const caption=document.createElement("p");caption.className="muted";caption.textContent="Загружаем ваши офферы…";
+    list.append(caption);
+    for(let i=0;i<2;i++){
+      const card=document.createElement("div");card.className="participant-offer-skeleton";card.setAttribute("aria-hidden","true");
+      for(let j=0;j<3;j++){const line=document.createElement("span");line.className="participant-skeleton-line";card.append(line);}
+      list.append(card);
+    }
+    el.append(list);
   }
   function taskNotice(message) {
     const element = $("task-notice");
@@ -291,7 +315,11 @@
     text("offer-filter-count","Показано "+offers.length+" из "+manualOffers.length);
     show("offer-filter-count",true);
     if(!offers.length){
-      offerMessage(manualOffers.length?"По выбранному фильтру предложений нет. Выберите «Все».":"Здесь появятся предложения, которые назначит вам администратор.");
+      offerMessage(manualOffers.length?"Попробуйте другой статус или посмотрите все назначенные предложения.":"Администратор ещё не назначил вам предложения. Когда они появятся, вы увидите здесь условия и инструкцию.",manualOffers.length?"filtered":"empty",manualOffers.length?()=>{
+        manualFilter="all";
+        document.querySelectorAll("[data-offer-filter]").forEach(tab=>tab.setAttribute("aria-pressed",String(tab.dataset.offerFilter==="all")));
+        renderManualOffers();
+      }:null);
       return;
     }
     const list=document.createElement("div");list.className="offer-list";
@@ -354,7 +382,9 @@
   async function loadManualOverview(){
     const request=++offersRequest;
     resetParticipantKpis();
-    offerMessage("Загружаем ваши офферы…");
+    show("offer-controls",false);show("offer-filter-count",false);
+    nextStep("Получаем актуальные офферы","Проверяем список назначенных предложений.");
+    offerLoading();
     try{
       const result=await api("/mvp/overview");
       if(request!==offersRequest)return;
@@ -366,7 +396,11 @@
       show("offer-controls",manualOffers.length>0);
       closeOfferDialog();
       renderManualOffers();
-    }catch(e){if(request===offersRequest){resetParticipantKpis();offerMessage("Не удалось получить офферы: "+e.message+". Обновите данные для повторной попытки.");}}
+    }catch(e){if(request===offersRequest){
+      manualOffers=[];resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);
+      nextStep("Не удалось загрузить офферы","Проверьте подключение и повторите загрузку в разделе «Офферы».","Перейти к офферам →");
+      offerMessage("Проверьте интернет-соединение и попробуйте снова. Если ошибка повторится, обратитесь к администратору.","error",loadManualOverview);
+    }}
   }
   async function loadTasks(){
     const request=++offersRequest;
@@ -424,9 +458,10 @@
     show("connect",false);show("account",true);
     const unregistered = ["invited","unregistered","new","not_registered"].includes(state.key);
     show("register-panel",unregistered);
+    show("pending-panel",state.key==="pending");
     const verifiedInvite = Boolean(session.source_info?.inviter_id);
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
-    text("registration-instructions",session.open_registration===true ? "Подтвердите согласие и отправьте заявку. Администратор увидит ваш Telegram ID и username." : verifiedInvite ? "Источник приглашения подтверждён Telegram. Проверьте данные и отправьте заявку." : "Чтобы подать заявку, откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные. Ввод одного кода не подтверждает источник.");
+    text("registration-instructions",session.open_registration===true ? "Регистрация выполняется через Telegram. После подачи заявки администратор проверит её и откроет доступ к назначенным предложениям." : verifiedInvite ? "Вы вошли по приглашению. Проверьте данные и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     nextStep("Проверяем ваши офферы","Получаем актуальные назначения…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
@@ -450,12 +485,15 @@
       $("crm-state").closest("section").hidden=true;
       loadManualOverview();
     }else if (["approved","active"].includes(state.key)){resetParticipantKpis();loadTasks();loadCrmStatus();}
-    else {++offersRequest;++crmStatusRequest;resetParticipantKpis();offerMessage("Предложения недоступны до подтверждения регистрации.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
+    else {++offersRequest;++crmStatusRequest;resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);offerMessage("Предложения станут доступны после одобрения заявки и назначения офферов.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   function unregisteredStatus(key){return ["invited","unregistered","new","not_registered"].includes(key);}
   async function refresh() {
-    const button = $("refresh");button.disabled=true;
+    const button = $("refresh");
+    const pendingButton = $("pending-refresh");
+    if(button.disabled)return;
+    button.disabled=true;pendingButton.disabled=true;
     error("");
     try {
       if (!initData()) {
@@ -463,7 +501,7 @@
         taskNotice("");
         ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
-        show("connect",true);show("account",false);show("register-panel",false);
+        show("connect",true);show("account",false);show("register-panel",false);show("pending-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
       }
       text("hero-status","Проверяем доступ…");
@@ -475,17 +513,17 @@
       taskNotice("");
       ++offersRequest;++crmStatusRequest;
       ++referralRequest;
-      show("account",false);show("register-panel",false);show("referral-panel",false);
+      show("account",false);show("register-panel",false);show("pending-panel",false);show("referral-panel",false);
       show("connect",true);
       error(e.message);text("hero-status","Не удалось проверить вход");
-    } finally {button.disabled=false;}
+    } finally {button.disabled=false;pendingButton.disabled=false;}
   }
   $("register-form").addEventListener("submit",async event => {
     event.preventDefault();error("");
     const button=$("register-submit");button.disabled=true;
     try {
       await api("/register",{consent:$("consent").checked});
-      text("registration-message","Заявка отправлена.");
+      text("registration-message","Заявка отправлена. Ожидайте решения администратора.");
       await refresh();
     } catch(e) {
       text("registration-message",e.message);
@@ -502,6 +540,7 @@
     } catch(e) {text("referral-message",e.message);}
   });
   $("refresh").addEventListener("click",refresh);
+  $("pending-refresh").addEventListener("click",refresh);
   try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");} catch {}
   refresh();
 })();

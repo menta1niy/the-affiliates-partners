@@ -12,9 +12,24 @@ from tests.test_admin_participant_browser import BrowserHandler
 FIXTURE = r"""(() => {
   const params = new URLSearchParams(location.hash.slice(1));
   const state = params.get('state') || 'active';
+  const overviewMode = params.get('overview') || 'normal';
+  let overviewAttempts = 0;
   const initial = window.fetch.bind(window);
   window.fetch = (url, options) => {
     const endpoint = String(url).replace('/partners/api', '');
+    if(endpoint === '/mvp/overview') {
+      overviewAttempts++;
+      if(overviewMode === 'error-once' && overviewAttempts === 1) {
+        return Promise.resolve(new Response(JSON.stringify({error:'Temporary error'}),{
+          status:503,headers:{'Content-Type':'application/json'}
+        }));
+      }
+      if(overviewMode === 'empty') {
+        return Promise.resolve(new Response(JSON.stringify({statistics:{total:0},offers:[]}),{
+          status:200,headers:{'Content-Type':'application/json'}
+        }));
+      }
+    }
     const user = {
       id: 881031, internal_id: 123, first_name: 'Александр',
       username: 'long_telegram_username_for_testing', role: 'lead', status: state
@@ -86,6 +101,9 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         )
                         page.locator('#participant-nav [data-view="offers"]').click()
                         self.assertTrue(page.locator("#participant-offers-view").is_visible())
+                        help_panel = page.locator(".participant-help")
+                        help_panel.locator("summary").click()
+                        self.assertIn("не подтверждение банковского начисления",help_panel.inner_text())
                         page.locator("#offers .offer-item").first.wait_for()
                         self.assertEqual(page.locator("#offers .offer-item").count(), 4)
                         self.assertIn("900 ₽", page.locator("#offers").inner_text())
@@ -144,6 +162,41 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         if state == "unregistered":
                             self.assertTrue(page.locator("#register-form").is_visible())
                             self.assertEqual(page.locator("#hero-cta").get_attribute("href"), "#register-panel")
+                            self.assertIn("После одобрения",page.locator("#register-panel").inner_text())
+                        else:
+                            self.assertTrue(page.locator("#pending-panel").is_visible())
+                            self.assertFalse(page.locator("#register-panel").is_visible())
+                            self.assertIn("Срок рассмотрения не установлен",page.locator("#pending-panel").inner_text())
+                            page.locator("#pending-refresh").click()
+                            self.assertTrue(page.locator("#pending-panel").is_visible())
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_empty_offers_and_recoverable_error(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for mode in ("empty", "error-once"):
+                    with self.subTest(mode=mode):
+                        page = browser.new_page(viewport={"width":390,"height":844})
+                        page.add_init_script(FIXTURE)
+                        page.goto(self.base + f"/partners/#tgWebAppData=ui-fixture&state=active&overview={mode}")
+                        page.locator('#participant-nav [data-view="offers"]').click()
+                        if mode == "empty":
+                            page.locator(".participant-offer-state-empty").wait_for()
+                            self.assertIn("не назначил",page.locator("#offers").inner_text())
+                            self.assertFalse(page.locator("#offer-controls").is_visible())
+                            self.assertEqual(page.locator("#kpi-total").inner_text(),"0")
+                        else:
+                            page.locator(".participant-offer-state-error").wait_for()
+                            self.assertFalse(page.locator("#offer-controls").is_visible())
+                            self.assertEqual(page.locator("#kpi-total").inner_text(),"—")
+                            page.get_by_role("button",name="Повторить попытку").click()
+                            page.locator("#offers .offer-item").first.wait_for()
+                            self.assertEqual(page.locator("#offers .offer-item").count(),4)
+                            self.assertTrue(page.locator("#offer-controls").is_visible())
+                        self.assertFalse(page.locator(".participant-offer-skeletons").count())
                         page.close()
             finally:
                 browser.close()
