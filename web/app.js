@@ -257,9 +257,18 @@
   }
   function nextOfferAction(stage){
     const row=document.createElement("p");row.className="participant-offer-next";
-    const label=document.createElement("strong");label.textContent="Следующий шаг";
-    const description=document.createElement("span");description.textContent=(manualStages[stage]||manualStages.assigned).next;
-    row.append(label,description);return row;
+    const descriptions={
+      assigned:"Прочитать условия",
+      in_progress:"Продолжить выполнение",
+      submitted:"Ожидает проверки",
+      completed:"Отмечено администратором",
+      rejected:"Уточнить причину"
+    };
+    const description=document.createElement("span");
+    description.textContent=descriptions[stage]||descriptions.assigned;
+    row.append(description);
+    row.title=(manualStages[stage]||manualStages.assigned).next;
+    return row;
   }
   function offerPayment(value){
     const amount=Number(value);
@@ -293,7 +302,11 @@
     const target=offerDetail("ЧТО НУЖНО СДЕЛАТЬ",offer.target_action||"Уточните у администратора","participant-offer-target");
     const notice=document.createElement("p");notice.className="participant-offer-warning";
     notice.textContent="Указанная ставка — условие предложения, а не подтверждение начисления или выплаты. Статусы отмечает администратор.";
-    offerDialogContent.append(category,title,status,nextOfferAction(offer.stage),values,target,notice);
+    const fullNext=document.createElement("p");fullNext.className="participant-offer-full-next";
+    const fullNextTitle=document.createElement("strong");fullNextTitle.textContent="Следующий шаг";
+    const fullNextText=document.createElement("span");fullNextText.textContent=(manualStages[offer.stage]||manualStages.assigned).next;
+    fullNext.append(fullNextTitle,fullNextText);
+    offerDialogContent.append(category,title,status,fullNext,values,target,notice);
     if(offer.instructions){
       const section=document.createElement("section");section.className="participant-offer-instruction-section";
       const heading=document.createElement("h3");heading.textContent="Инструкция";
@@ -335,12 +348,13 @@
       const category=document.createElement("span");category.className="participant-offer-category";
       category.textContent=offer.category||"Банковский оффер";
       const title=document.createElement("h3");title.textContent=offer.name||"Предложение";
+      title.title=offer.name||"Предложение";
       heading.append(category,title);
       const status=offerStatus(offer.stage);
       top.append(heading,status);
       const summary=document.createElement("div");summary.className="participant-offer-summary";
-      const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
-      const target=offerDetail("НЕОБХОДИМО",offer.target_action||"Уточните условия","participant-offer-target");
+      const payment=offerDetail("СТАВКА",offerPayment(offer.payout_rub),"participant-offer-payment");
+      const target=offerDetail("ЦЕЛЬ",offer.target_action||"Уточните условия","participant-offer-target");
       summary.append(payment,target);
       const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
       button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
@@ -368,11 +382,11 @@
     text("kpi-in-progress",stages.in_progress);
     text("kpi-submitted",stages.submitted);
     text("kpi-completed",stages.completed);
-    if(!offers.length)nextStep("Ожидаем ваши первые офферы","Когда администратор назначит вам предложение, оно появится в разделе «Офферы».","Перейти к офферам →");
-    else if(stages.in_progress>0)nextStep("Продолжите работу","В разделе «Офферы» есть предложения со статусом «В работе».","Открыть мои офферы →");
-    else if(offers.some(offer=>offer?.stage==="assigned"))nextStep("Изучите назначенные офферы","Откройте условия предложения и проверьте, какое действие необходимо выполнить.");
-    else if(stages.submitted>0)nextStep("Ожидайте проверки","Администратор проверяет отправленные результаты. Текущий статус можно посмотреть в офферах.");
-    else nextStep("Проверьте результаты","Все текущие предложения обработаны. Новые назначения появятся в разделе «Офферы».");
+    if(!offers.length)nextStep("Пока нет офферов","Новые назначения появятся здесь автоматически.","К офферам →");
+    else if(stages.in_progress>0)nextStep("Продолжить работу",stages.in_progress+" в работе","Открыть →");
+    else if(offers.some(offer=>offer?.stage==="assigned"))nextStep("Новые задания","Посмотрите условия перед началом.","Открыть →");
+    else if(stages.submitted>0)nextStep("На проверке",stages.submitted+" ожидают решения администратора.","Посмотреть →");
+    else nextStep("Всё обработано","Новые офферы появятся после назначения.","К офферам →");
   }
   function resetParticipantKpis(){
     for(const id of ["kpi-total","kpi-in-progress","kpi-submitted","kpi-completed"])text(id,"—");
@@ -388,7 +402,7 @@
     const request=++offersRequest;
     resetParticipantKpis();
     show("offer-controls",false);show("offer-filter-count",false);
-    nextStep("Получаем актуальные офферы","Проверяем список назначенных предложений.");
+    nextStep("Загружаем офферы","Получаем назначения.");
     offerLoading();
     try{
       const result=await api("/mvp/overview");
@@ -403,7 +417,7 @@
       renderManualOffers();
     }catch(e){if(request===offersRequest){
       manualOffers=[];resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);
-      nextStep("Не удалось загрузить офферы","Проверьте подключение и повторите загрузку в разделе «Офферы».","Перейти к офферам →");
+      nextStep("Ошибка загрузки","Повторите попытку в разделе офферов.","К офферам →");
       offerMessage("Проверьте интернет-соединение и попробуйте снова. Если ошибка повторится, обратитесь к администратору.","error",loadManualOverview);
     }}
   }
@@ -457,6 +471,7 @@
     setParticipantTabsEnabled(standalone);
     document.querySelector(".participant-hero").hidden=standalone;
     show("stats-section",active && session.open_registration===true);
+    show("participant-access-summary",!standalone);
     show("hero-cta",!standalone && (active || (unregisteredStatus(state.key) && session.open_registration===true)));
     $("hero-cta").href=active?"#offers-section":"#register-panel";
     $("hero-cta").firstChild.textContent=active?"Мои офферы ":"Подать заявку ";
@@ -468,7 +483,7 @@
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
     text("registration-instructions",session.open_registration===true ? "Регистрация выполняется через Telegram. После подачи заявки администратор проверит её и откроет доступ к назначенным предложениям." : verifiedInvite ? "Вы вошли по приглашению. Проверьте данные и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
-    nextStep("Проверяем ваши офферы","Получаем актуальные назначения…");
+    nextStep("Загружаем офферы","Получаем назначения…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
     text("status-description",unregistered && session.open_registration===true
       ? "Вы можете подать заявку через Telegram. Администратор рассмотрит её перед открытием доступа к офферам."
@@ -485,7 +500,7 @@
     text("source-details",typeof source === "object" ? source.description || (source.inviter_id || user.introduced_by_id ? "Приглашение подтверждено." : "Дополнительная информация не указана.") : "Информация о приглашении");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     if (["approved","active"].includes(state.key) && session.open_registration===true){
-      text("offers-description","Здесь ваши назначенные предложения. Указанная сумма — условие оффера, а не подтверждённая выплата.");
+      text("offers-description","Ваши задания и условия.");
       $("task-history").closest("section").hidden=true;
       $("crm-state").closest("section").hidden=true;
       loadManualOverview();

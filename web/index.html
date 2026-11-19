@@ -90,16 +90,16 @@
         <section id="owner-preview" class="panel" hidden aria-label="Демонстрационные данные владельца"></section>
         <div id="participant-home" class="participant-view">
         <section class="participant-account-heading" aria-labelledby="welcome">
-          <div><div class="section-kicker">ВАШЕ РАБОЧЕЕ ПРОСТРАНСТВО</div><h2 id="welcome">Личный кабинет</h2><p class="participant-welcome-subtitle">Здесь ваши задания и их текущий прогресс.</p></div>
+          <div><div class="section-kicker">ГЛАВНАЯ / ПАРТНЁРЫ</div><h2 id="welcome">Личный кабинет</h2></div>
           <span id="status-pill" class="pill">—</span>
         </section>
         <section class="participant-next-step panel" aria-labelledby="participant-next-title">
-          <div class="section-kicker">ЧТО ДЕЛАТЬ ДАЛЬШЕ</div>
+          <div class="section-kicker">СЕЙЧАС</div>
           <h3 id="participant-next-title">Проверяем задания…</h3>
           <p id="participant-next-description">Здесь появится следующий шаг.</p>
-          <a class="btn primary" href="#offers" data-go-view="offers" id="participant-next-action">Посмотреть офферы →</a>
+          <a class="btn primary" href="#offers" data-go-view="offers" id="participant-next-action">К офферам →</a>
         </section>
-        <div class="participant-account-cards">
+        <div class="participant-account-cards" id="participant-access-summary">
           <article class="panel participant-status-card">
             <div class="section-kicker">ВАШ ДОСТУП</div>
             <h3 id="status-title">—</h3>
@@ -108,33 +108,27 @@
         </div>
 
         <section id="stats-section" class="participant-stats" aria-labelledby="stats-heading" hidden>
-          <div class="participant-section-heading"><div class="section-kicker">ВАШ ПРОГРЕСС</div><h2 id="stats-heading">Результаты<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">ПРОГРЕСС</div><h2 id="stats-heading">В цифрах<span class="heading-period">.</span></h2></div>
           <div id="participant-kpis" class="participant-kpi-grid" aria-live="polite">
             <article class="metric"><span>НАЗНАЧЕНО</span><strong id="kpi-total">—</strong></article>
             <article class="metric"><span>В РАБОТЕ</span><strong id="kpi-in-progress">—</strong></article>
             <article class="metric"><span>НА ПРОВЕРКЕ</span><strong id="kpi-submitted">—</strong></article>
             <article class="metric"><span>ЗАВЕРШЕНО</span><strong id="kpi-completed">—</strong></article>
           </div>
-          <p class="participant-stats-note">Статусы обновляет администратор. Завершение не является банковским подтверждением или выплатой.</p>
+          <details class="participant-stats-disclaimer"><summary>О статусах и выплатах</summary><p>Статусы обновляет администратор. «Завершено» не означает начисление или выплату банком.</p></details>
         </section>
         </div>
 
         <div id="participant-offers-view" class="participant-view" hidden>
-        <header class="participant-screen-intro participant-screen-offers" aria-labelledby="offers-screen-title">
-          <div class="participant-screen-index" aria-hidden="true">02 <span>/ 03</span></div>
-          <div class="section-kicker">THE AFFILIATES / ОФФЕРЫ</div>
-          <h1 id="offers-screen-title">Рабочие<br><em>офферы.</em></h1>
-          <p>Все назначенные предложения, условия и этапы выполнения в одном разделе.</p>
-          <span class="participant-screen-decoration" aria-hidden="true">◈</span>
-        </header>
         <header class="participant-section-plaque participant-offers-plaque" aria-labelledby="offers-heading">
-          <div class="section-kicker">КАТАЛОГ НАЗНАЧЕНИЙ</div>
-          <h2 id="offers-heading">Предложения<span class="heading-period">.</span></h2>
-          <p id="offers-description">Здесь только ваши назначенные офферы. Указанная ставка — условие предложения, а не подтверждённая выплата.</p>
+          <span class="participant-offers-index" aria-hidden="true">02 / 03</span>
+          <div class="section-kicker">THE AFFILIATES / ОФФЕРЫ</div>
+          <h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2>
+          <p id="offers-description">Ваши активные задания и условия.</p>
         </header>
         <section id="offers-section" class="panel participant-offers" aria-label="Список назначенных офферов">
           <details class="participant-help">
-            <summary>Как работают офферы и статусы?</summary>
+            <summary>Как это работает?</summary>
             <div class="participant-help-body">
               <p><strong>Оффер</strong> — назначенное вам предложение с условиями выполнения. Откройте «Подробнее», чтобы прочитать инструкцию.</p>
               <p><strong>На проверке</strong> означает, что администратор рассматривает результат, а не что банк его подтвердил.</p>
@@ -168,8 +162,7 @@
         <header class="participant-screen-intro participant-screen-profile" aria-labelledby="profile-screen-title">
           <div class="participant-screen-index" aria-hidden="true">03 <span>/ 03</span></div>
           <div class="section-kicker">THE AFFILIATES / ПРОФИЛЬ</div>
-          <h1 id="profile-screen-title">Ваш<br><em>профиль.</em></h1>
-          <p>Доступ к платформе, данные аккаунта и персональные настройки.</p>
+          <h1 id="profile-screen-title">Мой<br><em>профиль.</em></h1>
           <span class="participant-screen-decoration" aria-hidden="true">◎</span>
         </header>
         <section id="referral-panel" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Пригласить участника</h2><p>Передайте персональную ссылку. Доступность приглашений определяется вашей ролью и правами на сервере.</p><div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div><p id="referral-message" role="status" class="muted"></p></section>
