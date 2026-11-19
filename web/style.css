@@ -2006,3 +2006,148 @@ dialog select,dialog input { max-width:100%; }
     gap:12px;
   }
 }
+
+/* Rounded float system: unify lead and admin panels with the compact glass dock.
+   Keep native modal top-layer behavior, semantics and existing permissions intact. */
+.participant-app,
+.admin-control {
+  --float-panel-radius:28px;
+  --float-inner-radius:22px;
+  --float-control-radius:18px;
+  --float-fill:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.015) 60%),rgba(20,22,25,.85);
+  --float-border:rgba(255,255,255,.14);
+  --float-shadow:inset 0 1px 0 rgba(255,255,255,.075),0 16px 38px rgba(0,0,0,.24);
+}
+.participant-app .panel,
+.admin-control .panel,
+.participant-app .participant-screen-intro,
+.admin-control .admin-screen-intro,
+.admin-control .admin-work-panel,
+.admin-control .admin-hero {
+  border-radius:var(--float-panel-radius);
+  border-color:var(--float-border);
+  box-shadow:var(--float-shadow);
+}
+.participant-app .panel,
+.admin-control .panel {
+  background:var(--float-fill);
+  -webkit-backdrop-filter:blur(16px);
+  backdrop-filter:blur(16px);
+}
+.participant-app .participant-screen-intro,
+.admin-control .admin-screen-intro {
+  -webkit-backdrop-filter:blur(16px);
+  backdrop-filter:blur(16px);
+}
+.participant-app .participant-next-step,
+.participant-app .participant-offers .offer-item,
+.participant-app .participant-kpi-grid .metric,
+.admin-control .admin-metrics .metric,
+.admin-control .admin-data-row,
+.admin-control .admin-row,
+.admin-control .admin-records .admin-data-row {
+  border-radius:var(--float-inner-radius);
+  border-color:var(--float-border);
+  box-shadow:var(--float-shadow);
+}
+.participant-app .participant-next-step {
+  background:linear-gradient(138deg,rgba(255,255,255,.09),rgba(255,255,255,.023) 70%),rgba(23,25,28,.87);
+}
+.participant-app .participant-offers .offer-item {
+  background:linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.015) 68%),rgba(22,24,27,.88);
+}
+.participant-app .participant-section-plaque {
+  position:relative;
+  isolation:isolate;
+  margin:16px 0 14px;
+  padding:22px 24px 23px;
+  border:1px solid var(--float-border);
+  border-radius:var(--float-panel-radius);
+  background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.02) 72%),rgba(21,23,26,.84);
+  -webkit-backdrop-filter:blur(20px);
+  backdrop-filter:blur(20px);
+  box-shadow:var(--float-shadow);
+}
+.participant-app .participant-section-plaque h2 {
+  font-family:var(--font-display);
+  font-size:clamp(20px,2.7vw,30px);
+  font-weight:700;
+  letter-spacing:-.008em;
+  line-height:1.36;
+  margin:12px 0 9px;
+}
+.participant-app .participant-section-plaque p {
+  margin:0;
+  max-width:680px;
+  color:var(--color-secondary);
+  font-size:13px;
+  line-height:1.68;
+}
+.participant-app #participant-offers-view #offers-section {
+  margin-top:0;
+  padding:22px 23px;
+}
+.participant-app .participant-offer-detail,
+.participant-app .participant-offer-summary .participant-offer-target,
+.participant-app .participant-offer-state,
+.participant-app .participant-offer-skeleton,
+.participant-app .participant-technical,
+.participant-app .participant-help,
+.admin-control .admin-filters,
+.admin-control .admin-toolbar,
+.admin-control .admin-modal-card {
+  border-radius:var(--float-inner-radius);
+}
+.participant-app .btn,
+.admin-control .btn,
+.participant-app button[data-offer-filter],
+.participant-app #offer-sort,
+.participant-app .participant-offer-detail-button,
+.admin-control .admin-tabs button {
+  border-radius:var(--float-control-radius);
+}
+.participant-app .btn.primary,
+.admin-control .btn.primary {
+  box-shadow:0 0 18px rgba(255,255,255,.085);
+}
+.participant-app .participant-offer-filter button[aria-pressed="true"] {
+  box-shadow:0 0 18px rgba(255,255,255,.08),inset 0 1px 0 rgba(255,255,255,.16);
+}
+.participant-app .participant-offer-dialog {
+  border-radius:var(--float-panel-radius);
+}
+.participant-app .participant-offer-dialog-head {
+  border-radius:var(--float-control-radius) var(--float-control-radius) 0 0;
+}
+@media (max-width:740px) {
+  .participant-app,.admin-control {
+    --float-panel-radius:25px;
+    --float-inner-radius:22px;
+    --float-control-radius:17px;
+  }
+  .participant-app .participant-section-plaque {
+    padding:18px 19px 20px;
+    margin:13px 0 12px;
+  }
+  .participant-app .participant-section-plaque h2 {
+    font-size:clamp(20px,5.6vw,25px);
+    line-height:1.4;
+  }
+  .participant-app .participant-section-plaque p {font-size:12px;}
+  .participant-app #participant-offers-view #offers-section {
+    padding:18px 16px;
+  }
+  .participant-app .participant-offers .offer-item,
+  .admin-control .admin-work-panel {
+    padding:18px 16px;
+  }
+}
+@media (prefers-reduced-transparency:reduce) {
+  .participant-app .panel,
+  .admin-control .panel,
+  .participant-app .participant-section-plaque {
+    background:#17191b;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+}

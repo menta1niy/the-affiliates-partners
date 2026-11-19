@@ -112,6 +112,47 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_rounded_float_panels_and_offers_heading_plaque(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for width in (320, 390, 430, 1440):
+                    with self.subTest(width=width):
+                        page = self.open_page(browser, width=width)
+                        page.locator('#participant-nav [data-view="offers"]').click()
+                        plaque = page.locator(".participant-section-plaque")
+                        self.assertTrue(plaque.is_visible())
+                        self.assertIn("Предложения", plaque.inner_text())
+                        self.assertFalse(page.locator("#participant-home").is_visible())
+                        metrics = page.evaluate("""() => {
+                          const get=selector=>{
+                            const node=document.querySelector(selector);
+                            const rect=node.getBoundingClientRect();
+                            return {radius:parseFloat(getComputedStyle(node).borderTopLeftRadius),
+                              width:rect.width,left:rect.left,right:rect.right};
+                          };
+                          return {plaque:get('.participant-section-plaque'),
+                            offers:get('#offers-section'),
+                            screen:get('.participant-screen-offers'),
+                            overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth};
+                        }""")
+                        for key in ("plaque", "offers", "screen"):
+                            self.assertGreaterEqual(metrics[key]["radius"], 25, metrics)
+                            self.assertGreaterEqual(metrics[key]["left"], 0, metrics)
+                            self.assertLessEqual(metrics[key]["right"], width+1, metrics)
+                        self.assertLessEqual(metrics["overflow"], 1, metrics)
+                        page.close()
+                for width in (320, 390, 1440):
+                    with self.subTest(admin=True, width=width):
+                        page = self.open_page(browser, admin=True, width=width)
+                        page.locator('[data-tab="users"]').click()
+                        radius=page.locator(".admin-work-panel:not([hidden])").first.evaluate(
+                            "el=>parseFloat(getComputedStyle(el).borderTopLeftRadius)")
+                        self.assertGreaterEqual(radius, 25)
+                        page.close()
+            finally:
+                browser.close()
+
     def test_mobile_sidebars_fixed_below_modal_layer(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
