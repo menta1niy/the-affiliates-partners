@@ -2369,3 +2369,61 @@ dialog select,dialog input { max-width:100%; }
     padding:9px 8px;
   }
 }
+
+/* Quiet UI: a single compact, horizontally swipeable filter + sort toolbar. */
+.participant-app .participant-offer-controls {
+  display:flex;flex-wrap:nowrap;align-items:center;gap:7px;
+  width:100%;min-width:0;margin:0 0 6px;
+}
+.participant-app .participant-offer-filter {
+  display:flex;flex:1 1 auto;min-width:0;width:auto;
+  flex-wrap:nowrap;gap:5px;
+  overflow-x:auto;overscroll-behavior-x:contain;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  padding:2px 0;
+}
+.participant-app .participant-offer-filter::-webkit-scrollbar {display:none;}
+.participant-app .participant-offer-filter button {
+  flex:0 0 auto;white-space:nowrap;
+  padding:0 12px;min-height:44px;
+  border-radius:999px;font-size:11px;
+}
+.participant-app .participant-offer-sort-label {
+  position:relative;display:grid;place-items:center;
+  flex:0 0 44px;width:44px;min-width:44px;height:44px;
+  padding:0;margin:0;border-radius:16px;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(255,255,255,.055);color:#e4e6e8;
+  overflow:hidden;
+}
+.participant-app .participant-offer-sort-label.is-custom-sort {
+  border-color:rgba(255,255,255,.42);
+  background:rgba(255,255,255,.12);
+}
+.participant-app .participant-offer-sort-label svg {
+  position:absolute;pointer-events:none;width:20px;height:20px;
+  inset:11px;display:block;
+}
+.participant-app #offer-sort {
+  position:absolute;inset:0;
+  display:block;opacity:0;
+  width:100%;height:100%;min-width:0;min-height:44px;
+  margin:0;padding:0;cursor:pointer;
+}
+.participant-app .participant-offer-sort-label:focus-within {
+  outline:2px solid #fff;outline-offset:2px;
+}
+.participant-app .participant-offer-filter-count {
+  margin:1px 0 11px;font-size:10px;color:#969a9e;
+}
+@media(max-width:740px) {
+  .participant-app .participant-offer-filter {
+    display:flex;grid-template-columns:none;width:auto;
+  }
+  .participant-app .participant-offer-filter button {
+    padding:0 11px;min-height:44px;
+  }
+  .participant-app .participant-offer-sort-label {
+    width:44px;min-width:44px;justify-content:center;
+  }
+}

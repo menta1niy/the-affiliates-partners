@@ -155,6 +155,23 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         page.locator('[data-offer-filter="all"]').click()
                         page.locator("#offer-sort").select_option("payout_desc")
                         self.assertIn("Вторая карта",page.locator("#offers .offer-item").first.inner_text())
+                        toolbar = page.locator("#offer-controls")
+                        toolbar_metrics = toolbar.evaluate("""node=>{
+                          const filter=node.querySelector('.participant-offer-filter');
+                          const sort=node.querySelector('#offer-sort');
+                          const r=node.getBoundingClientRect(), f=filter.getBoundingClientRect(), s=sort.getBoundingClientRect();
+                          return {height:r.height,filterScrollable:filter.scrollWidth>filter.clientWidth,
+                            sortHeight:s.height,sameRow:Math.abs(f.top-s.top)<4,
+                            sortLabel:sort.getAttribute('aria-label'),
+                            activeSort:sort.parentElement.classList.contains('is-custom-sort')};
+                        }""")
+                        self.assertLessEqual(toolbar_metrics["height"],54)
+                        self.assertTrue(toolbar_metrics["sameRow"])
+                        self.assertGreaterEqual(toolbar_metrics["sortHeight"],44)
+                        self.assertEqual(toolbar_metrics["sortLabel"],"Сортировка офферов")
+                        self.assertTrue(toolbar_metrics["activeSort"])
+                        if width <= 430:
+                            self.assertTrue(toolbar_metrics["filterScrollable"])
                         page.locator('#participant-nav [data-view="profile"]').click()
                         profile = page.locator("#profile-section")
                         self.assertTrue(profile.is_visible())

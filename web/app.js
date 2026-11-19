@@ -368,7 +368,12 @@
     document.querySelectorAll("[data-offer-filter]").forEach(tab=>tab.setAttribute("aria-pressed",String(tab===button)));
     renderManualOffers();
   }));
-  $("offer-sort").addEventListener("change",event=>{manualSort=event.target.value;renderManualOffers();});
+  $("offer-sort").addEventListener("change",event=>{
+    manualSort=event.target.value;
+    event.target.title="Сортировать: "+event.target.selectedOptions[0].textContent;
+    event.target.parentElement.classList.toggle("is-custom-sort",manualSort!=="recent");
+    renderManualOffers();
+  });
   function updateParticipantKpis(offers,stats){
     const stages={in_progress:0,submitted:0,completed:0};
     for(const offer of offers){
