@@ -20,6 +20,11 @@
       if(link.dataset.view===view)link.setAttribute("aria-current","page");
       else link.removeAttribute("aria-current");
     });
+    document.title={
+      home:"The Affiliates — Главная",
+      offers:"The Affiliates — Офферы",
+      profile:"The Affiliates — Профиль"
+    }[view];
     try { if(view==="home") tg?.BackButton?.hide(); else tg?.BackButton?.show(); } catch {}
     window.scrollTo({top:0,behavior:"instant"});
   }

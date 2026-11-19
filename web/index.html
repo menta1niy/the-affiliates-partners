@@ -120,8 +120,15 @@
         </div>
 
         <div id="participant-offers-view" class="participant-view" hidden>
+        <header class="participant-screen-intro participant-screen-offers" aria-labelledby="offers-screen-title">
+          <div class="participant-screen-index" aria-hidden="true">02 <span>/ 03</span></div>
+          <div class="section-kicker">THE AFFILIATES / ОФФЕРЫ</div>
+          <h1 id="offers-screen-title">Рабочие<br><em>офферы.</em></h1>
+          <p>Все назначенные предложения, условия и этапы выполнения в одном разделе.</p>
+          <span class="participant-screen-decoration" aria-hidden="true">◈</span>
+        </header>
         <section id="offers-section" class="panel participant-offers" aria-labelledby="offers-heading">
-          <div class="participant-section-heading"><div class="section-kicker">ВАШИ ЗАДАНИЯ</div><h2 id="offers-heading">Мои офферы<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">КАТАЛОГ НАЗНАЧЕНИЙ</div><h2 id="offers-heading">Предложения<span class="heading-period">.</span></h2></div>
           <p id="offers-description">Статусы ведёт администратор. Оплата в карточке — условие оффера, а не фактически начисленные средства.</p>
           <details class="participant-help">
             <summary>Как работают офферы и статусы?</summary>
@@ -155,9 +162,16 @@
         <section class="panel participant-legacy-section"><div class="section-kicker">ПОДТВЕРЖДЕНИЯ CRM</div><h2>Статусы заявок и выплаты</h2><p>Здесь отображаются только подтверждённые CRM сведения. Отчёт участника сам по себе не означает выполнение банковского условия или начисление.</p><div id="crm-state" aria-live="polite"><p class="muted">Загружаем статусы CRM…</p></div></section>
         </div>
         <div id="participant-profile-view" class="participant-view" hidden>
+        <header class="participant-screen-intro participant-screen-profile" aria-labelledby="profile-screen-title">
+          <div class="participant-screen-index" aria-hidden="true">03 <span>/ 03</span></div>
+          <div class="section-kicker">THE AFFILIATES / ПРОФИЛЬ</div>
+          <h1 id="profile-screen-title">Ваш<br><em>профиль.</em></h1>
+          <p>Доступ к платформе, данные аккаунта и персональные настройки.</p>
+          <span class="participant-screen-decoration" aria-hidden="true">◎</span>
+        </header>
         <section id="referral-panel" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Пригласить участника</h2><p>Передайте персональную ссылку. Доступность приглашений определяется вашей ролью и правами на сервере.</p><div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div><p id="referral-message" role="status" class="muted"></p></section>
         <section id="profile-section" class="panel compact participant-profile">
-          <div class="participant-section-heading"><div class="section-kicker">ВАШ АККАУНТ</div><h2>Профиль<span class="heading-period">.</span></h2></div>
+          <div class="participant-section-heading"><div class="section-kicker">ДАННЫЕ УЧАСТНИКА</div><h2>Мой аккаунт<span class="heading-period">.</span></h2></div>
           <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">АККАУНТ TELEGRAM</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>
           <div class="data-row"><span>Роль</span><strong id="profile-role">—</strong></div>
           <div class="data-row"><span>Статус</span><strong id="profile-status">—</strong></div>

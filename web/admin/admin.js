@@ -377,10 +377,35 @@
     }
     dialog.showModal();await reload();
   }
-  function switchTab(tab){
+  const tabScreens={
+    pending:{name:"Модерация",description:"Заявки и сводка активности платформы.",number:"01"},
+    users:{name:"Участники",description:"Профили пользователей, роли и управление доступом.",number:"02"},
+    invitations:{name:"Приглашения",description:"Создавайте ссылки и управляйте приглашёнными участниками.",number:"03"},
+    audit:{name:"История действий",description:"Последние изменения и события вашей команды.",number:"04"}
+  };
+  function switchTab(tab, addHistory=false){
+    if(!Object.hasOwn(tabScreens,tab))return;
+    if(addHistory && state.tab!==tab)history.pushState({...history.state,adminTab:tab},"",location.href);
     state.tab=tab;
     document.querySelectorAll("[data-tab]").forEach(button=>button.setAttribute("aria-selected",String(button.dataset.tab===tab)));
     document.querySelectorAll("[data-panel]").forEach(panel=>panel.hidden=panel.dataset.panel!==tab);
+    const isOverview=tab==="pending";
+    document.querySelector(".admin-topline-index").textContent="— "+tabScreens[tab].number;
+    document.querySelector(".admin-hero").hidden=!isOverview;
+    document.querySelector(".admin-overview").hidden=!isOverview;
+    document.querySelector(".admin-workspace-heading").hidden=!isOverview;
+    const intro=$("admin-screen-intro");
+    intro.hidden=isOverview;
+    if(!isOverview){
+      const screen=tabScreens[tab];
+      $("admin-screen-crumb").textContent="CONTROL CENTER / "+screen.name.toUpperCase();
+      $("admin-screen-index").textContent=screen.number+" / 04";
+      $("admin-screen-heading").textContent=screen.name+".";
+      $("admin-screen-description").textContent=screen.description;
+      $("admin-screen-symbol").textContent=screen.number;
+    }
+    document.title=isOverview?"The Affiliates — Управление":"The Affiliates — "+tabScreens[tab].name;
+    window.scrollTo({top:0,behavior:"instant"});
     if(tab==="audit")loadAudit();
   }
   $("invite-form").addEventListener("submit",async e=>{
@@ -398,7 +423,8 @@
       show("invite-result",true);notice("Приглашение создано.");await loadDashboard();
     }catch(err){error(err.message);}finally{submit.disabled=false;}
   });
-  document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>switchTab(button.dataset.tab)));
+  document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>switchTab(button.dataset.tab,true)));
+  window.addEventListener("popstate",event=>switchTab(event.state?.adminTab||"pending"));
   let searchDelay;
   $("user-query").addEventListener("input",()=>{
     clearTimeout(searchDelay);
@@ -427,6 +453,7 @@
         show("no-access",true);return;
       }
       await loadDashboard();show("admin-app",true);document.body.classList.add("admin-authenticated");
+      switchTab(history.state?.adminTab||"pending");
     }catch(e){show("no-access",true);$("no-access-message").textContent=e.message;}
   }
   start();
