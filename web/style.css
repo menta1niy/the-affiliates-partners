@@ -1743,3 +1743,87 @@ dialog select,dialog input { max-width:100%; }
   }
   .participant-app .participant-offer-close-label {display:none;}
 }
+
+/* Compact frosted-glass icon docks; desktop side navigation retains labels. */
+.participant-app .participant-nav .nav-icon,
+.admin-control .admin-tabs .nav-icon {
+  width:21px;height:21px;flex:0 0 21px;
+  stroke:currentColor;overflow:visible;
+}
+.participant-app .participant-nav a {
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+}
+.admin-control .admin-tabs button .nav-label {
+  display:inline;align-items:initial;justify-content:initial;
+  width:auto;flex-shrink:1;font-size:inherit;font-weight:inherit;
+}
+@media (max-width:740px) {
+  .participant-app .shell,.admin-control .admin-layout {
+    padding-bottom:calc(86px + var(--mobile-nav-bottom));
+  }
+  .participant-app .participant-nav,
+  .admin-control .admin-sidebar {
+    box-sizing:border-box;
+    left:50%;right:auto;
+    bottom:var(--mobile-nav-bottom);
+    width:max-content;max-width:calc(100vw - 24px);
+    transform:translateX(-50%);
+    margin:0;padding:5px;
+    border-radius:25px;
+    border:1px solid rgba(255,255,255,.23);
+    background:linear-gradient(140deg,rgba(255,255,255,.145),rgba(255,255,255,.045) 48%,rgba(255,255,255,.09)),rgba(18,20,23,.57);
+    -webkit-backdrop-filter:blur(22px) saturate(155%);
+    backdrop-filter:blur(22px) saturate(155%);
+    box-shadow:0 12px 32px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.14),0 0 16px rgba(255,255,255,.035);
+    z-index:40;
+  }
+  .participant-app .participant-nav {
+    display:grid;grid-template-columns:repeat(3,48px);gap:4px;
+  }
+  .participant-app .participant-nav a,
+  .admin-control .admin-tabs button {
+    box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+    width:48px;height:46px;min-height:46px;min-width:48px;
+    padding:0;margin:0;flex:0 0 48px;gap:0;
+    font-size:0;line-height:1;border-radius:18px;
+    color:rgba(232,234,237,.72);border:1px solid transparent;
+    background:transparent;box-shadow:none;
+    transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease,transform .2s ease;
+  }
+  .participant-app .participant-nav .nav-label,
+  .admin-control .admin-tabs .nav-label {display:none;}
+  .participant-app .participant-nav .nav-icon,
+  .admin-control .admin-tabs .nav-icon {
+    display:block;width:22px;height:22px;flex:0 0 22px;
+    filter:none;transition:filter .2s ease,transform .2s ease;
+  }
+  .admin-control .admin-sidebar {height:auto;align-self:auto;}
+  .admin-control .admin-tabs {
+    display:flex;flex-direction:row;align-items:center;gap:3px;
+    width:max-content;max-width:100%;padding:0;margin:0;
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+  }
+  .admin-control .admin-tabs::-webkit-scrollbar {display:none;}
+  .participant-app .participant-nav a[aria-current="page"],
+  .admin-control .admin-tabs button[aria-selected="true"] {
+    color:#fff;
+    border-color:rgba(255,255,255,.29);
+    background:linear-gradient(145deg,rgba(255,255,255,.25),rgba(255,255,255,.07));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 0 14px rgba(255,255,255,.11),0 3px 12px rgba(0,0,0,.24);
+  }
+  .participant-app .participant-nav a[aria-current="page"] .nav-icon,
+  .admin-control .admin-tabs button[aria-selected="true"] .nav-icon {
+    filter:drop-shadow(0 0 5px rgba(255,255,255,.75)) drop-shadow(0 0 10px rgba(255,255,255,.24));
+  }
+  .participant-app .participant-nav a:focus-visible,
+  .admin-control .admin-tabs button:focus-visible {outline:2px solid #fff;outline-offset:2px;}
+}
+@media (prefers-reduced-motion:reduce) and (max-width:740px) {
+  .participant-app .participant-nav a,.admin-control .admin-tabs button,
+  .participant-app .participant-nav .nav-icon,.admin-control .admin-tabs .nav-icon {transition:none;}
+}
+@media (prefers-reduced-transparency:reduce) and (max-width:740px) {
+  .participant-app .participant-nav,.admin-control .admin-sidebar {
+    background:#222427;-webkit-backdrop-filter:none;backdrop-filter:none;
+  }
+}

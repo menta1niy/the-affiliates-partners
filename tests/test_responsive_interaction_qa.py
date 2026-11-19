@@ -125,6 +125,46 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_compact_glass_icon_docks(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for admin in (False, True):
+                    for width in (320, 375, 390, 430):
+                        with self.subTest(admin=admin, width=width):
+                            page = self.open_page(browser, admin=admin, width=width)
+                            selector = ".admin-sidebar" if admin else "#participant-nav"
+                            dock = page.locator(selector)
+                            info = dock.evaluate("""node => {
+                              const css=getComputedStyle(node), rect=node.getBoundingClientRect();
+                              return {width:rect.width,height:rect.height,radius:parseFloat(css.borderRadius),
+                                blur:css.backdropFilter,background:css.backgroundColor,
+                                left:rect.left,right:rect.right};
+                            }""")
+                            self.assertLess(info["width"],width-20,info)
+                            self.assertLess(info["height"],70,info)
+                            self.assertGreaterEqual(info["radius"],24,info)
+                            self.assertIn("blur(",info["blur"],info)
+                            self.assertGreaterEqual(info["left"],0,info)
+                            self.assertLessEqual(info["right"],width,info)
+                            buttons = dock.locator(".admin-tabs button:not([hidden])" if admin else "a[data-view]")
+                            self.assertGreaterEqual(buttons.count(),3)
+                            for i in range(buttons.count()):
+                                item=buttons.nth(i)
+                                self.assertEqual(item.locator(".nav-icon").count(),1)
+                                self.assertFalse(item.locator(".nav-label").is_visible())
+                                self.assertTrue(item.get_attribute("aria-label"))
+                                rect=item.bounding_box()
+                                self.assertGreaterEqual(rect["width"],44,rect)
+                                self.assertGreaterEqual(rect["height"],44,rect)
+                            selected = dock.locator('[aria-selected="true"]' if admin else '[aria-current="page"]')
+                            self.assertEqual(selected.count(),1)
+                            self.assertIn("drop-shadow(",selected.locator(".nav-icon").evaluate(
+                                "node => getComputedStyle(node).filter"))
+                            page.close()
+            finally:
+                browser.close()
+
     def test_participant_three_views_and_back_navigation(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
