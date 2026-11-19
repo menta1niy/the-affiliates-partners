@@ -86,6 +86,32 @@ class ResponsiveInteractionQA(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_display_font_loaded_and_mobile_headings_readable(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for admin in (False, True):
+                    for width in (320, 390, 430, 1440):
+                        with self.subTest(admin=admin, width=width):
+                            page = self.open_page(browser, admin=admin, width=width)
+                            page.evaluate("document.fonts.load('700 24px Unbounded')")
+                            heading = page.locator(".admin-hero h1" if admin else "#welcome")
+                            heading.wait_for(state="visible")
+                            typography = heading.evaluate("""element => {
+                              const style=getComputedStyle(element),rect=element.getBoundingClientRect();
+                              return {font:style.fontFamily,spacing:style.letterSpacing,
+                                overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
+                                left:rect.left,right:rect.right,loaded:document.fonts.check('700 24px Unbounded')};
+                            }""")
+                            self.assertTrue(typography["loaded"], typography)
+                            self.assertIn("Unbounded", typography["font"])
+                            self.assertLessEqual(typography["overflow"], 1, typography)
+                            self.assertGreaterEqual(typography["left"], 0, typography)
+                            self.assertLessEqual(typography["right"], width + 1, typography)
+                            page.close()
+            finally:
+                browser.close()
+
     def test_mobile_sidebars_fixed_below_modal_layer(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
