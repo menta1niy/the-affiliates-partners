@@ -117,6 +117,16 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         first = page.locator("#offers .offer-item").first
                         self.assertEqual(first.locator(".participant-offer-next").inner_text(), "Прочитать условия")
                         self.assertEqual(first.locator("h3").evaluate("el=>getComputedStyle(el).webkitLineClamp"),"2")
+                        measurements=first.evaluate("""node=>{
+                          const css=getComputedStyle(node);
+                          const button=node.querySelector('.participant-offer-detail-button');
+                          const rect=button.getBoundingClientRect();
+                          return {padding:parseFloat(css.paddingTop),buttonHeight:rect.height,
+                            summaryColumns:getComputedStyle(node.querySelector('.participant-offer-summary')).gridTemplateColumns};
+                        }""")
+                        self.assertLessEqual(measurements["padding"],17)
+                        self.assertGreaterEqual(measurements["buttonHeight"],44)
+                        self.assertEqual(len(measurements["summaryColumns"].split()),2)
                         self.assertEqual(first.locator(".participant-offer-status .participant-status-symbol").count(),1)
                         self.assertEqual(first.locator(".participant-offer-instructions").count(), 0)
                         first.locator(".participant-offer-detail-button").click()
