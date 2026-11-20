@@ -72,3 +72,19 @@ Inspected the three failing assertions before further testing. The agency/referr
 Prepared a fresh isolated PostgreSQL 17 cluster `D:\GPT\.worker4-e2e-pg-isolated-20261121` on `127.0.0.1:55439` with **three separate new databases**: `partners_e2e_agency`, `partners_e2e_reverse`, and `partners_e2e_publish`. Partners schema preparation and compatible CRM worktree Alembic migrations succeeded for all three databases (each migration command exited zero). **Before any of the three individual test cases was executed, the prime requested termination of the diagnostic to finalize the release work.** Consequently the isolated rerun outcomes are **not measured**, and the 3 combined-suite failures remain unresolved. No individual rerun was attempted or reported as successful.
 
 The isolated PostgreSQL server was stopped (`pg_ctl` exit 0), cluster directory removed, and `55439` verified to have no listener. No source, tests, or CRM worktree files were modified.
+
+## Authorized final one-attempt-per-test diagnostic (2026-11-21, 03:38 +04:00)
+
+Authorization was renewed to determine whether the 3 combined-run E2E failures were true integration defects. Verified the chosen CRM worktree `D:\GPT\.crm-aeza-bootstrap-20261114` was clean and test dependencies `psycopg`, `sqlalchemy`, `uvicorn`, and `alembic` imported successfully. Port `55439` was initially free. Initialized a **new** PostgreSQL 17 cluster `D:\GPT\.worker4-e2e-pg-final-20261121`, bound to `127.0.0.1:55439`, and created three independent, previously nonexistent databases: `partners_e2e_final_agency`, `partners_e2e_final_reverse`, `partners_e2e_final_publish`. Partners `python -m database.prepare_schema --confirm-ddl` passed for each; compatible CRM `python -m alembic upgrade head` passed for each.
+
+Each individual test was launched **exactly once**, each in a separate Python 3.12 process on its own database. Environment per test was `CRM_BACKEND_ROOT=D:\GPT\.crm-aeza-bootstrap-20261114\backend`, `TEST_DATABASE_URL=postgresql+psycopg://e2e_admin@127.0.0.1:55439/partners_e2e_final_<case>`, `PARTNERS_DATABASE_URL=postgresql://e2e_admin@127.0.0.1:55439/partners_e2e_final_<case>`, `DATABASE_URL=TEST_DATABASE_URL`, `APP_ENV=test`.
+
+| Scenario / exact unittest target | Result | Elapsed | Log |
+| --- | --- | --- | --- |
+| `tests.test_two_service_agency_referral_http_e2e.AgencyReferralTwoServiceHTTP.test_agency_referral_attribution_replay_and_offers` | **PASS**, `Ran 1 test`, `OK`, exit `0` | 9.962 s | `D:\GPT\.worker4-e2e-final-agency-test.log` |
+| `tests.test_two_service_reverse_order_http.ReverseOrderHTTP.test_reverse_versioned_and_legacy_cutover` | **PASS**, `Ran 1 test`, `OK`, exit `0` | 4.257 s | `D:\GPT\.worker4-e2e-final-reverse-test.log` |
+| `tests.test_instruction_publish_two_service_e2e.PublishedInstructionHTTP.test_owner_draft_publish_republish_signed_catalog` | **PASS**, `Ran 1 test`, `OK`, exit `0` | 21.506 s | `D:\GPT\.worker4-e2e-final-publish-test.log` |
+
+All previously failing scenarios pass independently. The previous combined test invocation failed on global outbox counts and global event-order assertions; the results now **confirm that isolation removes the failures**, making cross-test pollution/shared synthetic state the supported diagnosis. The HTTP 409 observed only in the combined run did not occur in the isolated publish test. These are integration tests that passed locally on synthetic test data; this does not establish production readiness independently of the other release audits.
+
+Cleanup completed: `pg_ctl ... -m immediate -w stop` returned exit `0`, the temporary cluster directory was deleted and a fresh port inspection showed `PORT_55439_FREE`. CRM worktree remained Git-clean. No source or test files, user databases, production services, Git commits, pushes or deployments were modified by the worker.
