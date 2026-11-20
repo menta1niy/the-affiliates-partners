@@ -65,7 +65,7 @@
   --dock-blur: 22px;
   --dock-action-width: 48px;
   --dock-action-height: 46px;
-  --lead-nav-columns: 3;
+  --lead-nav-columns: 4;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -1658,6 +1658,7 @@ dialog select,dialog input { max-width:100%; }
 }
 .participant-app #participant-home,
 .participant-app #participant-offers-view,
+.participant-app #participant-statistics-view,
 .participant-app #participant-profile-view {
   min-width:0;
 }
@@ -2175,6 +2176,7 @@ dialog select,dialog input { max-width:100%; }
 /* Lead quiet UI: less explanatory copy in the foreground, subtle visual texture. */
 .participant-app #participant-home,
 .participant-app #participant-offers-view,
+.participant-app #participant-statistics-view,
 .participant-app #participant-profile-view {position:relative;isolation:isolate;}
 .participant-app #participant-home::before {
   content:"";position:absolute;z-index:-1;pointer-events:none;
@@ -3476,4 +3478,59 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-finance-stats {grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
   .participant-app .participant-finance-stats>div:first-child {grid-column:1/-1;min-height:76px;}
   .participant-app .participant-finance-request {padding:12px;}
+}
+
+/* Stage 11: fourth participant tab — indicative rates never mix with ledger. */
+.participant-app .participant-statistics-panel {
+  min-width:0;display:grid;gap:14px;
+  padding:clamp(17px,3.5vw,27px);
+  border-radius:var(--float-panel-radius);
+  border:1px solid var(--float-border);
+  background:var(--float-fill);
+}
+.participant-app .participant-statistics-panel h2 {
+  margin:0;font-family:var(--font-display);
+  font-size:clamp(16px,3.4vw,22px);line-height:1.4;
+}
+.participant-app .participant-statistics-panel p {
+  margin:0;font-size:12px;line-height:1.65;color:var(--color-secondary);
+}
+.participant-app .participant-statistics-grid {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;
+}
+.participant-app .participant-statistics-grid article {
+  min-width:0;min-height:96px;display:grid;align-content:center;gap:10px;
+  padding:14px;border:1px solid var(--glass-border);
+  border-radius:var(--float-control-radius);background:var(--glass-functional);
+}
+.participant-app .participant-statistics-grid span,
+.participant-app .participant-statistics-counts span {
+  font-size:10px;font-weight:700;letter-spacing:.065em;
+  line-height:1.5;color:var(--color-secondary);overflow-wrap:anywhere;
+}
+.participant-app .participant-statistics-grid strong {
+  font-family:var(--font-display);font-size:clamp(14px,3vw,21px);
+  color:var(--color-text);line-height:1.45;overflow-wrap:anywhere;
+  font-variant-numeric:tabular-nums;
+}
+.participant-app .participant-statistics-grid .stat-emphasis {
+  border-color:var(--accent-amber-edge);background:var(--accent-amber-glow);
+}
+.participant-app .participant-statistics-grid .stat-emphasis strong,
+.participant-app #statistics-paid {color:var(--accent-amber);}
+.participant-app .participant-statistics-counts {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:9px;
+}
+.participant-app .participant-statistics-counts>div {
+  display:grid;gap:8px;padding:13px;border:1px solid var(--glass-border);
+  border-radius:15px;background:var(--glass-quiet);
+}
+.participant-app .participant-statistics-counts strong {
+  font-family:var(--font-display);font-size:21px;color:var(--color-text);
+}
+.participant-app #statistics-feedback {margin:15px 4px 0;font-size:12px;line-height:1.6;}
+@media(max-width:360px){
+  .participant-app .participant-statistics-grid {gap:8px;}
+  .participant-app .participant-statistics-grid article {padding:11px;min-height:90px;}
+  .participant-app .participant-statistics-grid strong {font-size:13px;}
 }

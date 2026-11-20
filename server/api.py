@@ -17,6 +17,7 @@ from server import profile as participant_profile
 from server import offer_workflow
 from server import finance
 from server import referral
+from server import statistics
 
 
 def storage_error(exc):
@@ -81,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
         routes.update({"/api/finance/overview","/api/finance/withdraw",
                        "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
                        "/api/admin/finance/decision"})
-        routes.update({"/api/blogger/overview","/api/admin/bloggers/create",
+        routes.update({"/api/statistics/overview", "/api/blogger/overview","/api/admin/bloggers/create",
                        "/api/admin/bloggers/list","/api/admin/bloggers/fixed",
                        "/api/admin/bloggers/paid","/api/admin/bloggers/update"})
         if route not in routes:
@@ -226,6 +227,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = offer_workflow.evidence(user["id"], owner, body)
             elif route == "/api/finance/overview":
                 result = finance.overview(user["id"], owner, body)
+            elif route == "/api/statistics/overview":
+                result = statistics.overview(user["id"], owner, body)
             elif route == "/api/finance/withdraw":
                 result = finance.request(user["id"], owner, body)
             elif route == "/api/admin/finance/accrue":

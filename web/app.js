@@ -46,8 +46,49 @@
     }
   }
   let financeRequestId=0;
+  let statisticsRequestId=0;
   const money = value => Number.isSafeInteger(Number(value))
     ? new Intl.NumberFormat("ru-RU").format(Number(value))+" ₽" : "—";
+  async function loadStatistics(){
+    const id=++statisticsRequestId;
+    const fields=["statistics-not-started","statistics-in-work","statistics-hold",
+      "statistics-available","statistics-reserved","statistics-paid","statistics-accrued"];
+    for(const field of fields)text(field,"…");
+    text("statistics-feedback","Обновляем статистику…");
+    try{
+      const result=await api("/statistics/overview");
+      if(id!==statisticsRequestId)return;
+      const potential=result.potential||{};
+      const verified=result.verified||{};
+      const mapping={
+        "statistics-not-started":potential.not_started_rub,
+        "statistics-in-work":potential.in_work_rub,
+        "statistics-hold":potential.hold_rub,
+        "statistics-available":verified.available_rub,
+        "statistics-reserved":verified.reserved_rub,
+        "statistics-paid":verified.paid_rub,
+        "statistics-accrued":verified.accrued_rub
+      };
+      for(const [field,value] of Object.entries(mapping))text(field,
+        Number.isSafeInteger(value)&&value>=0?money(value):"—");
+      const counts=$("statistics-counts");counts.replaceChildren();
+      const stages=result.stages||{};
+      for(const [label,key] of [["Назначено","assigned"],["В работе","in_progress"],
+        ["На проверке","submitted"],["Завершено","completed"],["Отклонено","rejected"]]){
+        const item=document.createElement("div");
+        const caption=document.createElement("span");caption.textContent=label;
+        const value=document.createElement("strong");
+        value.textContent=Number.isSafeInteger(stages[key])&&stages[key]>=0?String(stages[key]):"—";
+        item.append(caption,value);counts.append(item);
+      }
+      text("statistics-feedback","Показатели рассчитаны по текущему состоянию назначений и финансов.");
+    }catch(e){
+      if(id!==statisticsRequestId)return;
+      for(const field of fields)text(field,"—");
+      $("statistics-counts").replaceChildren();
+      text("statistics-feedback","Не удалось загрузить статистику: "+e.message);
+    }
+  }
   async function loadFinance(){
     const id=++financeRequestId;
     const fields=["finance-available","finance-reserved","finance-paid","finance-accrued"];
@@ -116,12 +157,13 @@
   let crmStatusRequest = 0;
   let participantTabsEnabled = false;
   let participantView = "home";
-  const participantViews = {home:"participant-home",offers:"participant-offers-view",profile:"participant-profile-view"};
+  const participantViews = {home:"participant-home",offers:"participant-offers-view",statistics:"participant-statistics-view",profile:"participant-profile-view"};
   function setParticipantView(view, addHistory = false) {
     if (!participantTabsEnabled || !Object.hasOwn(participantViews, view)) return;
     if (addHistory && view !== participantView) history.pushState({...history.state,participantView:view},"",location.href);
     participantView = view;
     for (const [name,id] of Object.entries(participantViews)) show(id,name===view);
+    if(view==="statistics")loadStatistics();
     document.querySelectorAll("#participant-nav [data-view]").forEach(link=>{
       if(link.dataset.view===view)link.setAttribute("aria-current","page");
       else link.removeAttribute("aria-current");
@@ -129,6 +171,7 @@
     document.title={
       home:"The Affiliates — Главная",
       offers:"The Affiliates — Офферы",
+      statistics:"The Affiliates — Статистика",
       profile:"The Affiliates — Профиль"
     }[view];
     try { if(view==="home") tg?.BackButton?.hide(); else tg?.BackButton?.show(); } catch {}
@@ -745,7 +788,7 @@
     const state = statusInfo(rawStatus);
     const active=["approved","active"].includes(state.key);
     if(role==="blogger"){
-      ++offersRequest;++crmStatusRequest;++referralRequest;++financeRequestId;
+      ++offersRequest;++crmStatusRequest;++referralRequest;++financeRequestId;++statisticsRequestId;
       setParticipantTabsEnabled(false);
       document.querySelector(".participant-hero").hidden=true;
       show("connect",false);show("account",false);show("register-panel",false);
@@ -754,7 +797,7 @@
       if(active)loadBlogger();
       return;
     }
-    show("blogger-panel",false);++bloggerRequestId;
+    show("blogger-panel",false);++bloggerRequestId;++statisticsRequestId;
     const standalone = active && session.open_registration===true;
     if(!standalone)participantView="home";
     setParticipantTabsEnabled(standalone);
