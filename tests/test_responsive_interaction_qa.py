@@ -120,9 +120,10 @@ class ResponsiveInteractionQA(unittest.TestCase):
                     with self.subTest(width=width):
                         page = self.open_page(browser, width=width)
                         page.locator('#participant-nav [data-view="offers"]').click()
-                        plaque = page.locator(".participant-section-plaque")
+                        plaque = page.locator(".participant-screen-offers")
                         self.assertTrue(plaque.is_visible())
-                        self.assertIn("Мои офферы", plaque.inner_text())
+                        self.assertIn("Мои", plaque.inner_text())
+                        self.assertIn("офферы", plaque.inner_text())
                         self.assertFalse(page.locator("#participant-home").is_visible())
                         metrics = page.evaluate("""() => {
                           const get=selector=>{
@@ -131,7 +132,7 @@ class ResponsiveInteractionQA(unittest.TestCase):
                             return {radius:parseFloat(getComputedStyle(node).borderTopLeftRadius),
                               width:rect.width,left:rect.left,right:rect.right};
                           };
-                          return {plaque:get('.participant-section-plaque'),
+                          return {plaque:get('.participant-screen-offers'),
                             offers:get('#offers-section'),
                             overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth};
                         }""")
@@ -140,6 +141,26 @@ class ResponsiveInteractionQA(unittest.TestCase):
                             self.assertGreaterEqual(metrics[key]["left"], 0, metrics)
                             self.assertLessEqual(metrics[key]["right"], width+1, metrics)
                         self.assertLessEqual(metrics["overflow"], 1, metrics)
+                        offer_layout=page.locator(".participant-screen-offers").evaluate("""e=>({
+                          height:e.getBoundingClientRect().height,
+                          radius:getComputedStyle(e).borderTopLeftRadius,
+                          padding:getComputedStyle(e).padding,
+                          background:getComputedStyle(e).backgroundImage
+                        })""")
+                        page.locator('#participant-nav [data-view="profile"]').click()
+                        profile=page.locator(".participant-screen-profile")
+                        self.assertTrue(profile.is_visible())
+                        profile_layout=profile.evaluate("""e=>({
+                          height:e.getBoundingClientRect().height,
+                          radius:getComputedStyle(e).borderTopLeftRadius,
+                          padding:getComputedStyle(e).padding,
+                          background:getComputedStyle(e).backgroundImage
+                        })""")
+                        layout={"offers":offer_layout,"profile":profile_layout}
+                        self.assertAlmostEqual(offer_layout["height"],profile_layout["height"],delta=1,msg=str(layout))
+                        self.assertEqual(offer_layout["radius"],profile_layout["radius"])
+                        self.assertEqual(offer_layout["padding"],profile_layout["padding"])
+                        self.assertEqual(offer_layout["background"],profile_layout["background"])
                         page.close()
                 for width in (320, 390, 1440):
                     with self.subTest(admin=True, width=width):
@@ -246,14 +267,15 @@ class ResponsiveInteractionQA(unittest.TestCase):
                         nav.locator('[data-view="offers"]').click()
                         self.assertTrue(page.locator("#participant-offers-view").is_visible())
                         self.assertFalse(page.locator("#participant-home").is_visible())
-                        self.assertTrue(page.locator(".participant-offers-plaque").is_visible())
-                        self.assertIn("Мои офферы",page.locator("#offers-heading").inner_text())
+                        self.assertTrue(page.locator(".participant-screen-offers").is_visible())
+                        self.assertIn("Мои",page.locator("#offers-heading").inner_text())
+                        self.assertIn("офферы",page.locator("#offers-heading").inner_text())
                         self.assertEqual(page.title(),"The Affiliates — Офферы")
                         self.assertEqual(nav.locator('[aria-current="page"]').count(), 1)
                         nav.locator('[data-view="profile"]').click()
                         self.assertTrue(page.locator("#participant-profile-view").is_visible())
                         self.assertTrue(page.locator(".participant-screen-profile").is_visible())
-                        self.assertFalse(page.locator(".participant-offers-plaque").is_visible())
+                        self.assertFalse(page.locator(".participant-screen-offers").is_visible())
                         self.assertEqual(page.title(),"The Affiliates — Профиль")
                         page.go_back()
                         self.assertTrue(page.locator("#participant-offers-view").is_visible())

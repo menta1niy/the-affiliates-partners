@@ -2494,3 +2494,41 @@ dialog select,dialog input { max-width:100%; }
   .admin-control .btn.primary,
   .participant-app .participant-offer-detail-button {transition:none;}
 }
+
+/* Mobile consistency: Offers and Profile share one identical screen-header shell. */
+.participant-app .participant-screen-offers,
+.participant-app .participant-screen-profile {
+  background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.025) 64%),#141619;
+  min-height:190px;
+}
+.participant-app .participant-screen-offers .heading-period {color:var(--accent-amber);}
+.participant-app .visually-hidden {
+  position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
+}
+/* Dialog header is part of the card, not a second opaque/sticky rectangle. */
+.participant-app .participant-offer-dialog-head,
+.participant-app .participant-offer-dialog .participant-offer-dialog-head {
+  position:relative;top:auto;z-index:auto;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:nowrap;gap:12px;min-height:48px;
+  margin:0 0 16px;padding:0;
+  border:0;border-radius:0;background:transparent;
+}
+.participant-app .participant-offer-dialog-head .section-kicker {
+  flex:1 1 auto;min-width:0;max-width:none;
+  font-size:10px;line-height:1.55;
+}
+.participant-app #participant-offer-close {
+  flex:0 0 44px;width:44px;height:44px;min-height:44px;
+  padding:0;border-radius:15px;
+}
+@media(max-width:740px) {
+  .participant-app .participant-screen-offers,
+  .participant-app .participant-screen-profile {min-height:170px;}
+  .participant-app .participant-offer-dialog-head,
+  .participant-app .participant-offer-dialog .participant-offer-dialog-head {
+    align-items:center;flex-wrap:nowrap;gap:10px;margin-bottom:14px;
+  }
+}

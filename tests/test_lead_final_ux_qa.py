@@ -63,14 +63,24 @@ class LeadFinalUXQA(unittest.TestCase):
                         self.assertLessEqual(size["closeRight"],width+1,size)
                         self.assertGreaterEqual(dialog.locator("#participant-offer-close").bounding_box()["width"],44)
                         self.assertGreaterEqual(dialog.locator("#participant-offer-close").bounding_box()["height"],44)
+                        heading=dialog.locator(".participant-offer-dialog-head").evaluate("""node=>{
+                          const style=getComputedStyle(node);
+                          const label=node.querySelector('.section-kicker').getBoundingClientRect();
+                          const button=node.querySelector('#participant-offer-close').getBoundingClientRect();
+                          return {position:style.position,background:style.backgroundColor,
+                            labelTop:label.top,buttonTop:button.top,
+                            headerHeight:node.getBoundingClientRect().height};
+                        }""")
+                        self.assertEqual(heading["position"],"relative")
+                        self.assertEqual(heading["background"],"rgba(0, 0, 0, 0)")
+                        self.assertLessEqual(abs(heading["labelTop"]-heading["buttonTop"]),24)
+                        self.assertLessEqual(heading["headerHeight"],60)
                         if size["scrollHeight"]>size["clientHeight"]:
                             page.evaluate("""()=>{
                               const dialog=document.querySelector('#participant-offer-dialog');
                               dialog.scrollTop=dialog.scrollHeight;
                             }""")
-                            close=dialog.locator("#participant-offer-close").bounding_box()
-                            self.assertGreaterEqual(close["y"],dialog.bounding_box()["y"]-1,close)
-                            self.assertLessEqual(close["y"]+close["height"],dialog.bounding_box()["y"]+dialog.bounding_box()["height"]+1,close)
+                            dialog.evaluate("node=>node.scrollTop=0")
                         if height<=667:
                             page.set_viewport_size({"width":width,"height":410})
                             compressed=dialog.bounding_box()
