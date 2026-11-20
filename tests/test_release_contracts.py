@@ -95,10 +95,12 @@ class ReleaseContracts(unittest.TestCase):
         signed_ref = helpers.init_data(BOB, start_param=ref_code)
         signed_other = helpers.init_data(BOB, start_param=conflicting)
         self.assertEqual(self.post('/api/session', {'initData': signed_ref})[0], 200)
-        status, rejected = self.post('/api/register', {'initData': signed_ref, 'invite_code': conflicting, 'consent': True})
+        status, rejected = self.post('/api/register', {'initData': signed_ref, 'invite_code': conflicting,
+                                                       'consent': True, **helpers.TEST_ONBOARDING})
         self.assertEqual(status, 409, rejected)
         self.assertEqual(self.post('/api/session', {'initData': signed_other})[0], 200)
-        status, registered = self.post('/api/register', {'initData': signed_other, 'consent': True})
+        status, registered = self.post('/api/register', {'initData': signed_other, 'consent': True,
+                                                         **helpers.TEST_ONBOARDING})
         self.assertEqual(status, 200, registered)
         self.assertEqual(registered['user']['source'], 'referral')
         self.assertEqual(registered['user']['referrer_id'], ALICE)
@@ -106,10 +108,12 @@ class ReleaseContracts(unittest.TestCase):
         # Invalid *signed* start_param must not poison attribution for a new user.
         invalid = helpers.init_data(helpers.CAROL, start_param='ref_not_real1234')
         self.assertEqual(self.post('/api/session', {'initData': invalid})[0], 200)
-        status, no_source = self.post('/api/register', {'initData': invalid, 'consent': True})
+        status, no_source = self.post('/api/register', {'initData': invalid, 'consent': True,
+                                                       **helpers.TEST_ONBOARDING})
         self.assertEqual(status, 400, no_source)
         valid = helpers.init_data(helpers.CAROL, start_param=ref_code)
-        self.assertEqual(self.post('/api/register', {'initData': valid, 'consent': True})[0], 200)
+        self.assertEqual(self.post('/api/register', {'initData': valid, 'consent': True,
+                                                    **helpers.TEST_ONBOARDING})[0], 200)
 
     def test_notification_telegram_http_mock_and_dedup(self):
         self.assertEqual(self.register(ALICE, self.owner_invite())[0], 200)

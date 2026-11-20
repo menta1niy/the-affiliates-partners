@@ -25,7 +25,8 @@ class SchemaMigrationFocused(unittest.TestCase):
                 db.session(owner, owner["id"])
                 invitation = db.invite(owner["id"], owner["id"], "agency")["code"]
                 db.record_start(900001, candidate["id"], invitation)
-                db.register(candidate, owner["id"], None)
+                from tests.test_registration import TEST_ONBOARDING
+                db.register(candidate, owner["id"], None, {**TEST_ONBOARDING, "consent": True})
                 db.receive_crm_event({"event_id": "crm:synthetic:bound", "type": "lead.bound",
                                       "telegram_id": candidate["id"], "crm_lead_id": "synthetic-lead"})
                 db.receive_crm_event({"event_id": "crm:synthetic:offers", "type": "offers.assigned",

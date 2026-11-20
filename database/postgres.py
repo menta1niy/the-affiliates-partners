@@ -40,6 +40,17 @@ CREATE TABLE IF NOT EXISTS notifications_outbox (
 CREATE TABLE IF NOT EXISTS internal_id_sequence (
   singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id BIGINT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS registration_profiles (
+  telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  birth_date TEXT NOT NULL,
+  credit_cards INTEGER NOT NULL DEFAULT 0,
+  installments INTEGER NOT NULL DEFAULT 0,
+  loans INTEGER NOT NULL DEFAULT 0,
+  mortgages INTEGER NOT NULL DEFAULT 0,
+  consent_version TEXT NOT NULL,
+  submitted_at BIGINT NOT NULL,
+  credit_updated_at BIGINT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS crm_events (
   event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL, event_type TEXT NOT NULL,
   received_at BIGINT NOT NULL
@@ -200,6 +211,8 @@ def validate_ready(url):
     """Read-only runtime schema gate for DML-only PostgreSQL credentials."""
     required = {
         "users": {"id", "internal_id", "introduced_by_id", "source", "consent_at"},
+        "registration_profiles": {"telegram_id", "birth_date", "credit_cards", "installments",
+                                   "loans", "mortgages", "consent_version", "submitted_at", "credit_updated_at"},
         "invitations": {"code", "kind", "candidate_label", "blogger_uuid"},
         "crm_registration_outbox": {"telegram_id", "payload", "delivered_at"},
         "crm_lead_bindings": {"crm_lead_id", "telegram_id"},

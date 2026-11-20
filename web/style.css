@@ -3008,3 +3008,172 @@ dialog select,dialog input { max-width:100%; }
 @media(prefers-reduced-motion:reduce) {
   .admin-control .admin-assignment-choice {transition:none;}
 }
+
+/* Stage 5: registration and manual approval, fully inside Telegram Mini App. */
+.participant-app .participant-gate:has(.participant-registration-section) {
+  max-width:780px;
+  border:1px solid var(--float-border);
+  border-radius:var(--float-panel-radius);
+  background:var(--float-fill);
+}
+.participant-app .participant-registration-section {
+  min-width:0;
+  margin-top:16px;
+  padding:17px;
+  border-radius:var(--float-inner-radius);
+  border:1px solid rgba(255,255,255,.12);
+  background:linear-gradient(145deg,rgba(255,255,255,.038),rgba(255,255,255,.012)),#151719;
+}
+.participant-app .participant-registration-section-head {
+  display:flex;align-items:flex-start;gap:12px;
+  margin-bottom:14px;
+}
+.participant-app .participant-registration-section-head > div {flex:1;min-width:0;}
+.participant-app .participant-registration-step {
+  display:grid;place-items:center;
+  flex:0 0 32px;width:32px;height:32px;
+  border-radius:11px;
+  border:1px solid var(--accent-amber-edge);
+  color:var(--accent-amber);
+  background:rgba(228,163,74,.08);
+  font-family:var(--font-display);font-size:11px;
+}
+.participant-app .participant-registration-section h3 {
+  margin:1px 0 7px;
+  font-family:var(--font-display);
+  color:var(--color-text);
+  font-size:clamp(14px,2vw,18px);
+  line-height:1.45;
+}
+.participant-app .participant-registration-section-head p,
+.participant-app .participant-registration-disclaimer {
+  margin:0;
+  color:var(--color-secondary);
+  font-size:12px;
+  line-height:1.65;
+}
+.participant-app .participant-registration-label,
+.participant-app .participant-registration-credit-grid label {
+  display:grid;gap:8px;
+  min-width:0;
+  color:var(--color-text);
+  font-size:13px;font-weight:650;
+}
+.participant-app .participant-registration-label input,
+.participant-app .participant-registration-credit-grid input {
+  box-sizing:border-box;
+  width:100%;min-width:0;min-height:48px;
+  margin:0;padding:11px 13px;
+  border-radius:13px;
+  background:#1B1D20;
+  color:var(--color-text);font-size:15px;
+  border:1px solid rgba(255,255,255,.18);
+}
+.participant-app .participant-registration-label input:focus-visible,
+.participant-app .participant-registration-credit-grid input:focus-visible {
+  border-color:var(--accent-amber-edge);
+}
+.participant-app .participant-registration-label {max-width:360px;}
+.participant-app .participant-registration-credit-grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:13px;
+  margin-bottom:13px;
+}
+.participant-app .participant-registration-age {
+  margin:10px 0 0;color:var(--accent-amber);
+  font-size:12px;line-height:1.6;
+}
+.participant-app .participant-registration-disclosure {
+  min-width:0;
+  margin:0 0 9px;
+  padding:12px 13px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:12px;
+  background:rgba(255,255,255,.025);
+}
+.participant-app .participant-registration-disclosure summary {
+  cursor:pointer;min-height:30px;
+  display:list-item;
+  color:var(--color-text);
+  font-size:13px;font-weight:650;line-height:1.5;
+}
+.participant-app .participant-registration-disclosure[open] summary {
+  color:var(--accent-amber);
+}
+.participant-app .participant-registration-disclosure p {
+  margin:8px 0 0;
+  color:var(--color-secondary);font-size:12px;line-height:1.65;
+}
+.participant-app .participant-registration-check {
+  display:flex;gap:10px;align-items:flex-start;
+  min-height:44px;
+  margin:11px 0 0;padding:9px 3px;
+  font-size:12px;line-height:1.6;
+  color:var(--color-text);
+}
+.participant-app .participant-registration-check input {
+  flex:0 0 20px;width:20px;height:20px;
+  margin:0;accent-color:var(--accent-amber);
+}
+.participant-app .participant-registration-legal .participant-registration-disclaimer {
+  margin-top:12px;
+}
+.participant-app .participant-registration-submit {
+  display:block;width:100%;min-height:49px;
+  margin-top:19px;
+  border-radius:var(--float-control-radius);
+  color:var(--accent-amber-ink);
+  font-size:13px;font-weight:750;
+}
+.participant-app #registration-message {
+  margin:14px 0 0;min-height:16px;
+  font-size:13px;line-height:1.55;
+}
+.participant-app .participant-registration-id {
+  display:grid;gap:10px;
+  margin:19px 0;padding:16px 18px;
+  border-radius:var(--float-inner-radius);
+  background:rgba(228,163,74,.07);
+  border:1px solid var(--accent-amber-edge);
+}
+.participant-app .participant-registration-id span {
+  color:var(--color-secondary);
+  font-size:10px;letter-spacing:.075em;
+  font-weight:750;
+}
+.participant-app .participant-registration-id strong {
+  color:var(--accent-amber);font-family:var(--font-display);
+  font-size:clamp(21px,5.8vw,29px);
+  font-weight:700;line-height:1.35;
+  font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere;
+}
+.participant-app .participant-rejected-reason {
+  margin:14px 0;
+  padding:12px 14px;
+  border-left:3px solid #D37B75;
+  border-radius:9px;
+  background:rgba(211,123,117,.06);
+  color:var(--color-text);
+  line-height:1.6;font-size:13px;
+  overflow-wrap:anywhere;
+}
+@media(max-width:740px) {
+  .participant-app .participant-gate:has(.participant-registration-section) {
+    padding:18px 15px;
+    border-radius:23px;
+  }
+  .participant-app .participant-registration-section {
+    padding:14px 12px;
+    border-radius:17px;
+  }
+  .participant-app .participant-registration-credit-grid {gap:10px;}
+  .participant-app .participant-registration-section-head {gap:10px;}
+  .participant-app .participant-registration-check {font-size:12px;}
+}
+@media(max-width:350px) {
+  .participant-app .participant-registration-credit-grid {
+    grid-template-columns:minmax(0,1fr);
+  }
+}

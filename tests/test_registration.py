@@ -31,6 +31,15 @@ OWNER = 758398804
 ALICE = 721001
 BOB = 721002
 CAROL = 721003
+TEST_ONBOARDING = {
+    "birth_date": "2004-10-19",
+    "credit_cards": 0,
+    "installments": 0,
+    "loans": 0,
+    "mortgages": 0,
+    "privacy_accepted": True,
+    "terms_accepted": True,
+}
 
 
 def init_data(uid, *, username=None, age=0, start_param=None):
@@ -88,6 +97,8 @@ class HttpHarness(unittest.TestCase):
             return error.code, json.load(error)
 
     def as_user(self, path, uid, **payload):
+        if path == "/api/register":
+            payload = {**TEST_ONBOARDING, **payload}
         return self.post(path, {"initData": init_data(uid), **payload})
 
     def owner_invite(self, assignee_id=None):

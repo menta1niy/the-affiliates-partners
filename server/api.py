@@ -152,6 +152,7 @@ class Handler(BaseHTTPRequestHandler):
                 profile = db.session(user, owner)
                 pending_source = profile.pop("pending_source_info", None)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
+                result["registration"] = db.registration_profile(user["id"])
                 if pending_source:
                     result["source_info"] = pending_source
                 result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
@@ -162,9 +163,9 @@ class Handler(BaseHTTPRequestHandler):
                 if code is not None and not isinstance(code, str):
                     return self.send_json(400, {"error": "Некорректный код"})
                 if os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true" and code is None:
-                    profile = db.register_open(user, owner)
+                    profile = db.register_open(user, owner, body)
                 else:
-                    profile = db.register(user, owner, code)
+                    profile = db.register(user, owner, code, body)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
             elif route == "/api/invitations/referral":
                 result = db.invite(user["id"], owner, "referral")

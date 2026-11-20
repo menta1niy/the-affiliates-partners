@@ -59,26 +59,82 @@
         <a class="btn primary" href="https://t.me/affialite_partners_bot" target="_blank" rel="noopener noreferrer">Открыть Telegram-бота ↗</a>
       </section>
       <section id="register-panel" class="panel participant-gate" hidden>
-        <div class="section-kicker">НАЧАЛО РАБОТЫ</div>
-        <h2>Подать заявку на участие</h2>
+        <div class="section-kicker">РЕГИСТРАЦИЯ / ШАГ 01</div>
+        <h2>Стать участником<span class="heading-period">.</span></h2>
         <p id="registration-instructions">Для регистрации откройте приложение через Telegram.</p>
-        <ol class="participant-onboarding-steps">
-          <li>Проверьте данные Telegram и согласие на их обработку.</li>
-          <li>Отправьте заявку администратору.</li>
-          <li>После одобрения здесь появятся назначенные вам офферы.</li>
-        </ol>
         <form id="register-form" hidden>
-          <label class="check"><input type="checkbox" id="consent" required><span>Согласен(на) на обработку данных Telegram, необходимых для регистрации и проверки заявки.</span></label>
-          <button id="register-submit" class="btn primary" type="submit">Отправить заявку ↗</button>
+          <div class="participant-registration-section">
+            <div class="participant-registration-section-head">
+              <span class="participant-registration-step">01</span>
+              <div><h3>Дата рождения</h3><p>Возраст определится автоматически. Офферы доступны только с 18 лет, но реферальные приглашения предусмотрены и для младших участников при соблюдении правил программы.</p></div>
+            </div>
+            <label for="register-birth-date" class="participant-registration-label">Дата рождения
+              <input type="date" id="register-birth-date" name="birth_date" autocomplete="bday" required>
+            </label>
+            <p class="participant-registration-age" id="register-age-preview" role="status">Возраст будет указан после выбора даты.</p>
+          </div>
+          <div class="participant-registration-section">
+            <div class="participant-registration-section-head">
+              <span class="participant-registration-step">02</span>
+              <div><h3>Кредитные продукты</h3><p>Укажите, сколько действующих продуктов у вас есть сейчас. Если нет — поставьте 0.</p></div>
+            </div>
+            <div class="participant-registration-credit-grid">
+              <label for="register-credit-cards">Кредитные карты
+                <input id="register-credit-cards" name="credit_cards" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
+              </label>
+              <label for="register-installments">Рассрочки
+                <input id="register-installments" name="installments" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
+              </label>
+              <label for="register-loans">Кредиты
+                <input id="register-loans" name="loans" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
+              </label>
+              <label for="register-mortgages">Ипотека
+                <input id="register-mortgages" name="mortgages" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
+              </label>
+            </div>
+            <p class="participant-registration-disclaimer">Анкета помогает ориентировочно подобрать предложения. Количество продуктов само по себе не позволяет определить вероятность одобрения кредита или МФО.</p>
+          </div>
+          <div class="participant-registration-section participant-registration-legal">
+            <div class="participant-registration-section-head">
+              <span class="participant-registration-step">03</span>
+              <div><h3>Правила и согласия</h3><p>Ознакомьтесь с информацией перед отправкой.</p></div>
+            </div>
+            <details class="participant-registration-disclosure">
+              <summary>Какие данные используются?</summary>
+              <p>Для заявки мы обрабатываем сведения Telegram, дату рождения, количество действующих кредитных продуктов, внутренний ID и статус рассмотрения. Сведения используются для регистрации, модерации и подбора офферов; они не определяют автоматически банковское одобрение.</p>
+            </details>
+            <details class="participant-registration-disclosure">
+              <summary>Основные правила участия</summary>
+              <p>Заявка рассматривается вручную. До одобрения офферы недоступны. После одобрения для оформления потребуется указать ФИО и ИНН в профиле. Оформление любых офферов для пользователей младше 18 лет запрещено. Вознаграждения начисляются только после подтверждения оснований для выплаты.</p>
+            </details>
+            <label class="check participant-registration-check"><input type="checkbox" id="consent" required><span>Согласен(на) на обработку перечисленных данных для регистрации, модерации и подбора предложений.</span></label>
+            <label class="check participant-registration-check"><input type="checkbox" id="register-terms-consent" required><span>Ознакомился(-ась) с основными правилами участия выше и принимаю их.</span></label>
+            <p class="participant-registration-disclaimer">Развёрнутые юридические документы подлежат утверждению до публичного запуска обновлённой регистрации.</p>
+          </div>
+          <button id="register-submit" class="btn primary participant-registration-submit" type="submit">Отправить заявку на рассмотрение</button>
         </form>
         <p id="registration-message" class="muted" role="status"></p>
       </section>
       <section id="pending-panel" class="panel participant-gate participant-pending" hidden aria-labelledby="pending-title">
         <div class="section-kicker">ЗАЯВКА ОТПРАВЛЕНА</div>
-        <h2 id="pending-title">Ожидайте подтверждения</h2>
+        <h2 id="pending-title">Заявка на рассмотрении<span class="heading-period">.</span></h2>
+        <div class="participant-registration-id">
+          <span>ВАШ ВНУТРЕННИЙ ID</span>
+          <strong id="pending-internal-id">—</strong>
+        </div>
         <p>Заявка находится на рассмотрении администратора. Пока доступ к офферам закрыт. Когда заявку одобрят, назначенные предложения появятся в вашем кабинете.</p>
         <p class="participant-pending-note">Срок рассмотрения не установлен. Проверить текущий статус можно кнопкой ниже.</p>
         <button id="pending-refresh" class="btn primary" type="button">Проверить статус ↻</button>
+      </section>
+      <section id="rejected-panel" class="panel participant-gate participant-pending" hidden aria-labelledby="rejected-title">
+        <div class="section-kicker">РЕШЕНИЕ ПО ЗАЯВКЕ</div>
+        <h2 id="rejected-title">Заявка отклонена<span class="heading-period">.</span></h2>
+        <div class="participant-registration-id">
+          <span>ВАШ ВНУТРЕННИЙ ID</span><strong id="rejected-internal-id">—</strong>
+        </div>
+        <p>Рассмотрение завершено. Номер заявки остаётся закреплённым за вашим аккаунтом.</p>
+        <p id="rejected-reason" class="participant-rejected-reason" hidden></p>
+        <button id="rejected-refresh" class="btn ghost" type="button">Обновить статус</button>
       </section>
 
       <section id="account" hidden>

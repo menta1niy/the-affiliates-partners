@@ -73,6 +73,31 @@
     const descriptions = {pending:"Заявка ожидает решения модератора. Доступ к предложениям пока закрыт.",approved:"Аккаунт подтверждён. Доступ зависит от действующих предложений и вашей роли.",active:"Ваш аккаунт активен.",rejected:"Заявка отклонена. Для уточнения причины обратитесь к команде.",blocked:"Доступ к аккаунту приостановлен.",invited:"Откройте ссылку приглашения через Telegram и отправьте заявку.",unregistered:"Откройте ссылку приглашения через Telegram и отправьте заявку."};
     return {key,label:statusLabels[key] || key,description:descriptions[key] || "Для уточнения статуса обратитесь к администратору."};
   }
+  function displayRegistrationId(user){
+    if(typeof user?.display_id==="string" && /^L-[0-9]{6,}$/.test(user.display_id))return user.display_id;
+    const numeric=Number(user?.internal_id);
+    if(!Number.isSafeInteger(numeric)||numeric<=0)return "—";
+    return ["lead","referrer"].includes(user?.role)
+      ?"L-"+String(numeric).padStart(6,"0")
+      :String(numeric);
+  }
+  function ageFromBirthDate(value){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return null;
+    const [year,month,day]=value.split("-").map(Number);
+    const parsed=new Date(year,month-1,day);
+    if(parsed.getFullYear()!==year || parsed.getMonth()!==month-1 || parsed.getDate()!==day)return null;
+    const today=new Date();
+    if(parsed>today||year<1900)return null;
+    return today.getFullYear()-year -
+      ((today.getMonth()+1<month || (today.getMonth()+1===month && today.getDate()<day))?1:0);
+  }
+  function updateBirthPreview(){
+    const age=ageFromBirthDate($("register-birth-date").value);
+    const node=$("register-age-preview");
+    node.textContent=age===null?"Укажите действительную дату рождения.":"Ваш возраст: "+age+" "+(
+      age%10===1&&age%100!==11?"год":age%10>=2&&age%10<=4&&(age%100<12||age%100>14)?"года":"лет")+
+      ". "+(age<18?"Оформление офферов будет недоступно до 18 лет.":"После одобрения сможете оформлять назначенные офферы.");
+  }
   function referralUrl(response) {
     // Invite codes come from the authorized server endpoint. Never copy
     // arbitrary remote URLs into a participant's referral invitation.
@@ -504,19 +529,24 @@
     const standalone = active && session.open_registration===true;
     if(!standalone)participantView="home";
     setParticipantTabsEnabled(standalone);
-    document.querySelector(".participant-hero").hidden=standalone;
+    document.querySelector(".participant-hero").hidden=standalone || !active;
     show("stats-section",active && session.open_registration===true);
     show("participant-access-summary",!standalone);
-    show("hero-cta",!standalone && (active || (unregisteredStatus(state.key) && session.open_registration===true)));
+    show("hero-cta",!standalone && active);
     $("hero-cta").href=active?"#offers-section":"#register-panel";
     $("hero-cta").firstChild.textContent=active?"Мои офферы ":"Подать заявку ";
-    show("connect",false);show("account",true);
+    show("connect",false);show("account",active);
     const unregistered = ["invited","unregistered","new","not_registered"].includes(state.key);
     show("register-panel",unregistered);
     show("pending-panel",state.key==="pending");
+    show("rejected-panel",state.key==="rejected");
+    text("pending-internal-id",displayRegistrationId(user));
+    text("rejected-internal-id",displayRegistrationId(user));
+    const rejectedReason=String(user.decision_reason||"").slice(0,500);
+    text("rejected-reason",rejectedReason);show("rejected-reason",state.key==="rejected"&&Boolean(rejectedReason));
     const verifiedInvite = Boolean(session.source_info?.inviter_id);
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
-    text("registration-instructions",session.open_registration===true ? "Регистрация выполняется через Telegram. После подачи заявки администратор проверит её и откроет доступ к назначенным предложениям." : verifiedInvite ? "Вы вошли по приглашению. Проверьте данные и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
+    text("registration-instructions",session.open_registration===true ? "Заполните короткую анкету прямо здесь. После отправки вы получите постоянный внутренний ID, а заявку рассмотрит администратор." : verifiedInvite ? "Вы вошли по приглашению. Заполните анкету в Mini App и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     nextStep("Загружаем офферы","Получаем назначения…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
@@ -528,7 +558,7 @@
     text("profile-name",displayName);
     text("profile-avatar",displayName.trim().slice(0,1).toUpperCase());
     text("profile-username",user.username?"@"+user.username:"Telegram");
-    text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : user.internal_id);text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
+    text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : displayRegistrationId(user));text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
@@ -548,7 +578,7 @@
     const button = $("refresh");
     const pendingButton = $("pending-refresh");
     if(button.disabled)return;
-    button.disabled=true;pendingButton.disabled=true;
+    button.disabled=true;pendingButton.disabled=true;$("rejected-refresh").disabled=true;
     error("");
     try {
       if (!initData()) {
@@ -556,7 +586,7 @@
         taskNotice("");
         ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
-        show("connect",true);show("account",false);show("register-panel",false);show("pending-panel",false);
+        show("connect",true);show("account",false);show("register-panel",false);show("pending-panel",false);show("rejected-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
       }
       text("hero-status","Проверяем доступ…");
@@ -568,17 +598,38 @@
       taskNotice("");
       ++offersRequest;++crmStatusRequest;
       ++referralRequest;
-      show("account",false);show("register-panel",false);show("pending-panel",false);show("referral-panel",false);
+      show("account",false);show("register-panel",false);show("pending-panel",false);show("rejected-panel",false);show("referral-panel",false);
       show("connect",true);
       error(e.message);text("hero-status","Не удалось проверить вход");
-    } finally {button.disabled=false;pendingButton.disabled=false;}
+    } finally {button.disabled=false;pendingButton.disabled=false;$("rejected-refresh").disabled=false;}
   }
+  {
+    const today=new Date();
+    $("register-birth-date").max=[today.getFullYear(),
+      String(today.getMonth()+1).padStart(2,"0"),
+      String(today.getDate()).padStart(2,"0")].join("-");
+  }
+  $("register-birth-date").addEventListener("change",updateBirthPreview);
+  $("register-birth-date").addEventListener("input",updateBirthPreview);
   $("register-form").addEventListener("submit",async event => {
     event.preventDefault();error("");
     const button=$("register-submit");button.disabled=true;
+    text("registration-message","Отправляем заявку…");
     try {
-      await api("/register",{consent:$("consent").checked});
-      text("registration-message","Заявка отправлена. Ожидайте решения администратора.");
+      if(ageFromBirthDate($("register-birth-date").value)===null)throw new Error("Проверьте дату рождения.");
+      const values={birth_date:$("register-birth-date").value,consent:$("consent").checked,
+        privacy_accepted:$("consent").checked,
+        terms_accepted:$("register-terms-consent").checked};
+      for(const [name,id] of [["credit_cards","register-credit-cards"],["installments","register-installments"],
+                              ["loans","register-loans"],["mortgages","register-mortgages"]]){
+        const input=$(id);const count=Number(input.value);
+        if(!input.value.trim()||!Number.isInteger(count)||count<0||count>50)
+          throw new Error("Укажите количество каждого вида кредитных продуктов от 0 до 50.");
+        values[name]=count;
+      }
+      if(!values.privacy_accepted||!values.terms_accepted)throw new Error("Подтвердите согласие и ознакомление с правилами.");
+      const result=await api("/register",values);
+      text("registration-message","Заявка отправлена. Ваш ID: "+displayRegistrationId(result.user)+".");
       await refresh();
     } catch(e) {
       text("registration-message",e.message);
@@ -596,6 +647,7 @@
   });
   $("refresh").addEventListener("click",refresh);
   $("pending-refresh").addEventListener("click",refresh);
+  $("rejected-refresh").addEventListener("click",refresh);
   try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");} catch {}
   refresh();
 })();

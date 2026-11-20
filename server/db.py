@@ -161,6 +161,17 @@ def initialize():
         CREATE TABLE IF NOT EXISTS internal_id_sequence (
           singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS registration_profiles (
+          telegram_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          birth_date TEXT NOT NULL,
+          credit_cards INTEGER NOT NULL DEFAULT 0,
+          installments INTEGER NOT NULL DEFAULT 0,
+          loans INTEGER NOT NULL DEFAULT 0,
+          mortgages INTEGER NOT NULL DEFAULT 0,
+          consent_version TEXT NOT NULL,
+          submitted_at INTEGER NOT NULL,
+          credit_updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS crm_events (event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL,
           event_type TEXT NOT NULL, received_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_lead_bindings (crm_lead_id TEXT PRIMARY KEY,
@@ -237,7 +248,9 @@ def initialize():
 def public_user(row):
     if row is None:
         return None
-    return {key: row[key] for key in ("id", "internal_id", "first_name", "last_name", "username", "role", "status", "agency_id", "referrer_id", "manager_id", "source", "introduced_by_id")}
+    result = {key: row[key] for key in ("id", "internal_id", "first_name", "last_name", "username", "role", "status", "agency_id", "referrer_id", "manager_id", "source", "introduced_by_id")}
+    result["display_id"] = ("L-" + str(row["internal_id"]).zfill(6)) if row["internal_id"] is not None and row["role"] in ("lead", "referrer") else None
+    return result
 
 
 def allocate_internal_id(conn):
@@ -254,6 +267,48 @@ def audit(conn, actor, action, target=None, details=""):
 def enqueue(conn, event_key, recipient, message):
     conn.execute("INSERT OR IGNORE INTO notifications_outbox(event_key,chat_id,text,created_at) VALUES(?,?,?,?)",
                  (event_key, recipient, message[:1000], int(time.time())))
+
+
+def save_registration_profile(conn, telegram_id, details, now):
+    conn.execute(
+        "INSERT INTO registration_profiles(telegram_id,birth_date,credit_cards,installments,loans,mortgages,"
+        "consent_version,submitted_at,credit_updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (telegram_id, details["birth_date"], details["credit_cards"], details["installments"],
+         details["loans"], details["mortgages"], details["consent_version"], now, now),
+    )
+
+
+def registration_profile(telegram_id):
+    """Return registration survey only to the authenticated owner of the session."""
+    from server.registration import public_view
+
+    initialize()
+    with transaction() as conn:
+        row = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (telegram_id,)).fetchone()
+        return public_view(row)
+
+
+def notify_registration_submitted(conn, identity, owner_id, internal_id, *, agency_id=None, manager_id=None):
+    display_id = "L-" + str(internal_id).zfill(6)
+    enqueue(conn, "registration:received:" + str(identity["id"]), identity["id"],
+            "The Affiliates Partners\nВаша заявка отправлена и ожидает рассмотрения.\n"
+            "Ваш внутренний ID: " + display_id + ".")
+    recipients = {owner_id}
+    reviewers = conn.execute("SELECT id,role,agency_id FROM users WHERE status='active' "
+                             "AND role IN ('owner','admin','staff')").fetchall()
+    for reviewer in reviewers:
+        if reviewer["role"] == "owner":
+            recipients.add(reviewer["id"])
+        elif reviewer["role"] == "admin" and agency_id is not None and reviewer["agency_id"] == agency_id:
+            recipients.add(reviewer["id"])
+        elif reviewer["role"] == "staff" and reviewer["id"] == manager_id:
+            recipients.add(reviewer["id"])
+    for recipient in recipients:
+        event_key = ("register:" + str(identity["id"]) if recipient == owner_id else
+                     "registration:review:" + str(identity["id"]) + ":" + str(recipient))
+        enqueue(conn, event_key, recipient,
+                "The Affiliates Partners\nНовая заявка на рассмотрение.\n"
+                "Внутренний ID: " + display_id + ".")
 
 
 def get_user(conn, user_id):
@@ -290,7 +345,7 @@ def session(identity, owner_id):
             conn.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?",
                          (identity["first_name"], identity["last_name"], identity["username"], identity["id"]))
             row = get_user(conn, identity["id"])
-        return public_user(row) if row else {
+        return {**public_user(row), "decision_reason": row["decision_reason"] if row["status"] == "rejected" else ""} if row else {
             **identity, "role": "lead", "status": "invited", "agency_id": None,
             "referrer_id": None, "manager_id": None,
             "pending_source_info": ({
@@ -300,13 +355,15 @@ def session(identity, owner_id):
         }
 
 
-def register(identity, owner_id, invitation_code):
+def register(identity, owner_id, invitation_code, registration_data=None, *, standalone=False):
+    from server.registration import normalize
     initialize()
     with transaction() as conn:
         ensure_owner(conn, owner_id)
         existing = get_user(conn, identity["id"])
         if existing:
             return public_user(existing)
+        details = normalize(registration_data)
         capture_signed_start(conn, identity)
         pending = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         if pending and invitation_code and invitation_code != pending["code"]:
@@ -354,12 +411,11 @@ def register(identity, owner_id, invitation_code):
             # Agency introductions are individual, while referral links are reusable.
             conn.execute("UPDATE invitations SET active=0 WHERE code=?", (code,))
         conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (identity["id"],))
+        save_registration_profile(conn, identity["id"], details, now)
         audit(conn, identity["id"], "register", identity["id"], "source=" + invite["kind"])
-        enqueue(conn, "register:" + str(identity["id"]), owner_id,
-                "Новая заявка в The Affiliates Partners.\n"
-                "Внутренний ID: " + str(internal_id) + ".\n"
-                "Telegram ID кандидата: " + str(identity["id"]) + ".\n"
-                "Статус: ожидает рассмотрения.")
+        notify_registration_submitted(conn, identity, owner_id, internal_id, agency_id=agency, manager_id=manager)
+        if standalone:
+            return public_user(get_user(conn, identity["id"]))
         source_type = {"referral": "referrer", "agency": "agency", "blogger": "blogger"}[invite["kind"]]
         # A staff-assigned agency invitation is employee-sourced traffic,
         # even when an owner generated the link on their behalf. Keep the
@@ -380,7 +436,7 @@ def register(identity, owner_id, invitation_code):
         return public_user(get_user(conn, identity["id"]))
 
 
-def register_open(identity, owner_id):
+def register_open(identity, owner_id, registration_data=None):
     """Opt-in standalone MVP onboarding; still requires verified Telegram initData.
 
     Unlike the existing referral workflow, no attribution is invented and no
@@ -388,27 +444,34 @@ def register_open(identity, owner_id):
     """
     initialize()
     with transaction() as check:
+        existing = get_user(check, identity["id"])
+        if existing:
+            return public_user(existing)
         pending = check.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         linked = bool(pending and valid_invitation_source(check, identity["id"], pending["code"]))
     if linked or identity.get("start_param"):
-        return register(identity, owner_id, None)
+        return register(identity, owner_id, None, registration_data, standalone=True)
     with transaction() as conn:
         ensure_owner(conn, owner_id)
         existing = get_user(conn, identity["id"])
         if existing:
             return public_user(existing)
+        from server.registration import normalize
+        details = normalize(registration_data)
         capture_signed_start(conn, identity)
         verified_source = conn.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         if verified_source and valid_invitation_source(conn, identity["id"], verified_source["code"]):
             raise Problem(409, "Используйте подтверждённое приглашение для регистрации")
         now = int(time.time())
+        internal_id = allocate_internal_id(conn)
         conn.execute("INSERT INTO users(id,internal_id,first_name,last_name,username,role,status,agency_id,manager_id,registered_at,updated_at,consent_at) "
                      "VALUES(?,?,?,?,?,'lead','pending',?,?,?,?,?)",
-                     (identity["id"], allocate_internal_id(conn), identity["first_name"], identity["last_name"],
+                     (identity["id"], internal_id, identity["first_name"], identity["last_name"],
                       identity["username"], owner_id, owner_id, now, now, now))
+        save_registration_profile(conn, identity["id"], details, now)
         audit(conn, identity["id"], "mvp_registration", identity["id"])
-        enqueue(conn, f"mvp:register:{identity['id']}", owner_id,
-                "Новая заявка Partners. Telegram ID: " + str(identity["id"]))
+        notify_registration_submitted(conn, identity, owner_id, internal_id,
+                                      agency_id=owner_id, manager_id=owner_id)
         return public_user(get_user(conn, identity["id"]))
 
 

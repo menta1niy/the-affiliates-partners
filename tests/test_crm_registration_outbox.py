@@ -82,7 +82,9 @@ class OutboundRegistrationTests(unittest.TestCase):
                          "VALUES(?, 'Staff', 'staff', 'active', ?, ?, ?)", (staff, owner, now, now))
         invite = db.invite(owner, owner, "agency", assignee=staff)["code"]
         db.record_start(owner, participant, invite)
-        db.register({"id": participant, "first_name": "Test", "last_name": "", "username": ""}, owner, None)
+        from tests.test_registration import TEST_ONBOARDING
+        db.register({"id": participant, "first_name": "Test", "last_name": "", "username": ""},
+                    owner, None, {**TEST_ONBOARDING, "consent": True})
         with db.transaction() as conn:
             payload = json.loads(conn.execute("SELECT payload FROM crm_registration_outbox WHERE telegram_id=?",
                                               (participant,)).fetchone()["payload"])
