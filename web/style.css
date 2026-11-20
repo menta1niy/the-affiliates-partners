@@ -13,11 +13,13 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 .task-report{display:grid;gap:10px;margin-top:18px}.task-report select{max-width:380px}.task-report .btn{justify-self:start}.task-report p{margin:0}.history-entry{padding:15px 0;border-bottom:1px solid var(--line)}.history-entry strong{font-size:14px}.history-entry p{margin:4px 0;overflow-wrap:anywhere}
 .published-instruction-text{white-space:pre-wrap;overflow-wrap:anywhere}.published-instruction-images{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:14px 0}.published-instruction-images img{display:block;width:100%;height:auto;max-height:350px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#080909}.published-instruction-links{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.published-instruction-links a{padding:9px 12px;border:1px solid var(--line);border-radius:8px;overflow-wrap:anywhere;max-width:100%;text-decoration:underline}
-/* Visual Foundation v2: Black Graphite / Frosted White Glass / Soft White Glow.
-   Keep component geometry and API-driven DOM intact until later stages. */
+/* Amber Edition foundation. Shared values live here, not in later overrides.
+   Neutral --color-accent remains white; interactive accents use --accent-amber. */
 :root {
   color-scheme: dark;
-  font-family: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-body: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-display: "Unbounded", "Plus Jakarta Sans", system-ui, sans-serif;
+  font-family: var(--font-body);
   font-weight: 400;
   --color-bg: #080909;
   --color-bg-secondary: #0D0E10;
@@ -31,6 +33,11 @@
   --color-muted: #929598;
   --color-accent: #FFFFFF;
   --color-accent-ink: #080909;
+  --accent-amber: #E4A34A;
+  --accent-amber-hover: #F0B660;
+  --accent-amber-ink: #18110A;
+  --accent-amber-edge: rgba(228,163,74,.42);
+  --accent-amber-glow: rgba(228,163,74,.15);
   --glass-quiet: rgba(255,255,255,.028);
   --glass-functional: rgba(255,255,255,.045);
   --glass-emphasis: rgba(255,255,255,.075);
@@ -43,6 +50,22 @@
   --shadow-panel: 0 12px 32px rgba(0,0,0,.22);
   --radius-card: 16px;
   --radius-control: 12px;
+  --float-panel-radius: 28px;
+  --float-inner-radius: 22px;
+  --float-control-radius: 18px;
+  --float-fill: linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.015) 60%),rgba(20,22,25,.85);
+  --float-border: rgba(255,255,255,.14);
+  --float-shadow: inset 0 1px 0 rgba(255,255,255,.075),0 16px 38px rgba(0,0,0,.24);
+  --screen-heading-height: 155px;
+  --screen-heading-height-mobile: 132px;
+  --screen-title-size: clamp(17px,3.1vw,30px);
+  --screen-title-size-mobile: clamp(16px,5vw,24px);
+  --screen-kicker-size: clamp(8px,2vw,10px);
+  --dock-radius: 25px;
+  --dock-blur: 22px;
+  --dock-action-width: 48px;
+  --dock-action-height: 46px;
+  --lead-nav-columns: 3;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -53,6 +76,13 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --control-height: 48px;
+  --control-height-compact: 44px;
+  --control-duration: 160ms;
+  --control-ease: cubic-bezier(.2,.75,.3,1);
+  --divider: rgba(255,255,255,.085);
+  --glass-stroke: rgba(255,255,255,.13);
+  --glass-stroke-active: rgba(255,255,255,.38);
   /* Compatibility aliases used by the current layout. No green accent. */
   --paper: var(--color-bg);
   --surface: var(--color-surface);
@@ -96,10 +126,10 @@ body {
   }
 }
 h1,h2,h3,h4,h5,h6,.brand,.metric strong {
-  font-family: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-family:var(--font-body);
   font-weight: 800;
 }
-body,button,input,select,textarea { font-family: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+body,button,input,select,textarea { font-family:var(--font-body); }
 h1 { letter-spacing: -.05em; }
 h2,h3 { letter-spacing: -.035em; }
 .metric strong { font-variant-numeric: tabular-nums; letter-spacing: -.045em; }
@@ -248,16 +278,6 @@ dialog::backdrop { background:rgba(0,0,0,.79); }
 
 /* Core Components v3 — shared, composable surfaces and interaction states.
    Screen composition and navigation are intentionally unchanged in this stage. */
-:root {
-  --control-height: 48px;
-  --control-height-compact: 44px;
-  --control-duration: 160ms;
-  --control-ease: cubic-bezier(.2,.75,.3,1);
-  --divider: rgba(255,255,255,.085);
-  --glass-stroke: rgba(255,255,255,.13);
-  --glass-stroke-active: rgba(255,255,255,.38);
-}
-
 /* A restrained edge highlight, not a permanent glow on every component. */
 .panel,.cards .panel,.offer-item,.metric,.owner-preview-card,.participant-detail-item {
   border: 1px solid var(--glass-border);
@@ -1726,26 +1746,13 @@ dialog select,dialog input { max-width:100%; }
   }
 }
 
-/* Final mobile UX audit: keep the offer dialog's close control usable on short screens. */
-.participant-app .participant-offer-dialog-head {
-  position:sticky;top:-25px;z-index:2;
-  padding:9px 0 12px;margin-top:-9px;
-  background:#121416;
-  border-bottom:1px solid rgba(255,255,255,.10);
-}
+/* The dialog heading shares the modal surface (no opaque sticky strip). */
 .participant-app #participant-offer-close {
   display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;
   gap:7px;white-space:nowrap;min-height:44px;min-width:44px;
 }
 .participant-app .participant-offer-close-mark {font-size:19px;line-height:1;}
 @media (max-width:740px) {
-  .participant-app .participant-offer-dialog-head {
-    top:-19px;flex-wrap:nowrap;gap:8px;
-  }
-  .participant-app .participant-offer-dialog-head .section-kicker {
-    max-width:calc(100% - 60px);
-    font-size:10px;line-height:1.45;
-  }
   .participant-app #participant-offer-close {
     width:44px;height:44px;padding:0;border-radius:12px;
   }
@@ -1777,22 +1784,23 @@ dialog select,dialog input { max-width:100%; }
     width:max-content;max-width:calc(100vw - 24px);
     transform:translateX(-50%);
     margin:0;padding:5px;
-    border-radius:25px;
+    border-radius:var(--dock-radius);
     border:1px solid rgba(255,255,255,.23);
     background:linear-gradient(140deg,rgba(255,255,255,.145),rgba(255,255,255,.045) 48%,rgba(255,255,255,.09)),rgba(18,20,23,.57);
-    -webkit-backdrop-filter:blur(22px) saturate(155%);
-    backdrop-filter:blur(22px) saturate(155%);
+    -webkit-backdrop-filter:blur(var(--dock-blur)) saturate(155%);
+    backdrop-filter:blur(var(--dock-blur)) saturate(155%);
     box-shadow:0 12px 32px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.14),0 0 16px rgba(255,255,255,.035);
     z-index:40;
   }
   .participant-app .participant-nav {
-    display:grid;grid-template-columns:repeat(3,48px);gap:4px;
+    display:grid;grid-template-columns:repeat(var(--lead-nav-columns),var(--dock-action-width));gap:4px;
   }
   .participant-app .participant-nav a,
   .admin-control .admin-tabs button {
     box-sizing:border-box;display:flex;align-items:center;justify-content:center;
-    width:48px;height:46px;min-height:46px;min-width:48px;
-    padding:0;margin:0;flex:0 0 48px;gap:0;
+    width:var(--dock-action-width);height:var(--dock-action-height);
+    min-height:var(--dock-action-height);min-width:var(--dock-action-width);
+    padding:0;margin:0;flex:0 0 var(--dock-action-width);gap:0;
     font-size:0;line-height:1;border-radius:18px;
     color:rgba(232,234,237,.72);border:1px solid transparent;
     background:transparent;box-shadow:none;
@@ -1849,12 +1857,6 @@ dialog select,dialog input { max-width:100%; }
   content:"";position:absolute;pointer-events:none;inset:0;z-index:-1;
   background:radial-gradient(ellipse at 90% 18%,rgba(255,255,255,.13),transparent 49%),
     linear-gradient(135deg,rgba(255,255,255,.058),transparent 52%);
-}
-.participant-app .participant-screen-offers {
-  background:linear-gradient(148deg,#22252a,#121416 72%);
-}
-.participant-app .participant-screen-profile {
-  background:linear-gradient(148deg,#121417,#1c1f22 77%);
 }
 .participant-app .participant-screen-intro h1,
 .admin-control .admin-screen-intro h1 {
@@ -1927,7 +1929,6 @@ dialog select,dialog input { max-width:100%; }
 
 /* Type restoration: Unbounded for display, neutral tracking for its wide glyphs.
    Body copy remains Plus Jakarta Sans for clarity on narrow Telegram screens. */
-:root {--font-display:"Unbounded","Plus Jakarta Sans",system-ui,sans-serif;}
 .participant-app h1,.participant-app h2,.participant-app h3,
 .admin-control h1,.admin-control h2,.admin-control h3,
 .participant-app .brand,.admin-control .brand,
@@ -1939,7 +1940,7 @@ dialog select,dialog input { max-width:100%; }
   letter-spacing:0;
 }
 .participant-app .brand,.admin-control .brand {font-weight:700;letter-spacing:.015em;}
-.participant-app .brand small,.admin-control .brand small {font-family:"Plus Jakarta Sans",system-ui,sans-serif;}
+.participant-app .brand small,.admin-control .brand small {font-family:var(--font-body);}
 .participant-app h1,.participant-app h2,.participant-app h3,
 .admin-control h1,.admin-control h2,.admin-control h3 {
   font-weight:700;
@@ -2008,16 +2009,7 @@ dialog select,dialog input { max-width:100%; }
 }
 
 /* Rounded float system: unify lead and admin panels with the compact glass dock.
-/* Keep native modal top-layer behavior, semantics and existing permissions intact. */
-.participant-app,
-.admin-control {
-  --float-panel-radius:28px;
-  --float-inner-radius:22px;
-  --float-control-radius:18px;
-  --float-fill:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.015) 60%),rgba(20,22,25,.85);
-  --float-border:rgba(255,255,255,.14);
-  --float-shadow:inset 0 1px 0 rgba(255,255,255,.075),0 16px 38px rgba(0,0,0,.24);
-}
+   Keep native modal top-layer behavior, semantics and existing permissions intact. */
 .participant-app .panel,
 .admin-control .panel,
 .participant-app .participant-screen-intro,
@@ -2158,16 +2150,16 @@ dialog select,dialog input { max-width:100%; }
   .admin-control .admin-sidebar {
     width:max-content;
     max-width:calc(100vw - 24px);
-    border-radius:25px;
+    border-radius:var(--dock-radius);
     padding:5px;
   }
   .participant-app #participant-nav a,
   .admin-control .admin-tabs button {
-    flex:0 0 48px;
-    width:48px;
-    height:46px;
-    min-width:48px;
-    min-height:46px;
+    flex:0 0 var(--dock-action-width);
+    width:var(--dock-action-width);
+    height:var(--dock-action-height);
+    min-width:var(--dock-action-width);
+    min-height:var(--dock-action-height);
     border-radius:18px;
     padding:0;
   }
@@ -2429,14 +2421,6 @@ dialog select,dialog input { max-width:100%; }
 }
 
 /* Amber Edition: restrained warm-gold emphasis, without recoloring semantic statuses. */
-.participant-app,
-.admin-control {
-  --accent-amber:#E4A34A;
-  --accent-amber-hover:#F0B660;
-  --accent-amber-ink:#18110A;
-  --accent-amber-edge:rgba(228,163,74,.42);
-  --accent-amber-glow:rgba(228,163,74,.15);
-}
 .participant-app .participant-offer-summary .participant-offer-payment strong,
 .participant-app .participant-offer-dialog .participant-offer-payment strong,
 .participant-app .participant-kpi-grid .metric strong,
@@ -2495,15 +2479,13 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-offer-detail-button {transition:none;}
 }
 
-/* Mobile consistency: Offers and Profile share one identical screen-header shell. */
-.participant-app .participant-screen-offers,
-.participant-app .participant-screen-profile {
+/* One lead screen-header component for Offers, Profile and future Statistics. */
+.participant-app .participant-screen-intro {
   background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.025) 64%),#141619;
-  min-height:155px;
+  min-height:var(--screen-heading-height);
 }
-.participant-app .participant-screen-offers h1,
-.participant-app .participant-screen-profile h1 {
-  font-size:clamp(17px,3.1vw,30px);
+.participant-app .participant-screen-intro h1 {
+  font-size:var(--screen-title-size);
   font-weight:700;
   letter-spacing:-.008em;
   line-height:1.35;
@@ -2511,9 +2493,8 @@ dialog select,dialog input { max-width:100%; }
   overflow-wrap:normal;
   margin:25px 0 0;
 }
-.participant-app .participant-screen-offers > .section-kicker,
-.participant-app .participant-screen-profile > .section-kicker {
-  font-size:clamp(8px,2vw,10px);
+.participant-app .participant-screen-intro > .section-kicker {
+  font-size:var(--screen-kicker-size);
   letter-spacing:.08em;
   white-space:nowrap;
 }
@@ -2541,15 +2522,26 @@ dialog select,dialog input { max-width:100%; }
   padding:0;border-radius:15px;
 }
 @media(max-width:740px) {
-  .participant-app .participant-screen-offers,
-  .participant-app .participant-screen-profile {min-height:132px;}
-  .participant-app .participant-screen-offers h1,
-  .participant-app .participant-screen-profile h1 {
-    font-size:clamp(16px,5vw,24px);
+  .participant-app .participant-screen-intro {min-height:var(--screen-heading-height-mobile);}
+  .participant-app .participant-screen-intro h1 {
+    font-size:var(--screen-title-size-mobile);
     margin-top:22px;
   }
   .participant-app .participant-offer-dialog-head,
   .participant-app .participant-offer-dialog .participant-offer-dialog-head {
     align-items:center;flex-wrap:nowrap;gap:10px;margin-bottom:14px;
   }
+}
+
+/* Shared interaction states; these do not change status badge semantics. */
+.participant-app :is(a,button,input,select,textarea):focus-visible,
+.admin-control :is(a,button,input,select,textarea):focus-visible {
+  outline:2px solid var(--accent-amber);
+  outline-offset:3px;
+}
+.participant-app :is(a,button):disabled,
+.admin-control :is(a,button):disabled,
+.participant-app :is(a,button)[aria-disabled="true"],
+.admin-control :is(a,button)[aria-disabled="true"] {
+  cursor:not-allowed;
 }
