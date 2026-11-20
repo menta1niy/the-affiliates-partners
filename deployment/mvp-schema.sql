@@ -56,8 +56,28 @@ CREATE TABLE IF NOT EXISTS manual_offer_events (
 );
 CREATE INDEX IF NOT EXISTS ix_manual_offer_events_user ON manual_offer_events(telegram_id,created_at);
 CREATE INDEX IF NOT EXISTS ix_manual_offer_events_review ON manual_offer_events(review_status,created_at);
+CREATE TABLE IF NOT EXISTS finance_accruals (
+  id TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES users(id),
+  offer_id TEXT NOT NULL REFERENCES manual_offers(id),
+  amount_rub BIGINT NOT NULL CHECK(amount_rub>0),
+  source_reference TEXT NOT NULL UNIQUE, note TEXT NOT NULL DEFAULT '',
+  confirmed_by BIGINT NOT NULL REFERENCES users(id), created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_finance_accruals_user ON finance_accruals(telegram_id,created_at);
+CREATE TABLE IF NOT EXISTS finance_withdrawals (
+  id TEXT PRIMARY KEY,telegram_id BIGINT NOT NULL REFERENCES users(id),
+  amount_rub BIGINT NOT NULL CHECK(amount_rub>0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','rejected','paid')),
+  review_note TEXT NOT NULL DEFAULT '', payment_reference TEXT NOT NULL DEFAULT '',
+  reviewed_by BIGINT REFERENCES users(id), created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(telegram_id,created_at);
+CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
+  ON finance_withdrawals(payment_reference) WHERE payment_reference!='';
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.registration_profiles TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.participant_identities TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offer_events TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.finance_accruals, partners.finance_withdrawals TO "ta-partners";
 COMMIT;

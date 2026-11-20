@@ -114,6 +114,31 @@
             await openParticipant(person);
           },"danger"));
           item.append(select,note,buttons);
+          if(state.role==="owner" || state.role==="admin"){
+            const credit=make("div",undefined,"admin-finance-credit-inline");
+            const amount=make("input");amount.type="number";amount.min="1";amount.max="10000000";
+            amount.step="1";amount.inputMode="numeric";amount.placeholder="Сумма начисления, ₽";
+            amount.setAttribute("aria-label","Подтверждённое начисление для "+offer.name);
+            const reference=make("input");reference.type="text";reference.maxLength=120;
+            reference.placeholder="Внешний ID подтверждения";
+            reference.setAttribute("aria-label","Уникальный номер подтверждения для "+offer.name);
+            const submit=action("Добавить подтверждённое начисление",async()=>{
+              const value=Number(amount.value);
+              if(!amount.value.trim()||!Number.isSafeInteger(value)||value<1||value>10000000)
+                throw new Error("Укажите сумму в целых рублях.");
+              const source=reference.value.trim();
+              if(!/^[A-Za-z0-9][A-Za-z0-9._:/-]{3,119}$/.test(source))
+                throw new Error("Укажите уникальный внешний ID подтверждения (4–120 символов).");
+              if(!window.confirm("Добавить вручную подтверждённое начисление "+number(value)+
+                " ₽ участнику "+personName(person)+"? Статус оффера не подтверждает банковское начисление."))
+                return;
+              await api("/admin/finance/accrue",{user_id:id,offer_id:offer.id,amount_rub:value,source_reference:source});
+              notice("Начисление подтверждено. Повтор с таким ID невозможен.");
+              await openParticipant(person);
+            },"primary");
+            credit.append(make("p","Финансовое подтверждение только при наличии независимого основания.","muted"),amount,reference,submit);
+            item.append(credit);
+          }
           section.append(item);
         }
         const available=await api("/admin/mvp/catalog");
@@ -511,7 +536,7 @@
     people:{name:"Пользователи",description:"Регистрации, профили и права участников.",number:"04"},
     more:{name:"Ещё",description:"Приглашения, история действий и другие инструменты.",number:"05"}
   };
-  const subtabSection={pending:"people",users:"people",offer_reviews:"people",invitations:"more",audit:"more"};
+  const subtabSection={pending:"people",users:"people",offer_reviews:"people",finance:"people",invitations:"more",audit:"more"};
   const defaultSubtab={people:"pending",more:"invitations"};
   function canManageOffers(){return state.role==="owner" || state.role==="admin";}
   async function renderOffersView(){
@@ -761,7 +786,63 @@
     });
     if(tab==="audit")loadAudit();
     if(tab==="offer_reviews")loadOfferReviewQueue();
+    if(tab==="finance")loadFinanceQueue();
   }
+  async function loadFinanceQueue(){
+    const root=$("admin-finance-list");
+    root.replaceChildren(make("p","Загружаем заявки на вывод…","muted"));
+    try{
+      const response=await api("/admin/finance/withdrawals",{status:$("admin-finance-filter").value});
+      if(state.tab!=="finance")return;
+      root.replaceChildren();
+      if(!response.withdrawals?.length){
+        root.append(make("p","Заявок с таким статусом нет.","muted"));return;
+      }
+      const statusNames={pending:"На рассмотрении",confirmed:"Подтверждена",
+        rejected:"Отклонена",paid:"Выплачена"};
+      for(const payout of response.withdrawals){
+        const card=make("article",undefined,"admin-offer-event-card");
+        card.append(make("span",payout.display_id+" · "+payout.id.slice(-8),"section-kicker"));
+        card.append(make("h3",number(payout.amount_rub)+" ₽"));
+        card.append(make("p",statusNames[payout.status]||payout.status));
+        if(payout.review_note)card.append(make("p","Комментарий: "+payout.review_note,"muted"));
+        if(payout.status==="pending"||payout.status==="confirmed"){
+          const note=make("textarea");note.maxLength=300;note.rows=2;
+          note.placeholder="Причина отказа или комментарий";
+          note.setAttribute("aria-label","Комментарий заявки "+payout.display_id);
+          card.append(note);
+          const actions=make("div",undefined,"admin-offer-event-actions");
+          if(canManageOffers()){
+            if(payout.status==="pending")actions.append(action("Подтвердить",async()=>{
+              if(!window.confirm("Подтвердить заявку на "+number(payout.amount_rub)+" ₽? Сумма останется в резерве."))return;
+              await api("/admin/finance/decision",{withdrawal_id:payout.id,decision:"confirm",note:note.value});
+              notice("Заявка подтверждена");await loadFinanceQueue();
+            },"primary"));
+            if(payout.status==="confirmed")actions.append(action("Выплачена",async()=>{
+              const payment=window.prompt("Уникальный ID реально отправленного платежа:");
+              if(payment===null)return;
+              if(!/^[A-Za-z0-9][A-Za-z0-9._:/-]{3,119}$/.test(payment.trim()))
+                throw new Error("Нужен уникальный номер операции (4–120 символов).");
+              if(!window.confirm("Отметить как фактически выплаченную сумму "+number(payout.amount_rub)+" ₽?"))return;
+              await api("/admin/finance/decision",{withdrawal_id:payout.id,decision:"paid",
+                payment_reference:payment.trim(),note:note.value});
+              notice("Фактический платёж учтён");await loadFinanceQueue();
+            },"primary"));
+            actions.append(action("Отклонить",async()=>{
+              if(!note.value.trim())throw new Error("Укажите причину отказа.");
+              if(!window.confirm("Отклонить заявку? Зарезервированные средства вернутся в доступный баланс."))return;
+              await api("/admin/finance/decision",{withdrawal_id:payout.id,decision:"reject",note:note.value});
+              notice("Заявка отклонена, резерв возвращён");await loadFinanceQueue();
+            }));
+          }
+          card.append(actions);
+        }
+        root.append(card);
+      }
+    }catch(err){root.replaceChildren(make("p",err.message,"message error"));error(err.message);}
+  }
+  $("admin-finance-filter").addEventListener("change",loadFinanceQueue);
+  $("admin-finance-reload").addEventListener("click",loadFinanceQueue);
   async function loadOfferReviewQueue(){
     const root=$("admin-offer-event-list");
     root.replaceChildren(make("p","Загружаем заявки…","muted"));

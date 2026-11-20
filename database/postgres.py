@@ -136,6 +136,25 @@ CREATE INDEX IF NOT EXISTS ix_manual_offer_events_user
   ON manual_offer_events(telegram_id,created_at);
 CREATE INDEX IF NOT EXISTS ix_manual_offer_events_review
   ON manual_offer_events(review_status,created_at);
+CREATE TABLE IF NOT EXISTS finance_accruals (
+  id TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES users(id),
+  offer_id TEXT NOT NULL REFERENCES manual_offers(id),
+  amount_rub BIGINT NOT NULL CHECK(amount_rub>0),
+  source_reference TEXT NOT NULL UNIQUE, note TEXT NOT NULL DEFAULT '',
+  confirmed_by BIGINT NOT NULL REFERENCES users(id), created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_finance_accruals_user ON finance_accruals(telegram_id,created_at);
+CREATE TABLE IF NOT EXISTS finance_withdrawals (
+  id TEXT PRIMARY KEY,telegram_id BIGINT NOT NULL REFERENCES users(id),
+  amount_rub BIGINT NOT NULL CHECK(amount_rub>0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','rejected','paid')),
+  review_note TEXT NOT NULL DEFAULT '', payment_reference TEXT NOT NULL DEFAULT '',
+  reviewed_by BIGINT REFERENCES users(id), created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(telegram_id,created_at);
+CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
+  ON finance_withdrawals(payment_reference) WHERE payment_reference!='';
 CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
@@ -251,10 +270,16 @@ def validate_ready(url):
         "manual_offer_events": {"id", "telegram_id", "offer_id", "kind", "lead_stage", "proof_url",
                                 "evidence_data", "evidence_type", "review_status", "review_note",
                                 "reviewed_by", "created_at", "reviewed_at"},
+        "finance_accruals": {"id","telegram_id","offer_id","amount_rub","source_reference","note",
+                             "confirmed_by","created_at"},
+        "finance_withdrawals": {"id","telegram_id","amount_rub","status","review_note",
+                                "payment_reference","reviewed_by","created_at","updated_at"},
     }
     tables = ("pending_starts", "telegram_updates", "audit", "notifications_outbox", "internal_id_sequence", "crm_events")
     indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user", "ix_manual_assignments_user",
-               "ix_manual_offer_events_user", "ix_manual_offer_events_review"}
+               "ix_manual_offer_events_user", "ix_manual_offer_events_review",
+               "ix_finance_accruals_user", "ix_finance_withdrawals_user", "ix_finance_withdrawals_status",
+               "ix_finance_withdrawals_payment_ref"}
     with connect(url).raw as conn:
         rows = conn.execute("SELECT table_name,column_name FROM information_schema.columns "
                             "WHERE table_schema='partners'").fetchall()

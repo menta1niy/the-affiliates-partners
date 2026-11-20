@@ -5,6 +5,47 @@
   const roleLabels = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник"};
   const statusLabels = {pending:"На рассмотрении",approved:"Подтверждён",active:"Активен",rejected:"Отклонён",blocked:"Заблокирован",invited:"Не зарегистрирован",unregistered:"Не зарегистрирован",new:"Не зарегистрирован"};
   let current = null;
+  let financeRequestId=0;
+  const money = value => Number.isSafeInteger(Number(value))
+    ? new Intl.NumberFormat("ru-RU").format(Number(value))+" ₽" : "—";
+  async function loadFinance(){
+    const id=++financeRequestId;
+    const fields=["finance-available","finance-reserved","finance-paid","finance-accrued"];
+    for(const field of fields)text(field,"Загрузка…");
+    const renderRows=(target,items,kind)=>{
+      const root=$(target);root.replaceChildren();
+      if(!items?.length){const p=document.createElement("p");p.className="muted";
+        p.textContent="Записей пока нет.";root.append(p);return;}
+      const labels={pending:"На рассмотрении",confirmed:"Подтверждена",
+        rejected:"Отклонена",paid:"Выплачена"};
+      for(const entry of items){
+        const item=document.createElement("div");item.className="participant-finance-history-item";
+        const title=document.createElement("strong");
+        title.textContent=money(entry.amount_rub)+" · "+
+          (kind==="withdrawals"?(labels[entry.status]||entry.status):"Подтверждённое начисление");
+        const detail=document.createElement("small");detail.textContent=kind==="withdrawals"
+          ?(entry.review_note||"Заявка № "+entry.id.slice(-8))
+          :"Основание: "+entry.source_reference;
+        item.append(title,detail);root.append(item);
+      }
+    };
+    try{
+      const data=await api("/finance/overview");
+      if(id!==financeRequestId)return;
+      text("finance-available",money(data.balances.available_rub));
+      text("finance-reserved",money(data.balances.reserved_rub));
+      text("finance-paid",money(data.balances.paid_rub));
+      text("finance-accrued",money(data.balances.accrued_rub));
+      $("finance-request-amount").max=String(Math.min(10000000,data.balances.available_rub));
+      $("finance-request-submit").disabled=data.balances.available_rub<1;
+      renderRows("finance-withdrawals",data.withdrawals,"withdrawals");
+      renderRows("finance-accruals",data.accruals,"accruals");
+    }catch(err){
+      if(id!==financeRequestId)return;
+      text("finance-available","—");text("finance-reserved","—");text("finance-paid","—");text("finance-accrued","—");
+      text("finance-request-feedback","Не удалось загрузить финансы: "+err.message);
+    }
+  }
   const gateReasons={
     underage:"Оформление недоступно до 18 лет. Реферальные приглашения остаются доступны.",
     identity:"Сначала заполните ФИО и ИНН в профиле.",
@@ -682,6 +723,8 @@
     text("profile-username",user.username?"@"+user.username:"Telegram");
     text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : displayRegistrationId(user));text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const canEditProfile=active && ["lead","referrer"].includes(role) && session.open_registration===true;
+    show("participant-finance-panel",canEditProfile);
+    if(canEditProfile)loadFinance();else ++financeRequestId;
     show("participant-identity-panel",canEditProfile);
     show("participant-credit-panel",canEditProfile);
     show("profile-age-row",Boolean(session.registration?.age!==undefined&&session.registration?.age!==null));
@@ -815,6 +858,23 @@
       await refresh();
     }catch(e){text("participant-identity-message",e.message);}
     finally{save.disabled=false;}
+  });
+  $("participant-finance-request").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const submit=$("finance-request-submit");submit.disabled=true;
+    const field=$("finance-request-amount");
+    const amount=Number(field.value);
+    try{
+      if(!field.value.trim()||!Number.isSafeInteger(amount)||amount<1)
+        throw new Error("Введите положительную сумму в целых рублях.");
+      if(!window.confirm("Запросить выплату "+money(amount)+"? Сумма будет зарезервирована до решения."))
+        return;
+      await api("/finance/withdraw",{amount_rub:amount});
+      field.value="";
+      text("finance-request-feedback","Заявка отправлена на рассмотрение.");
+      await loadFinance();
+    }catch(e){text("finance-request-feedback",e.message);}
+    finally{submit.disabled=false;}
   });
   $("participant-credit-form").addEventListener("submit",async event=>{
     event.preventDefault();

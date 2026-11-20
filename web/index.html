@@ -243,6 +243,30 @@
             </div>
           </details>
         </section>
+        <section id="participant-finance-panel" class="panel participant-finance-panel" hidden aria-labelledby="participant-finance-heading">
+          <div class="section-kicker">БАЛАНС / УЧЁТ</div>
+          <h2 id="participant-finance-heading">Мои финансы<span class="heading-period">.</span></h2>
+          <p class="participant-profile-explain">Только подтверждённые начисления. Ставки офферов и отправленные отчёты не являются балансом.</p>
+          <div class="participant-finance-stats">
+            <div><span>ДОСТУПНО</span><strong id="finance-available">—</strong></div>
+            <div><span>ЗАРЕЗЕРВИРОВАНО</span><strong id="finance-reserved">—</strong></div>
+            <div><span>ВЫПЛАЧЕНО</span><strong id="finance-paid">—</strong></div>
+            <div><span>НАЧИСЛЕНО ВСЕГО</span><strong id="finance-accrued">—</strong></div>
+          </div>
+          <form id="participant-finance-request" class="participant-finance-request">
+            <label for="finance-request-amount">Сумма запроса в рублях
+              <input type="number" inputmode="numeric" min="1" max="10000000" step="1" id="finance-request-amount" required>
+            </label>
+            <button id="finance-request-submit" type="submit" class="btn primary">Запросить выплату</button>
+            <p id="finance-request-feedback" role="status"></p>
+          </form>
+          <div class="participant-finance-history">
+            <h3>История выплат</h3>
+            <div id="finance-withdrawals" aria-live="polite"></div>
+            <h3>Начисления</h3>
+            <div id="finance-accruals" aria-live="polite"></div>
+          </div>
+        </section>
         <section id="participant-identity-panel" class="panel participant-profile-form-panel" hidden aria-labelledby="participant-identity-heading">
           <div class="section-kicker">РЕКВИЗИТЫ / ДОСТУП К ОФФЕРАМ</div>
           <h2 id="participant-identity-heading">Данные для выплат<span class="heading-period">.</span></h2>

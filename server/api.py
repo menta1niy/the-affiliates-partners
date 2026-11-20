@@ -15,6 +15,7 @@ from server import tasks
 from server import mvp
 from server import profile as participant_profile
 from server import offer_workflow
+from server import finance
 
 
 def storage_error(exc):
@@ -76,6 +77,9 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding",
                   "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
                   "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
+        routes.update({"/api/finance/overview","/api/finance/withdraw",
+                       "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
+                       "/api/admin/finance/decision"})
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -216,6 +220,16 @@ class Handler(BaseHTTPRequestHandler):
                 result = offer_workflow.review(user["id"], owner, body)
             elif route == "/api/admin/mvp/evidence":
                 result = offer_workflow.evidence(user["id"], owner, body)
+            elif route == "/api/finance/overview":
+                result = finance.overview(user["id"], owner, body)
+            elif route == "/api/finance/withdraw":
+                result = finance.request(user["id"], owner, body)
+            elif route == "/api/admin/finance/accrue":
+                result = finance.accrue(user["id"], owner, body)
+            elif route == "/api/admin/finance/withdrawals":
+                result = finance.queue(user["id"], owner, body)
+            elif route == "/api/admin/finance/decision":
+                result = finance.decide(user["id"], owner, body)
             elif route == "/api/profile/identity":
                 result = participant_profile.save_identity(user["id"], body)
             elif route == "/api/profile/credit-survey":

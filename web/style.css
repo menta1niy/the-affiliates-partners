@@ -3396,3 +3396,84 @@ dialog select,dialog input { max-width:100%; }
   .admin-control .admin-offer-event-card {padding:12px;border-radius:17px;}
   .participant-app .participant-offer-report {padding:12px;border-radius:15px;}
 }
+
+/* Stage 8: verified ledger and reserved withdrawal requests. */
+.participant-app .participant-finance-panel {
+  display:grid;gap:14px;min-width:0;
+  background:var(--float-fill);border:1px solid var(--float-border);
+  border-radius:var(--float-panel-radius);
+}
+.participant-app .participant-finance-panel[hidden]{display:none!important;}
+.participant-app .participant-finance-panel h2{
+  margin:0;font-family:var(--font-display);font-size:clamp(18px,3.5vw,23px);
+}
+.participant-app .participant-finance-stats{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;
+}
+.participant-app .participant-finance-stats > div {
+  display:grid;align-content:center;gap:8px;
+  min-width:0;min-height:92px;padding:12px;
+  border:1px solid var(--float-border);border-radius:15px;
+  background:rgba(255,255,255,.025);
+}
+.participant-app .participant-finance-stats span{
+  color:var(--color-secondary);font-size:10px;font-weight:750;
+  line-height:1.4;overflow-wrap:anywhere;
+}
+.participant-app .participant-finance-stats strong {
+  color:var(--accent-amber);font-family:var(--font-display);
+  font-size:clamp(13px,2vw,19px);line-height:1.5;
+  overflow-wrap:anywhere;font-variant-numeric:tabular-nums;
+}
+.participant-app .participant-finance-request {
+  display:grid;gap:11px;min-width:0;
+  padding:15px;border:1px solid var(--accent-amber-edge);
+  border-radius:var(--float-inner-radius);
+  background:rgba(228,163,74,.055);
+}
+.participant-app .participant-finance-request label {
+  display:grid;gap:7px;min-width:0;
+  font-size:12px;color:var(--color-text);font-weight:650;
+}
+.participant-app .participant-finance-request input {
+  box-sizing:border-box;width:100%;min-width:0;min-height:46px;
+  padding:10px 12px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.18);
+  color:var(--color-text);background:#1B1D20;font-size:14px;
+}
+.participant-app .participant-finance-request .btn {
+  min-height:46px;font-size:12px;
+}
+.participant-app #finance-request-feedback {
+  margin:0;min-height:15px;line-height:1.5;font-size:12px;color:var(--color-secondary);
+}
+.participant-app .participant-finance-history {display:grid;gap:10px;}
+.participant-app .participant-finance-history h3 {
+  margin:12px 0 0;font-family:var(--font-display);font-size:14px;
+}
+.participant-app .participant-finance-history-item {
+  display:grid;gap:5px;margin-bottom:8px;
+  padding:11px 13px;border:1px solid var(--float-border);
+  border-radius:12px;background:rgba(255,255,255,.025);
+}
+.participant-app .participant-finance-history-item strong {font-size:13px;color:var(--color-text);line-height:1.5;}
+.participant-app .participant-finance-history-item small {
+  color:var(--color-secondary);font-size:11px;line-height:1.5;overflow-wrap:anywhere;
+}
+.admin-control .admin-finance-credit-inline {
+  display:grid;gap:8px;margin-top:14px;padding:12px;
+  border:1px solid var(--accent-amber-edge);border-radius:13px;
+  background:rgba(228,163,74,.04);
+}
+.admin-control .admin-finance-credit-inline input {
+  box-sizing:border-box;width:100%;min-height:44px;
+  border-radius:12px;background:#1B1D20;color:var(--color-text);
+  border:1px solid rgba(255,255,255,.18);padding:10px 12px;font-size:13px;
+}
+.admin-control .admin-finance-credit-inline .btn {min-height:44px;font-size:12px;}
+@media(max-width:540px){
+  .participant-app .participant-finance-panel {padding:16px 13px;border-radius:20px;}
+  .participant-app .participant-finance-stats {grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+  .participant-app .participant-finance-stats>div:first-child {grid-column:1/-1;min-height:76px;}
+  .participant-app .participant-finance-request {padding:12px;}
+}

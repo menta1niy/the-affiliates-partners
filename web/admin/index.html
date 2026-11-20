@@ -167,6 +167,7 @@
             <button type="button" class="btn ghost" data-subtab="pending" aria-pressed="true">Заявки</button>
             <button type="button" class="btn ghost" data-subtab="users" aria-pressed="false">Лиды и команда</button>
             <button type="button" class="btn ghost" data-subtab="offer_reviews" aria-pressed="false">Проверка офферов</button>
+            <button type="button" class="btn ghost" data-subtab="finance" aria-pressed="false">Выплаты</button>
           </div>
         <section data-panel="pending" class="panel admin-work-panel">
           <div class="admin-section-title"><div><div class="section-kicker">МОДЕРАЦИЯ</div><h2>Ожидают решения<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">01</span></div>
@@ -196,6 +197,23 @@
             <button type="button" class="btn ghost" id="admin-offer-event-reload">Обновить очередь ↻</button>
           </div>
           <div id="admin-offer-event-list" class="admin-offer-event-list" aria-live="polite"></div>
+        </section>
+        <section data-panel="finance" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">ФИНАНСЫ / КОНТРОЛЬ</div><h2>Заявки на выплаты<span>.</span></h2></div></div>
+          <p class="admin-workspace-description">Подтверждение заявки резервирует деньги. Статус «Выплачена» ставится только после фактического платежа с уникальным номером операции.</p>
+          <div class="admin-assignment-filter-row">
+            <label for="admin-finance-filter">Статус
+              <select id="admin-finance-filter">
+                <option value="pending">На рассмотрении</option>
+                <option value="confirmed">Подтверждена</option>
+                <option value="rejected">Отклонена</option>
+                <option value="paid">Выплачена</option>
+                <option value="all">Все</option>
+              </select>
+            </label>
+            <button id="admin-finance-reload" type="button" class="btn ghost">Обновить ↻</button>
+          </div>
+          <div id="admin-finance-list" class="admin-offer-event-list" aria-live="polite"></div>
         </section>
         </section>
         <section data-workspace="more" class="admin-workspace" aria-label="Дополнительные инструменты" hidden>
