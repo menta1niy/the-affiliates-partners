@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class BrowserHandler(Handler):
     def do_GET(self):
+        if self.path.startswith('/partners/api/'):
+            self.path = self.path.replace('/partners/api/', '/api/', 1)
+            return super().do_GET()
         files = {'/partners/admin/': 'web/admin/index.html', '/partners/admin/admin.js': 'web/admin/admin.js',
                  '/partners/': 'web/index.html', '/partners/app.js': 'web/app.js',
                  '/partners/style.css': 'web/style.css', '/partners/telegram-layout.js': 'web/telegram-layout.js',

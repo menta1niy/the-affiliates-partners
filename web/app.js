@@ -239,6 +239,22 @@
     completed:{label:"Завершено",symbol:"✓",next:"Администратор отметил задание завершённым. Это не подтверждение банковского начисления или выплаты."},
     rejected:{label:"Отклонено",symbol:"×",next:"Посмотрите комментарий администратора и уточните причину отклонения."}
   };
+  const leadStageLabels={
+    application_sent:"Отправил заявку",meeting_scheduled:"Назначена встреча",
+    product_received:"Продукт получен",account_opened:"Счёт открыт",loan_issued:"Займ получен"
+  };
+  function offerLogoUrl(offer){
+    const url=offer?.logo_url;
+    return typeof url==="string" && /^\/partners\/api\/offer-logo\/[a-f0-9]{64}$/.test(url)?url:"";
+  }
+  function attachOfferLogo(card,offer){
+    const url=offerLogoUrl(offer);
+    if(!url)return;
+    const img=document.createElement("img");
+    img.className="offer-logo-watermark";img.src=url;img.alt="";
+    img.loading="lazy";img.decoding="async";img.setAttribute("aria-hidden","true");
+    card.prepend(img);card.classList.add("has-offer-logo");
+  }
   let manualOffers=[];
   let manualFilter="all";
   let manualSort="recent";
@@ -319,6 +335,19 @@
       const content=document.createElement("p");content.className="participant-offer-note";content.textContent=offer.note;
       section.append(heading,content);offerDialogContent.append(section);
     }
+    if(Array.isArray(offer.lead_stages)&&offer.lead_stages.length){
+      const section=document.createElement("section");section.className="participant-offer-instruction-section";
+      const heading=document.createElement("h3");heading.textContent="Этапы оформления";
+      const list=document.createElement("ol");list.className="participant-offer-stage-list";
+      for(const code of offer.lead_stages){
+        if(!Object.hasOwn(leadStageLabels,code))continue;
+        const item=document.createElement("li");item.textContent=leadStageLabels[code];list.append(item);
+      }
+      section.append(heading,list);
+      const hint=document.createElement("p");hint.className="participant-offer-stage-hint";
+      hint.textContent="Это возможные этапы. Отметки о выполнении будут доступны после подключения подтверждений.";
+      section.append(hint);offerDialogContent.append(section);
+    }
     const link=offerExternalLink(offer.referral_url);
     if(link)offerDialogContent.append(link);
     if(!offerDialog.open)offerDialog.showModal();
@@ -343,6 +372,7 @@
     const list=document.createElement("div");list.className="offer-list";
     for(const offer of offers){
       const item=document.createElement("article");item.className="offer-item";
+      attachOfferLogo(item,offer);
       const top=document.createElement("div");top.className="participant-offer-top";
       const heading=document.createElement("div");heading.className="participant-offer-heading";
       const category=document.createElement("span");category.className="participant-offer-category";

@@ -13,7 +13,8 @@ from database.postgres import SCHEMA
 TABLES = ("users", "invitations", "pending_starts", "telegram_updates",
           "audit", "notifications_outbox", "internal_id_sequence", "crm_events",
           "crm_registration_outbox", "crm_lead_bindings", "crm_assigned_offers", "crm_offer_snapshot_versions",
-          "crm_participant_states", "crm_bloggers", "participant_task_reports", "participant_task_report_outbox")
+          "crm_participant_states", "crm_bloggers", "participant_task_reports", "participant_task_report_outbox",
+          "manual_offers", "manual_assignments", "offer_logos")
 USER_REFS = ("agency_id", "referrer_id", "manager_id", "introduced_by_id")
 
 

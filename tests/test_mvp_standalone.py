@@ -1,7 +1,13 @@
 """MVP works without CRM workspace, including signed HTTP and tenant RBAC."""
+import base64
+import io
 import os
+import sqlite3
 import unittest
+from urllib.error import HTTPError
+from urllib.request import urlopen
 from unittest.mock import patch
+from PIL import Image
 
 from server import db
 from tests.test_registration import HttpHarness, OWNER, ALICE, BOB, init_data
@@ -86,6 +92,74 @@ class StandaloneMvpTests(HttpHarness):
                 status, response = self.as_user('/api/admin/mvp/assignment', OWNER,
                     user_id=ALICE, offer_id=offer, stage=malformed)
                 self.assertEqual(status, 400, response)
+
+    def test_logo_and_category_stages_round_trip(self):
+        image=Image.new("RGBA", (240, 140), (255, 120, 40, 150))
+        buffer=io.BytesIO();image.save(buffer,format="PNG")
+        logo="data:image/png;base64,"+base64.b64encode(buffer.getvalue()).decode("ascii")
+        offer=self.create_offer(category="Бизнес-счета",logo_data=logo)
+        status,result=self.as_user("/api/admin/mvp/catalog",OWNER)
+        self.assertEqual(status,200)
+        saved=next(item for item in result["offers"] if item["id"]==offer)
+        self.assertEqual(saved["lead_stages"],["application_sent","meeting_scheduled","product_received"])
+        self.assertRegex(saved["logo_url"],r"^/partners/api/offer-logo/[0-9a-f]{64}$")
+        with urlopen(self.base+saved["logo_url"].replace("/partners/api/","/api/"),timeout=6) as response:
+            self.assertEqual(response.status,200)
+            self.assertEqual(response.headers["Content-Type"],"image/webp")
+            self.assertEqual(Image.open(io.BytesIO(response.read())).format,"WEBP")
+        self.register_open_user()
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment",OWNER,user_id=ALICE,offer_id=offer)[0],200)
+        view=self.as_user("/api/mvp/overview",ALICE)[1]["offers"][0]
+        self.assertEqual(view["logo_url"],saved["logo_url"])
+        self.assertEqual(view["lead_stages"],saved["lead_stages"])
+
+        edited={"name":"Бизнес-счёт обновлён","category":"Бизнес-счета",
+                "target_action":"Открыть счёт","payout_rub":900,"hold_days":9,
+                "offer_id":offer,"lead_stages":["application_sent","account_opened"]}
+        self.assertEqual(self.as_user("/api/admin/mvp/offer",OWNER,**edited)[0],200)
+        view=self.as_user("/api/mvp/overview",ALICE)[1]["offers"][0]
+        self.assertEqual(view["lead_stages"],["application_sent","account_opened"])
+        self.assertEqual(view["logo_url"],saved["logo_url"])
+        self.assertEqual(self.as_user("/api/admin/mvp/offer",OWNER,**edited,remove_logo=True)[0],200)
+        self.assertEqual(self.as_user("/api/mvp/overview",ALICE)[1]["offers"][0]["logo_url"],"")
+
+    def test_logo_upload_rejects_invalid_payload_and_preserves_old_offer(self):
+        offer=self.create_offer()
+        base={"name":"Проверка","category":"МФО","target_action":"Заявка",
+              "payout_rub":100,"hold_days":0,"offer_id":offer}
+        for changes in (
+            {"lead_stages":[]},
+            {"lead_stages":["application_sent","application_sent"]},
+            {"lead_stages":["credited"]},
+            {"logo_data":"data:image/svg+xml;base64,PHN2Zz4="},
+            {"logo_data":"data:image/png;base64,YWJjZA=="},
+            {"logo_data":3},
+            {"remove_logo":True,"logo_data":"data:image/png;base64,QQ=="},
+        ):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.as_user("/api/admin/mvp/offer",OWNER,**{**base,**changes})[0],400)
+        self.assertEqual(self.as_user("/api/admin/mvp/offer",ALICE,**base)[0],403)
+        status,response=self.as_user("/api/admin/mvp/catalog",OWNER)
+        self.assertEqual(status,200)
+        current=next(item for item in response["offers"] if item["id"]==offer)
+        self.assertEqual(current["name"],"Карта Test")
+
+    def test_sqlite_legacy_catalog_columns_are_migrated_in_place(self):
+        from server import mvp
+        db.initialize()
+        with db.transaction() as conn:
+            conn.execute("""CREATE TABLE manual_offers (
+                id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,
+                target_action TEXT NOT NULL,payout_rub INTEGER NOT NULL,
+                hold_days INTEGER NOT NULL,instructions TEXT NOT NULL DEFAULT '',
+                referral_url TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)""")
+            conn.execute("INSERT INTO manual_offers(id,name,category,target_action,payout_rub,hold_days,created_at,updated_at) VALUES('manual_12345678901234567890','Старый оффер','Дебетовые карты','Оформить',200,0,1,1)")
+        with db.transaction() as conn:
+            mvp.schema(conn)
+            record=conn.execute("SELECT logo_hash,lead_stages FROM manual_offers").fetchone()
+            self.assertEqual(record["logo_hash"],"")
+            self.assertEqual(record["lead_stages"],'["application_sent","meeting_scheduled","product_received"]')
 
 
 if __name__=='__main__':

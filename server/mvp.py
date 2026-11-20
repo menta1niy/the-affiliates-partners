@@ -3,6 +3,11 @@
 These are admin-managed *operational* states, never CRM banking approvals or
 payment confirmation. All reads are Telegram-identity scoped.
 """
+import base64
+import binascii
+import hashlib
+import io
+import json
 import re
 import secrets
 import time
@@ -12,6 +17,75 @@ from server import db
 
 STAGES = {"assigned", "in_progress", "submitted", "completed", "rejected"}
 OFFER_ID = re.compile(r"^manual_[0-9a-f]{20}$")
+LOGO_HASH = re.compile(r"^[0-9a-f]{64}$")
+LOGO_DATA = re.compile(r"^data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
+MAX_LOGO_UPLOAD = 1024 * 1024
+MAX_LOGO_PIXELS = 8_000_000
+MAX_LOGO_OUTPUT = 250_000
+LEAD_STAGE_LABELS = {
+    "application_sent": "Отправил заявку",
+    "meeting_scheduled": "Назначена встреча",
+    "product_received": "Продукт получен",
+    "account_opened": "Счёт открыт",
+    "loan_issued": "Займ получен",
+}
+DEFAULT_LEAD_STAGES = ("application_sent", "meeting_scheduled", "product_received")
+
+
+def default_lead_stages(category):
+    kind = category.lower().replace("ё", "е")
+    if "мфо" in kind or "микрозайм" in kind or "микрокредит" in kind:
+        return ["application_sent", "loan_issued"]
+    if "бизнес" in kind or "рко" in kind or "расчетн" in kind:
+        return list(DEFAULT_LEAD_STAGES)
+    if "карт" in kind:
+        return list(DEFAULT_LEAD_STAGES)
+    return ["application_sent", "product_received"]
+
+
+def _lead_stages(value, category):
+    if value is None:
+        return default_lead_stages(category)
+    if (not isinstance(value, list) or not 1 <= len(value) <= 5
+            or any(type(v) is not str or v not in LEAD_STAGE_LABELS for v in value)
+            or len(value) != len(set(value))):
+        raise db.Problem(400, "Некорректные этапы выполнения оффера")
+    return value
+
+
+def _logo_bytes(value):
+    if not isinstance(value, str) or len(value) > MAX_LOGO_UPLOAD * 4 // 3 + 128:
+        raise db.Problem(400, "Логотип слишком большой")
+    match = LOGO_DATA.fullmatch(value)
+    if not match:
+        raise db.Problem(400, "Поддерживаются PNG, JPG и WebP")
+    try:
+        raw = base64.b64decode(match.group(1), validate=True)
+    except (binascii.Error, ValueError):
+        raise db.Problem(400, "Некорректное изображение") from None
+    if len(raw) > MAX_LOGO_UPLOAD:
+        raise db.Problem(400, "Размер логотипа превышает 1 МБ")
+    try:
+        from PIL import Image, ImageOps, UnidentifiedImageError
+    except ImportError:
+        raise db.Problem(503, "Обработка изображений не установлена на сервере") from None
+    try:
+        with Image.open(io.BytesIO(raw)) as image:
+            if image.format not in ("PNG", "JPEG", "WEBP") or getattr(image, "n_frames", 1) != 1:
+                raise ValueError
+            if image.width * image.height > MAX_LOGO_PIXELS or min(image.size) < 1:
+                raise ValueError
+            image.load()
+            normalized = ImageOps.exif_transpose(image).convert("RGBA")
+            normalized.thumbnail((960, 960), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            normalized.save(output, format="WEBP", quality=78, method=4)
+            content = output.getvalue()
+            if len(content) > MAX_LOGO_OUTPUT:
+                raise ValueError
+            return hashlib.sha256(content).hexdigest(), content
+    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+        raise db.Problem(400, "Некорректное изображение или слишком большое разрешение") from None
 
 
 def schema(conn):
@@ -30,6 +104,15 @@ def schema(conn):
         note TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL,
         PRIMARY KEY(telegram_id,offer_id))""")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id)")
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(manual_offers)")}
+    if "logo_hash" not in existing:
+        conn.execute("ALTER TABLE manual_offers ADD COLUMN logo_hash TEXT NOT NULL DEFAULT ''")
+    if "lead_stages" not in existing:
+        conn.execute("""ALTER TABLE manual_offers ADD COLUMN lead_stages TEXT NOT NULL
+                        DEFAULT '["application_sent","meeting_scheduled","product_received"]'""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS offer_logos (
+        logo_hash TEXT PRIMARY KEY, image_data BLOB NOT NULL,
+        created_at INTEGER NOT NULL)""")
 
 
 def _admin(conn, actor, owner_id):
@@ -64,8 +147,21 @@ def _url(value):
 
 
 def _offer(row):
-    return {k: row[k] for k in ("id", "name", "category", "target_action", "payout_rub",
-                                 "hold_days", "instructions", "referral_url", "active")}
+    result = {k: row[k] for k in ("id", "name", "category", "target_action", "payout_rub",
+                                  "hold_days", "instructions", "referral_url", "active")}
+    result["lead_stages"] = json.loads(row["lead_stages"])
+    result["logo_url"] = ("/partners/api/offer-logo/" + row["logo_hash"]) if row["logo_hash"] else ""
+    return result
+
+
+def logo(logo_hash):
+    if not isinstance(logo_hash, str) or not LOGO_HASH.fullmatch(logo_hash):
+        return None
+    db.initialize()
+    with db.transaction() as conn:
+        schema(conn)
+        row = conn.execute("SELECT image_data FROM offer_logos WHERE logo_hash=?", (logo_hash,)).fetchone()
+        return bytes(row["image_data"]) if row is not None else None
 
 
 def catalog(actor, owner_id):
@@ -94,6 +190,11 @@ def save_offer(actor, owner_id, data):
     active = data.get("active", True)
     if type(active) is not bool:
         raise db.Problem(400, "Некорректная доступность")
+    lead_stages = json.dumps(_lead_stages(data.get("lead_stages"), category), separators=(",", ":"))
+    logo_data = data.get("logo_data")
+    remove_logo = data.get("remove_logo", False)
+    if type(remove_logo) is not bool or (logo_data is not None and remove_logo):
+        raise db.Problem(400, "Некорректное действие с логотипом")
     now = int(time.time())
     db.initialize()
     with db.transaction() as conn:
@@ -101,15 +202,23 @@ def save_offer(actor, owner_id, data):
         if staff["role"] != "owner":
             raise db.Problem(403, "Изменять общий каталог может только владелец")
         schema(conn)
+        previous = None
         if offer_id:
-            if not conn.execute("SELECT 1 FROM manual_offers WHERE id=?", (offer_id,)).fetchone():
+            previous = conn.execute("SELECT logo_hash FROM manual_offers WHERE id=?", (offer_id,)).fetchone()
+            if not previous:
                 raise db.Problem(404, "Оффер не найден")
-            conn.execute("UPDATE manual_offers SET name=?,category=?,target_action=?,payout_rub=?,hold_days=?,instructions=?,referral_url=?,active=?,updated_at=? WHERE id=?",
-                         (name, category, target_action, payout, hold, instructions, link, int(active), now, offer_id))
+        logo_hash = "" if remove_logo else previous["logo_hash"] if previous else ""
+        if logo_data is not None:
+            logo_hash, content = _logo_bytes(logo_data)
+            conn.execute("INSERT INTO offer_logos(logo_hash,image_data,created_at) VALUES(?,?,?) "
+                         "ON CONFLICT(logo_hash) DO NOTHING", (logo_hash, content, now))
+        if offer_id:
+            conn.execute("UPDATE manual_offers SET name=?,category=?,target_action=?,payout_rub=?,hold_days=?,instructions=?,referral_url=?,active=?,logo_hash=?,lead_stages=?,updated_at=? WHERE id=?",
+                         (name, category, target_action, payout, hold, instructions, link, int(active), logo_hash, lead_stages, now, offer_id))
         else:
             offer_id = "manual_" + secrets.token_hex(10)
-            conn.execute("INSERT INTO manual_offers(id,name,category,target_action,payout_rub,hold_days,instructions,referral_url,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                         (offer_id, name, category, target_action, payout, hold, instructions, link, int(active), now, now))
+            conn.execute("INSERT INTO manual_offers(id,name,category,target_action,payout_rub,hold_days,instructions,referral_url,active,logo_hash,lead_stages,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (offer_id, name, category, target_action, payout, hold, instructions, link, int(active), logo_hash, lead_stages, now, now))
         db.audit(conn, actor, "manual_offer_save", None, offer_id)
         return {"offer_id": offer_id}
 

@@ -1,9 +1,11 @@
 """Local stage-5 visual, role and mobile tests for the existing admin API UI."""
 
 import threading
+import io
 import unittest
 from http.server import ThreadingHTTPServer
 
+from PIL import Image
 from playwright.sync_api import sync_playwright
 
 from tests.test_admin_participant_browser import BrowserHandler
@@ -37,6 +39,10 @@ BOOTSTRAP = r"""(() => {
     }
     if(path==='/admin/audit') data={events:[]};
     if(path==='/admin/mvp/catalog') data={offers:[sampleOffer]};
+    if(path==='/admin/mvp/offer') {
+      window.__lastOfferPayload=JSON.parse(opts.body);
+      data={offer_id:'manual_12345678901234567890'};
+    }
     if(path==='/admin/participant') data={user:people[0],
       manual:{statistics:{total:1,in_progress:0,completed:0},offers:[sampleOffer]},audit:[]};
     if(data!==undefined)return Promise.resolve(new Response(JSON.stringify(data),
@@ -198,5 +204,35 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(form.locator('input[name="name"]').input_value(),'')
                         self.assertTrue(toggle.is_checked())
                         page.close()
+            finally:
+                browser.close()
+
+    def test_stage3_category_options_and_logo_upload(self):
+        buffer=io.BytesIO()
+        Image.new('RGBA',(64,64),(230,115,40,190)).save(buffer,format='PNG')
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=self.open_admin(browser,390)
+                page.locator('[data-section="offers"]').click()
+                page.get_by_role('button',name='Управлять каталогом').click()
+                form=page.locator('#mvp-catalog-dialog form.admin-catalog-form')
+                form.locator('input[name="name"]').fill('Тест МФО')
+                form.locator('input[name="category"]').fill('МФО')
+                form.locator('input[name="target_action"]').fill('Заявка')
+                self.assertTrue(form.locator('.admin-offer-stage-option input[value="application_sent"]').is_checked())
+                self.assertTrue(form.locator('.admin-offer-stage-option input[value="loan_issued"]').is_checked())
+                self.assertFalse(form.locator('.admin-offer-stage-option input[value="meeting_scheduled"]').is_checked())
+                form.locator('input#admin-offer-logo-file').set_input_files(
+                    {'name':'logo.png','mimeType':'image/png','buffer':buffer.getvalue()})
+                self.assertTrue(form.locator('.admin-logo-preview img').is_visible())
+                form.get_by_role('button',name='Сохранить оффер').click()
+                page.wait_for_function('Boolean(window.__lastOfferPayload)')
+                payload=page.evaluate('window.__lastOfferPayload')
+                self.assertEqual(payload['lead_stages'],['application_sent','loan_issued'])
+                self.assertTrue(payload['logo_data'].startswith('data:image/webp;base64,'))
+                self.assertNotIn('age_min',payload)
+                self.assertNotIn('auto_assign',payload)
+                page.close()
             finally:
                 browser.close()

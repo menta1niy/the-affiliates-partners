@@ -8,7 +8,15 @@ CREATE TABLE IF NOT EXISTS manual_offers (
   target_action TEXT NOT NULL, payout_rub INTEGER NOT NULL,
   hold_days INTEGER NOT NULL, instructions TEXT NOT NULL DEFAULT '',
   referral_url TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
+  logo_hash TEXT NOT NULL DEFAULT '',
+  lead_stages TEXT NOT NULL DEFAULT '["application_sent","meeting_scheduled","product_received"]',
   created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS logo_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS lead_stages TEXT NOT NULL
+  DEFAULT '["application_sent","meeting_scheduled","product_received"]';
+CREATE TABLE IF NOT EXISTS offer_logos (
+  logo_hash TEXT PRIMARY KEY, image_data BYTEA NOT NULL, created_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS manual_assignments (
   telegram_id BIGINT NOT NULL REFERENCES users(id),
@@ -17,5 +25,5 @@ CREATE TABLE IF NOT EXISTS manual_assignments (
   updated_at BIGINT NOT NULL, PRIMARY KEY(telegram_id,offer_id)
 );
 CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id);
-GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
 COMMIT;

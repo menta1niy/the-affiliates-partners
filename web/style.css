@@ -2668,3 +2668,167 @@ dialog select,dialog input { max-width:100%; }
     border-color:var(--accent-amber-edge);
   }
 }
+
+/* Stage 3: catalog logos and configurable lead-facing milestones. */
+.participant-app .participant-offers .offer-item,
+.admin-control .admin-catalog-card {
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+}
+.participant-app .participant-offers .offer-item > :not(.offer-logo-watermark),
+.admin-control .admin-catalog-card > :not(.offer-logo-watermark) {
+  position:relative;
+  z-index:1;
+}
+.participant-app .participant-offers .offer-item > .offer-logo-watermark,
+.admin-control .admin-catalog-card > .offer-logo-watermark {
+  position:absolute;
+  z-index:0;
+  right:-8%;
+  top:-7%;
+  width:70%;
+  height:114%;
+  object-fit:contain;
+  object-position:center right;
+  opacity:.15;
+  pointer-events:none;
+  user-select:none;
+}
+.participant-app .participant-offer-stage-list {
+  margin:10px 0 7px;
+  padding:0 0 0 22px;
+  display:grid;
+  gap:9px;
+  color:var(--color-text);
+  font-size:13px;
+  line-height:1.55;
+}
+.participant-app .participant-offer-stage-list li {padding-left:5px;}
+.participant-app .participant-offer-stage-list li::marker {color:var(--accent-amber);font-weight:700;}
+.participant-app .participant-offer-stage-hint {
+  color:var(--color-secondary);
+  font-size:12px;
+  line-height:1.6;
+}
+.admin-control .admin-offer-visual,
+.admin-control .admin-offer-stages {
+  margin:20px 0 0;
+  padding:16px;
+  border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+  background:rgba(255,255,255,.025);
+  min-width:0;
+}
+.admin-control .admin-offer-visual h4,
+.admin-control .admin-offer-stages legend {
+  margin:0;
+  color:var(--color-text);
+  font-family:var(--font-display);
+  font-size:14px;
+  font-weight:650;
+  line-height:1.4;
+}
+.admin-control .admin-offer-stages legend {padding:0 5px;}
+.admin-control .admin-offer-visual p,
+.admin-control .admin-offer-stages p {
+  margin:7px 0 15px;
+  color:var(--color-secondary);
+  font-size:12px;
+  line-height:1.55;
+}
+.admin-control .admin-logo-upload-row {
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+.admin-control .admin-logo-preview {
+  width:94px;
+  height:94px;
+  flex:0 0 94px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:19px;
+  background:linear-gradient(145deg,#292B2E,#111315);
+}
+.admin-control .admin-logo-preview img {width:100%;height:100%;object-fit:contain;}
+.admin-control #mvp-catalog-dialog .admin-catalog-card-heading .pill {
+  flex:0 0 auto;
+  white-space:nowrap;
+  font-size:11px;
+}
+.admin-control #mvp-catalog-dialog .admin-catalog-card-heading h3 {
+  font-size:clamp(14px,3vw,17px);
+  line-height:1.4;
+}
+.admin-control .admin-logo-fallback {font-family:var(--font-display);font-size:26px;color:var(--color-muted);}
+.admin-control .admin-logo-upload-actions {display:flex;flex-wrap:wrap;gap:7px;align-items:center;min-width:0;}
+.admin-control .admin-logo-upload-actions .btn {margin:0;min-height:44px;padding:9px 12px;font-size:12px;}
+.admin-control .admin-logo-upload-actions small {width:100%;font-size:11px;color:var(--color-secondary);}
+.admin-control .admin-logo-file-label {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  position:relative;
+  width:auto;
+  color:var(--color-text);
+}
+.admin-control .admin-logo-file-label input {
+  position:absolute;
+  width:1px;height:1px;min-height:0;padding:0;margin:0;
+  opacity:0;pointer-events:none;
+}
+.admin-control .admin-logo-file-label:focus-within {
+  outline:2px solid var(--accent-amber);
+  outline-offset:3px;
+}
+.admin-control .admin-offer-stage-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.admin-control .admin-offer-stage-option {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  min-height:44px;
+  margin:0;
+  padding:9px 10px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:12px;
+  background:rgba(0,0,0,.14);
+  color:var(--color-text);
+  font-size:12px;
+  font-weight:550;
+  line-height:1.45;
+  cursor:pointer;
+}
+.admin-control .admin-offer-stage-option input {
+  flex:0 0 18px;
+  width:18px;height:18px;min-height:18px;
+  padding:0;margin:0;
+  accent-color:var(--accent-amber);
+}
+.admin-control .admin-offer-stage-option span {overflow-wrap:anywhere;}
+.admin-control .admin-stage-reset {min-height:44px;margin-top:11px;font-size:12px;}
+@media(max-width:740px) {
+  .admin-control .admin-offer-visual,
+  .admin-control .admin-offer-stages {padding:13px;border-radius:17px;}
+  .admin-control .admin-logo-preview {width:72px;height:72px;flex-basis:72px;border-radius:15px;}
+  .admin-control .admin-logo-upload-row {gap:11px;}
+  .admin-control .admin-logo-upload-actions .btn {font-size:11px;padding:9px 10px;}
+  .admin-control .admin-offer-stage-grid {grid-template-columns:1fr;}
+}
+@media(max-width:350px) {
+  .admin-control [data-workspace="offers"] > .admin-section-title {
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+  }
+  .admin-control [data-workspace="offers"] > .admin-section-title h2 {white-space:nowrap;}
+  .admin-control [data-workspace="offers"] > .admin-section-title .btn {width:100%;}
+}
+@media(prefers-reduced-transparency:reduce) {
+  .participant-app .participant-offers .offer-item > .offer-logo-watermark,
+  .admin-control .admin-catalog-card > .offer-logo-watermark {opacity:.12;}
+}

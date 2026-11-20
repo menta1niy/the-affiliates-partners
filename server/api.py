@@ -34,7 +34,25 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if urlsplit(self.path).path == "/api/health":
+        path = urlsplit(self.path).path
+        if path.startswith("/api/offer-logo/"):
+            try:
+                image = mvp.logo(path.removeprefix("/api/offer-logo/"))
+            except Exception as exc:
+                if storage_error(exc):
+                    return self.send_json(503, {"error": "Хранилище временно недоступно"})
+                raise
+            if image is None:
+                return self.send_json(404, {"error": "Изображение не найдено"})
+            self.send_response(200)
+            self.send_header("Content-Type", "image/webp")
+            self.send_header("Content-Length", str(len(image)))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(image)
+            return
+        if path == "/api/health":
             try:
                 db.initialize()
                 with db.transaction() as conn:
@@ -61,7 +79,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {"error": "Недостаточно прав"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= size <= 24000:
+            size_limit = 1_500_000 if route == "/api/admin/mvp/offer" else 24000
+            if not 1 <= size <= size_limit:
                 return self.send_json(400, {"error": "Неверный размер запроса"})
             body = json.loads(self.rfile.read(size))
             if not isinstance(body, dict):

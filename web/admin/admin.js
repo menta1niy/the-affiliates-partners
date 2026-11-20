@@ -8,6 +8,28 @@
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"На проверке",completed:"Завершено",rejected:"Отклонено"};
+  const leadStageOptions={
+    application_sent:"Отправил заявку",meeting_scheduled:"Назначена встреча",
+    product_received:"Продукт получен",account_opened:"Счёт открыт",loan_issued:"Займ получен"
+  };
+  function defaultLeadStages(category){
+    const kind=String(category||"").toLowerCase().replaceAll("ё","е");
+    if(kind.includes("мфо")||kind.includes("микрозайм")||kind.includes("микрокредит"))return ["application_sent","loan_issued"];
+    if(kind.includes("бизнес")||kind.includes("рко")||kind.includes("расчетн"))return ["application_sent","meeting_scheduled","product_received"];
+    if(kind.includes("карт"))return ["application_sent","meeting_scheduled","product_received"];
+    return ["application_sent","product_received"];
+  }
+  function offerLogoUrl(offer){
+    const url=offer?.logo_url;
+    return typeof url==="string" && /^\/partners\/api\/offer-logo\/[a-f0-9]{64}$/.test(url)?url:"";
+  }
+  function attachOfferLogo(card,offer){
+    const url=offerLogoUrl(offer);
+    if(!url)return;
+    const img=make("img",undefined,"offer-logo-watermark");
+    img.alt="";img.loading="lazy";img.decoding="async";img.src=url;
+    img.setAttribute("aria-hidden","true");card.prepend(img);card.classList.add("has-offer-logo");
+  }
   function initData() {
     if (tg?.initData) return tg.initData;
     for (const part of [location.hash.slice(1),location.search.slice(1)]) {
@@ -332,6 +354,81 @@
       inputs[key]=input;wrap.append(title,input);grid.append(wrap);
     }
     form.append(grid);
+    const categories=make("datalist");categories.id="admin-offer-category-options";
+    for(const name of ["Дебетовые карты","Кредитные карты","Бизнес-счета","МФО","Рассрочка","Другие продукты"]){
+      const option=make("option");option.value=name;categories.append(option);
+    }
+    inputs.category.setAttribute("list",categories.id);form.append(categories);
+    const visual=make("section",undefined,"admin-offer-visual");
+    visual.append(make("h4","Логотип оффера"),make("p","PNG, JPG или WebP. На карточке изображение будет полупрозрачным (15%)."));
+    const uploadRow=make("div",undefined,"admin-logo-upload-row");
+    const preview=make("div",undefined,"admin-logo-preview");
+    const fileLabel=make("label","Загрузить изображение","btn ghost admin-logo-file-label");
+    const fileInput=make("input");fileInput.type="file";fileInput.accept="image/png,image/jpeg,image/webp";
+    fileInput.id="admin-offer-logo-file";fileLabel.append(fileInput);
+    const removeImage=make("button","Убрать логотип","btn ghost");removeImage.type="button";
+    const fileHint=make("small","Файл обрабатывается при сохранении.");
+    const uploadActions=make("div",undefined,"admin-logo-upload-actions");uploadActions.append(fileLabel,removeImage,fileHint);
+    uploadRow.append(preview,uploadActions);visual.append(uploadRow);form.append(visual);
+    let pendingFile=null,removeLogo=false,previewUrl="";
+    function setPreview(src){
+      if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl="";}
+      preview.replaceChildren();
+      if(src){
+        const image=make("img");image.alt="Предпросмотр логотипа";image.src=src;preview.append(image);
+      }else preview.append(make("span","AP","admin-logo-fallback"));
+    }
+    setPreview("");
+    fileInput.addEventListener("change",()=>{
+      const file=fileInput.files?.[0];
+      if(!file)return;
+      if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size>5_000_000){
+        fileInput.value="";error("Выберите PNG, JPG или WebP размером до 5 МБ.");return;
+      }
+      pendingFile=file;removeLogo=false;error("");
+      const src=URL.createObjectURL(file);
+      setPreview(src);previewUrl=src;
+    });
+    removeImage.addEventListener("click",()=>{
+      pendingFile=null;removeLogo=true;fileInput.value="";setPreview("");
+    });
+    async function encodeLogo(file){
+      const image=await createImageBitmap(file);
+      try{
+        const scale=Math.min(1,960/Math.max(image.width,image.height));
+        const canvas=document.createElement("canvas");
+        canvas.width=Math.max(1,Math.round(image.width*scale));
+        canvas.height=Math.max(1,Math.round(image.height*scale));
+        canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
+        const data=canvas.toDataURL("image/webp",.78);
+        if(!data.startsWith("data:image/webp;base64,")||data.length>1_350_000)
+          throw new Error("Логотип слишком большой после сжатия. Выберите другое изображение.");
+        return data;
+      }finally{image.close();}
+    }
+    const stagesSection=make("fieldset",undefined,"admin-offer-stages");
+    stagesSection.append(make("legend","Этапы для лида"));
+    stagesSection.append(make("p","Укажите, какие этапы должны отображаться в условиях оффера. Изменение статусов самим лидом — следующий этап."));
+    const stageGrid=make("div",undefined,"admin-offer-stage-grid");
+    const stageInputs={};let stagesCustomized=false;
+    for(const [key,label] of Object.entries(leadStageOptions)){
+      const item=make("label",undefined,"admin-offer-stage-option");
+      const checkbox=make("input");checkbox.type="checkbox";checkbox.value=key;
+      checkbox.addEventListener("change",()=>{stagesCustomized=true;});
+      stageInputs[key]=checkbox;item.append(checkbox,make("span",label));stageGrid.append(item);
+    }
+    function setStages(stages){
+      for(const [key,control] of Object.entries(stageInputs))control.checked=stages.includes(key);
+    }
+    const resetStages=make("button","По категории","btn ghost admin-stage-reset");
+    resetStages.type="button";resetStages.addEventListener("click",()=>{
+      stagesCustomized=false;setStages(defaultLeadStages(inputs.category.value));
+    });
+    inputs.category.addEventListener("input",()=>{
+      if(!stagesCustomized)setStages(defaultLeadStages(inputs.category.value));
+    });
+    stagesSection.append(stageGrid,resetStages);form.append(stagesSection);
+    setStages(defaultLeadStages(""));
     const active=make("input");active.type="checkbox";active.checked=true;active.id="admin-catalog-active";
     const activeLabel=make("label",undefined,"admin-catalog-availability");
     activeLabel.htmlFor=active.id;
@@ -342,19 +439,38 @@
     const actions=make("div",undefined,"admin-catalog-form-actions");
     const save=make("button","Сохранить оффер","btn primary");save.type="submit";
     const cancel=make("button","Отменить редактирование","btn ghost");cancel.type="button";cancel.hidden=true;
-    function resetEditor(){editingId=null;heading.textContent="Добавить оффер";form.reset();inputs.payout_rub.value="0";inputs.hold_days.value="0";active.checked=true;cancel.hidden=true;save.textContent="Сохранить оффер";}
+    function loadEditor(offer){
+      editingId=offer.id;heading.textContent="Редактировать оффер";
+      for(const [key] of fields)inputs[key].value=offer[key]??"";
+      active.checked=!!offer.active;
+      pendingFile=null;removeLogo=false;fileInput.value="";setPreview(offerLogoUrl(offer));
+      stagesCustomized=true;
+      setStages(Array.isArray(offer.lead_stages)?offer.lead_stages:defaultLeadStages(offer.category));
+      cancel.hidden=false;save.textContent="Сохранить изменения";
+    }
+    function resetEditor(){
+      editingId=null;heading.textContent="Добавить оффер";form.reset();
+      inputs.payout_rub.value="0";inputs.hold_days.value="0";active.checked=true;
+      pendingFile=null;removeLogo=false;fileInput.value="";setPreview("");
+      stagesCustomized=false;setStages(defaultLeadStages(""));
+      cancel.hidden=true;save.textContent="Сохранить оффер";
+    }
     cancel.addEventListener("click",resetEditor);
     actions.append(save,cancel);form.append(actions);
     form.addEventListener("submit",async e=>{e.preventDefault();save.disabled=true;try{
       const payload={};for(const [key] of fields)payload[key]=inputs[key].value.trim();
       payload.payout_rub=Number(payload.payout_rub);payload.hold_days=Number(payload.hold_days);payload.active=active.checked;
+      payload.lead_stages=Object.entries(stageInputs).filter(([,input])=>input.checked).map(([key])=>key);
+      if(!payload.lead_stages.length)throw new Error("Выберите хотя бы один этап оформления.");
+      if(pendingFile)payload.logo_data=await encodeLogo(pendingFile);
+      else if(removeLogo)payload.remove_logo=true;
       if(editingId)payload.offer_id=editingId;
       await api("/admin/mvp/offer",payload);resetEditor();await reload();
       if(state.section==="offers")await renderOffersView();
       notice("Оффер сохранён");
     }catch(err){error(err.message);}finally{save.disabled=false;}});
     const canEdit=state.role==="owner";
-    if(canEdit)dialog.append(form);
+    if(canEdit)dialog.insertBefore(form,list);
     else dialog.append(make("p","Для вашей роли доступен просмотр каталога. Изменение общего каталога выполняет владелец.","message"));
     async function reload(){
       list.replaceChildren(make("p","Загрузка…"));
@@ -367,13 +483,13 @@
         const name=make("div");name.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("h3",offer.name));
         const availability=make("span",offer.active?"Доступен":"Отключён","pill");
         availability.dataset.status=offer.active?"active":"blocked";meta.append(name,availability);
-        item.append(meta);
+        item.append(meta);attachOfferLogo(item,offer);
         const terms=make("div",undefined,"admin-catalog-terms");
         for(const [key,value] of [["СТАВКА",number(offer.payout_rub)+" ₽"],["ХОЛД",(offer.hold_days??"—")+" дн."],["ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action||"—"]]){
           const row=make("div");row.append(make("span",key),make("strong",value));terms.append(row);
         }
         item.append(terms);
-        if(canEdit)item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;cancel.hidden=false;save.textContent="Сохранить изменения";form.scrollIntoView({behavior:"smooth",block:"start"});}));
+        if(canEdit)item.append(action("Редактировать",()=>{loadEditor(offer);form.scrollIntoView({behavior:"smooth",block:"start"});}));
         list.append(item);
       }
       return offers;
@@ -383,12 +499,7 @@
     if(canEdit && focusOfferId){
       const offer=offers.find(item=>String(item.id)===String(focusOfferId));
       if(offer){
-        editingId=offer.id;
-        heading.textContent="Редактировать оффер";
-        for(const [key] of fields)inputs[key].value=offer[key]??"";
-        active.checked=!!offer.active;
-        cancel.hidden=false;
-        save.textContent="Сохранить изменения";
+        loadEditor(offer);
         form.scrollIntoView({behavior:"instant",block:"start"});
       }
     }
@@ -425,7 +536,7 @@
         for(const [label,value] of [["СТАВКА",number(offer.payout_rub)+" ₽"],["ХОЛД",(offer.hold_days??"—")+" дн."],["ЦЕЛЬ",offer.target_action||"—"]]){
           const cell=make("div");cell.append(make("span",label),make("strong",value));terms.append(cell);
         }
-        card.append(head,terms);
+        card.append(head,terms);attachOfferLogo(card,offer);
         card.append(action(state.role==="owner"?"Редактировать":"Подробнее",
           ()=>openOfferCatalog(state.role==="owner"?offer.id:null)));
         root.append(card);
