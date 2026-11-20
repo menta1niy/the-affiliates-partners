@@ -113,6 +113,17 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         page.locator("#offers .offer-item").first.wait_for()
                         self.assertEqual(page.locator("#offers .offer-item").count(), 4)
                         self.assertIn("900 ₽", page.locator("#offers").inner_text())
+                        amber=page.evaluate("""() => {
+                          const price=getComputedStyle(document.querySelector('.participant-offer-payment strong'));
+                          const cta=getComputedStyle(document.querySelector('.participant-offer-detail-button'));
+                          const filter=getComputedStyle(document.querySelector('[data-offer-filter="all"]'));
+                          return {price:price.color,button:cta.backgroundColor,ink:cta.color,
+                            filter:filter.backgroundColor};
+                        }""")
+                        self.assertEqual(amber["price"],"rgb(228, 163, 74)")
+                        self.assertEqual(amber["button"],"rgb(228, 163, 74)")
+                        self.assertEqual(amber["ink"],"rgb(24, 17, 10)")
+                        self.assertEqual(amber["filter"],"rgb(228, 163, 74)")
                         self.assertIn("Назначено", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
                         self.assertEqual(first.locator(".participant-offer-next").inner_text(), "Прочитать условия")
