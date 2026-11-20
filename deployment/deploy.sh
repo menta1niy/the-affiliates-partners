@@ -3,6 +3,13 @@
 set -euo pipefail
 umask 077
 
+# Retired deployment entrypoint. It previously fetched main and copied web/
+# directly, bypassing the approved legal manifest and sha256 static installer.
+# Keep it fail-closed even if an old systemd timer invokes this script.
+# See docs/FINAL_RELEASE_RUNBOOK_STAGE14.md for the reviewed release procedure.
+echo "Legacy auto-deploy is disabled: use the reviewed, explicitly authorized release procedure" >&2
+exit 1
+
 ROOT=/opt/the-affiliates-partners
 PUBLIC=/var/www/theaffiliates-partners
 RELEASES=/var/www/theaffiliates-partners.releases
