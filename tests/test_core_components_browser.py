@@ -88,14 +88,16 @@ class CoreComponentsBrowserTests(unittest.TestCase):
                 })();""")
                 page.goto(self.origin + "/partners/admin/#tgWebAppData=ui-fixture")
                 page.locator("#admin-app").wait_for(state="visible")
-                page.locator('[data-tab="users"]').click()
+                page.locator('[data-section="people"]').click()
+                page.locator('[data-subtab="users"]').click()
                 self.assertEqual(
-                    page.locator('[data-tab="users"]').get_attribute("aria-selected"), "true"
+                    page.locator('[data-subtab="users"]').get_attribute("aria-pressed"), "true"
                 )
                 self.assertEqual(
-                    page.locator('[data-tab="pending"]').get_attribute("aria-selected"), "false"
+                    page.locator('[data-subtab="pending"]').get_attribute("aria-pressed"), "false"
                 )
-                page.get_by_role("button", name="Каталог офферов").click()
+                page.locator('[data-section="offers"]').click()
+                page.get_by_role("button", name="Управлять каталогом").click()
                 dialog = page.locator("#mvp-catalog-dialog")
                 dialog.wait_for(state="visible")
                 values = dialog.evaluate("""el => ({

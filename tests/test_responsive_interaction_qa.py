@@ -182,7 +182,8 @@ class ResponsiveInteractionQA(unittest.TestCase):
                 for width in (320, 390, 1440):
                     with self.subTest(admin=True, width=width):
                         page = self.open_page(browser, admin=True, width=width)
-                        page.locator('[data-tab="users"]').click()
+                        page.locator('[data-section="people"]').click()
+                        page.locator('[data-subtab="users"]').click()
                         radius=page.locator(".admin-work-panel:not([hidden])").first.evaluate(
                             "el=>parseFloat(getComputedStyle(el).borderTopLeftRadius)")
                         self.assertGreaterEqual(radius, 25)
@@ -261,7 +262,7 @@ class ResponsiveInteractionQA(unittest.TestCase):
                                 rect=item.bounding_box()
                                 self.assertGreaterEqual(rect["width"],44,rect)
                                 self.assertGreaterEqual(rect["height"],44,rect)
-                            selected = dock.locator('[aria-selected="true"]' if admin else '[aria-current="page"]')
+                            selected = dock.locator('[aria-current="page"]')
                             self.assertEqual(selected.count(),1)
                             self.assertIn("drop-shadow(",selected.locator(".nav-icon").evaluate(
                                 "node => getComputedStyle(node).filter"))
@@ -307,7 +308,8 @@ class ResponsiveInteractionQA(unittest.TestCase):
             browser = playwright.chromium.launch(headless=True)
             try:
                 page = self.open_page(browser, admin=True, width=390, viewport_height=540)
-                page.locator('[data-tab="users"]').click()
+                page.locator('[data-section="people"]').click()
+                page.locator('[data-subtab="users"]').click()
                 page.locator("#users-list").get_by_role("button", name="Карточка").first.click()
                 dialog = page.locator("#participant-detail")
                 dialog.wait_for(state="visible")

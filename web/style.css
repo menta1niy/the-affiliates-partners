@@ -2545,3 +2545,126 @@ dialog select,dialog input { max-width:100%; }
 .admin-control :is(a,button)[aria-disabled="true"] {
   cursor:not-allowed;
 }
+
+/* Admin stage 2: five clear workspaces, with compact secondary navigation.
+   Existing moderation, catalog and role operations remain unchanged. */
+.admin-control .admin-tabs button[aria-current="page"] {
+  color:var(--accent-amber);
+  background:linear-gradient(145deg,rgba(228,163,74,.14),rgba(228,163,74,.035));
+  border-color:var(--accent-amber-edge);
+  box-shadow:inset 0 1px 0 rgba(255,222,169,.12),0 0 14px rgba(228,163,74,.08);
+}
+.admin-control .admin-tabs button[aria-current="page"] .nav-icon {
+  filter:drop-shadow(0 0 5px rgba(228,163,74,.35));
+}
+.admin-control .admin-workspace {
+  min-width:0;
+  display:grid;
+  align-content:start;
+  gap:var(--space-4);
+  padding:0 0 var(--space-6);
+}
+.admin-control .admin-workspace[hidden] {display:none;}
+.admin-control .admin-workspace > .admin-work-panel {margin:0;}
+.admin-control .admin-workspace-description {
+  margin:0;
+  max-width:690px;
+  font-size:13px;
+  line-height:1.65;
+  color:var(--color-secondary);
+}
+.admin-control .admin-quick-actions {
+  display:flex;
+  gap:var(--space-2);
+  flex-wrap:wrap;
+  margin-top:var(--space-4);
+}
+.admin-control .admin-subtabs {
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:var(--space-2);
+  min-width:0;
+  overflow-x:auto;
+  padding:2px 0 4px;
+  scrollbar-width:none;
+}
+.admin-control .admin-subtabs::-webkit-scrollbar {display:none;}
+.admin-control .admin-subtabs button {
+  flex:0 0 auto;
+  min-height:44px;
+  padding:9px 15px;
+  border-radius:var(--float-control-radius);
+  font-size:12px;
+  white-space:nowrap;
+}
+.admin-control .admin-subtabs button[aria-pressed="true"] {
+  color:var(--accent-amber-ink);
+  background:var(--accent-amber);
+  border-color:var(--accent-amber);
+}
+.admin-control [data-workspace="offers"] .admin-catalog-list {margin:0;}
+.admin-control [data-workspace="offers"] .admin-catalog-card-heading h3 {
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-clamp:2;
+  overflow:hidden;
+  font-size:clamp(14px,2.3vw,17px);
+  line-height:1.4;
+}
+.admin-control [data-workspace="offers"] .admin-catalog-card-heading .pill {
+  flex:0 0 auto;
+  white-space:nowrap;
+  font-size:11px;
+}
+.admin-control #mvp-catalog-open {
+  color:var(--accent-amber-ink);
+  font-size:12px;
+  font-weight:700;
+}
+.admin-control .admin-assignment-search-label {
+  display:block;
+  margin:1px 0 -9px;
+  font-size:12px;
+  color:var(--color-secondary);
+}
+.admin-control #admin-assignment-search {min-height:44px;max-width:560px;}
+.admin-control .admin-assignment-users {display:grid;gap:10px;min-width:0;}
+.admin-control .admin-assignment-user {
+  display:flex;align-items:center;justify-content:space-between;
+  gap:var(--space-3);min-width:0;padding:12px 14px;
+  background:var(--float-fill);border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+}
+.admin-control .admin-assignment-user > div {display:grid;gap:4px;min-width:0;}
+.admin-control .admin-assignment-user strong {
+  font-size:13px;line-height:1.45;overflow-wrap:anywhere;
+}
+.admin-control .admin-assignment-user span {font-size:11px;color:var(--color-secondary);}
+.admin-control .admin-assignment-pages {
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  color:var(--color-secondary);font-size:12px;
+}
+@media(max-width:740px) {
+  .admin-control .admin-workspace {gap:12px;padding-bottom:18px;}
+  .admin-control .admin-workspace > .admin-section-title {align-items:center;}
+  .admin-control .admin-workspace > .admin-section-title h2 {font-size:clamp(19px,5vw,25px);}
+  .admin-control .admin-workspace > .admin-section-title .btn {min-height:44px;font-size:11px;}
+  .admin-control #mvp-catalog-open {font-size:12px;}
+  .admin-control .admin-screen-intro h1 {
+    font-size:clamp(18px,5.8vw,28px);
+    line-height:1.32;
+    white-space:nowrap;
+    overflow-wrap:normal;
+    letter-spacing:-.008em;
+  }
+  .admin-control .admin-assignment-user {padding:12px;gap:8px;}
+  .admin-control .admin-assignment-user .btn {flex-shrink:0;min-height:44px;padding:9px 12px;}
+  .admin-control .admin-tabs {gap:3px;}
+  .admin-control .admin-tabs button[aria-current="page"] {
+    color:var(--accent-amber);
+    background:linear-gradient(145deg,rgba(228,163,74,.17),rgba(228,163,74,.045));
+    border-color:var(--accent-amber-edge);
+  }
+}

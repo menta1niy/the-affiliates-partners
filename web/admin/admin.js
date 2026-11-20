@@ -2,8 +2,8 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
-  const state = {users:[],pending:[],invites:[],tab:"pending",role:"",actorId:null,
-    pages:{users:1,pending:1},requests:{users:0,pending:0}};
+  const state = {users:[],pending:[],invites:[],tab:"pending",section:"overview",role:"",actorId:null,
+    pages:{users:1,pending:1,assignments:1},requests:{users:0,pending:0,assignments:0}};
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
@@ -301,7 +301,7 @@
       });
     }catch(e){root.append(make("p",e.message,"empty"));error(e.message);}
   }
-  async function openOfferCatalog(){
+  async function openOfferCatalog(focusOfferId=null){
     let dialog=$("mvp-catalog-dialog");
     if(!dialog){dialog=make("dialog");dialog.id="mvp-catalog-dialog";dialog.className="panel admin-catalog-dialog";document.body.append(dialog);}
     dialog.replaceChildren();
@@ -349,7 +349,9 @@
       const payload={};for(const [key] of fields)payload[key]=inputs[key].value.trim();
       payload.payout_rub=Number(payload.payout_rub);payload.hold_days=Number(payload.hold_days);payload.active=active.checked;
       if(editingId)payload.offer_id=editingId;
-      await api("/admin/mvp/offer",payload);resetEditor();await reload();notice("Оффер сохранён");
+      await api("/admin/mvp/offer",payload);resetEditor();await reload();
+      if(state.section==="offers")await renderOffersView();
+      notice("Оффер сохранён");
     }catch(err){error(err.message);}finally{save.disabled=false;}});
     const canEdit=state.role==="owner";
     if(canEdit)dialog.append(form);
@@ -358,7 +360,7 @@
       list.replaceChildren(make("p","Загрузка…"));
       const data=await api("/admin/mvp/catalog");list.replaceChildren();
       const offers=Array.isArray(data.offers)?data.offers:[];
-      if(!offers.length){list.append(make("p","Офферы пока не добавлены.","empty"));return;}
+      if(!offers.length){list.append(make("p","Офферы пока не добавлены.","empty"));return offers;}
       for(const offer of offers){
         const item=make("article",undefined,"admin-catalog-card");
         const meta=make("div",undefined,"admin-catalog-card-heading");
@@ -374,39 +376,137 @@
         if(canEdit)item.append(action("Редактировать",()=>{editingId=offer.id;heading.textContent="Редактировать оффер";for(const [key] of fields)inputs[key].value=offer[key]??"";active.checked=!!offer.active;cancel.hidden=false;save.textContent="Сохранить изменения";form.scrollIntoView({behavior:"smooth",block:"start"});}));
         list.append(item);
       }
+      return offers;
     }
-    dialog.showModal();await reload();
+    dialog.showModal();
+    const offers=await reload();
+    if(canEdit && focusOfferId){
+      const offer=offers.find(item=>String(item.id)===String(focusOfferId));
+      if(offer){
+        editingId=offer.id;
+        heading.textContent="Редактировать оффер";
+        for(const [key] of fields)inputs[key].value=offer[key]??"";
+        active.checked=!!offer.active;
+        cancel.hidden=false;
+        save.textContent="Сохранить изменения";
+        form.scrollIntoView({behavior:"instant",block:"start"});
+      }
+    }
   }
-  const tabScreens={
-    pending:{name:"Модерация",description:"Заявки и сводка активности платформы.",number:"01"},
-    users:{name:"Участники",description:"Профили пользователей, роли и управление доступом.",number:"02"},
-    invitations:{name:"Приглашения",description:"Создавайте ссылки и управляйте приглашёнными участниками.",number:"03"},
-    audit:{name:"История действий",description:"Последние изменения и события вашей команды.",number:"04"}
+  const sections={
+    overview:{name:"Обзор",description:"Главные показатели и быстрые действия.",number:"01"},
+    offers:{name:"Офферы",description:"Каталог предложений, условия и ставки.",number:"02"},
+    assignments:{name:"Назначения",description:"Ручная выдача и контроль назначенных офферов.",number:"03"},
+    people:{name:"Пользователи",description:"Регистрации, профили и права участников.",number:"04"},
+    more:{name:"Ещё",description:"Приглашения, история действий и другие инструменты.",number:"05"}
   };
-  function switchTab(tab, addHistory=false){
-    if(!Object.hasOwn(tabScreens,tab))return;
-    if(addHistory && state.tab!==tab)history.pushState({...history.state,adminTab:tab},"",location.href);
+  const subtabSection={pending:"people",users:"people",invitations:"more",audit:"more"};
+  const defaultSubtab={people:"pending",more:"invitations"};
+  function canManageOffers(){return state.role==="owner" || state.role==="admin";}
+  async function renderOffersView(){
+    if(!canManageOffers())return;
+    const root=$("admin-offers-list");
+    root.replaceChildren(make("p","Загружаем офферы…","muted"));
+    try{
+      const data=await api("/admin/mvp/catalog");
+      if(state.section!=="offers")return;
+      const offers=Array.isArray(data.offers)?data.offers:[];
+      root.replaceChildren();
+      if(!offers.length){root.append(make("p","Офферы пока не добавлены. Откройте управление каталогом.","empty"));return;}
+      for(const offer of offers){
+        const card=make("article",undefined,"admin-catalog-card");
+        const head=make("div",undefined,"admin-catalog-card-heading");
+        const identity=make("div");
+        identity.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("h3",offer.name));
+        const status=make("span",offer.active?"Активен":"Отключён","pill");
+        status.dataset.status=offer.active?"active":"blocked";
+        head.append(identity,status);
+        const terms=make("div",undefined,"admin-catalog-terms");
+        for(const [label,value] of [["СТАВКА",number(offer.payout_rub)+" ₽"],["ХОЛД",(offer.hold_days??"—")+" дн."],["ЦЕЛЬ",offer.target_action||"—"]]){
+          const cell=make("div");cell.append(make("span",label),make("strong",value));terms.append(cell);
+        }
+        card.append(head,terms);
+        card.append(action(state.role==="owner"?"Редактировать":"Подробнее",
+          ()=>openOfferCatalog(state.role==="owner"?offer.id:null)));
+        root.append(card);
+      }
+    }catch(e){root.replaceChildren(make("p",e.message,"message error"));}
+  }
+  async function renderAssignmentsView(page=1){
+    if(!canManageOffers())return;
+    const requestId=++state.requests.assignments;
+    const root=$("admin-assignment-users");
+    root.replaceChildren(make("p","Загружаем лидов…","muted"));
+    try{
+      const data=await api("/admin/users",{page,query:$("admin-assignment-search").value.trim()});
+      if(requestId!==state.requests.assignments || state.section!=="assignments")return;
+      state.pages.assignments=page;
+      const people=(data.users||[]).filter(u=>["lead","referrer"].includes(roleOf(u)));
+      root.replaceChildren();
+      if(!people.length){root.append(make("p","Лиды не найдены.","empty"));}
+      for(const user of people){
+        const item=make("div",undefined,"admin-assignment-user");
+        const info=make("div");
+        info.append(make("strong",personName(user)),make("span",
+          "ID "+(user.internal_id??"—")+" · "+(statuses[statusOf(user)]||statusOf(user))));
+        item.append(info,action("Назначения",()=>openParticipant(user),"ghost"));
+        root.append(item);
+      }
+      const nav=make("div",undefined,"admin-assignment-pages");
+      nav.append(make("span","Страница "+page+" · всего "+number(data.total||0)));
+      const prev=action("Назад",()=>renderAssignmentsView(page-1));prev.disabled=page<=1;
+      const next=action("Далее",()=>renderAssignmentsView(page+1));next.disabled=!data.has_next;
+      nav.append(prev,next);root.append(nav);
+    }catch(e){if(requestId===state.requests.assignments)root.replaceChildren(make("p",e.message,"message error"));}
+  }
+  function setSubtab(tab){
+    if(!Object.hasOwn(subtabSection,tab))return;
     state.tab=tab;
-    document.querySelectorAll("[data-tab]").forEach(button=>button.setAttribute("aria-selected",String(button.dataset.tab===tab)));
-    document.querySelectorAll("[data-panel]").forEach(panel=>panel.hidden=panel.dataset.panel!==tab);
-    const isOverview=tab==="pending";
-    document.querySelector(".admin-topline-index").textContent="— "+tabScreens[tab].number;
-    document.querySelector(".admin-hero").hidden=!isOverview;
-    document.querySelector(".admin-overview").hidden=!isOverview;
-    document.querySelector(".admin-workspace-heading").hidden=!isOverview;
-    const intro=$("admin-screen-intro");
-    intro.hidden=isOverview;
-    if(!isOverview){
-      const screen=tabScreens[tab];
+    document.querySelectorAll("[data-subtab]").forEach(button=>{
+      button.setAttribute("aria-pressed",String(button.dataset.subtab===tab));
+    });
+    document.querySelectorAll("[data-panel]").forEach(panel=>{
+      panel.hidden=panel.dataset.panel!==tab;
+    });
+    if(tab==="audit")loadAudit();
+  }
+  function navigateSection(section,{subtab,addHistory=false}={}){
+    if(!Object.hasOwn(sections,section))return;
+    if(!canManageOffers() && ["offers","assignments"].includes(section))return;
+    const tab=subtab && subtabSection[subtab]===section?subtab:
+      (subtabSection[state.tab]===section?state.tab:defaultSubtab[section]);
+    if(addHistory && (section!==state.section || (tab && tab!==state.tab))){
+      history.pushState({...history.state,adminSection:section,...(tab?{adminTab:tab}:{})},"",location.href);
+    }
+    state.section=section;
+    document.querySelectorAll("[data-section]").forEach(button=>{
+      if(button.dataset.section===section)button.setAttribute("aria-current","page");
+      else button.removeAttribute("aria-current");
+    });
+    document.querySelectorAll("[data-workspace]").forEach(workspace=>{
+      workspace.hidden=workspace.dataset.workspace!==section;
+    });
+    if(tab)setSubtab(tab);
+    const overview=section==="overview";
+    document.querySelector(".admin-hero").hidden=!overview;
+    const intro=$("admin-screen-intro");intro.hidden=overview;
+    const screen=sections[section];
+    document.querySelector(".admin-topline-index").textContent="— "+screen.number;
+    if(!overview){
       $("admin-screen-crumb").textContent="CONTROL CENTER / "+screen.name.toUpperCase();
-      $("admin-screen-index").textContent=screen.number+" / 04";
+      $("admin-screen-index").textContent=screen.number+" / 05";
       $("admin-screen-heading").textContent=screen.name+".";
       $("admin-screen-description").textContent=screen.description;
       $("admin-screen-symbol").textContent=screen.number;
     }
-    document.title=isOverview?"The Affiliates — Управление":"The Affiliates — "+tabScreens[tab].name;
+    document.title="The Affiliates — "+screen.name;
     window.scrollTo({top:0,behavior:"instant"});
-    if(tab==="audit")loadAudit();
+    if(section==="offers")renderOffersView();
+    if(section==="assignments")renderAssignmentsView();
+  }
+  function navigateTab(tab,addHistory=false){
+    if(!Object.hasOwn(subtabSection,tab))return;
+    navigateSection(subtabSection[tab],{subtab:tab,addHistory});
   }
   $("invite-form").addEventListener("submit",async e=>{
     e.preventDefault();error("");const submit=$("invite-submit");submit.disabled=true;
@@ -423,8 +523,18 @@
       show("invite-result",true);notice("Приглашение создано.");await loadDashboard();
     }catch(err){error(err.message);}finally{submit.disabled=false;}
   });
-  document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>switchTab(button.dataset.tab,true)));
-  window.addEventListener("popstate",event=>switchTab(event.state?.adminTab||"pending"));
+  document.querySelectorAll("[data-section]").forEach(button=>
+    button.addEventListener("click",()=>navigateSection(button.dataset.section,{addHistory:true})));
+  document.querySelectorAll("[data-subtab]").forEach(button=>
+    button.addEventListener("click",()=>navigateTab(button.dataset.subtab,true)));
+  document.querySelectorAll("[data-go-section]").forEach(button=>
+    button.addEventListener("click",()=>navigateSection(button.dataset.goSection,
+      {subtab:button.dataset.goSubtab,addHistory:true})));
+  window.addEventListener("popstate",event=>{
+    const tab=event.state?.adminTab;
+    const section=event.state?.adminSection || subtabSection[tab] || "overview";
+    navigateSection(section,{subtab:tab});
+  });
   let searchDelay;
   $("user-query").addEventListener("input",()=>{
     clearTimeout(searchDelay);
@@ -434,11 +544,16 @@
   });
   $("user-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("role-filter").addEventListener("change",()=>loadUsersPage("users",1));
+  let assignmentSearchDelay;
+  $("admin-assignment-search").addEventListener("input",()=>{
+    clearTimeout(assignmentSearchDelay);
+    assignmentSearchDelay=setTimeout(()=>renderAssignmentsView(1),220);
+  });
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   const catalogButton=$("mvp-catalog-anchor");
   catalogButton.id="mvp-catalog-open";
   catalogButton.addEventListener("click",()=>{error("");openOfferCatalog().catch(e=>error(e.message));});
-  $("admin-primary-action").addEventListener("click",()=>{switchTab("pending");document.querySelector('[data-panel="pending"]').scrollIntoView({behavior:"smooth",block:"start"});});
+  $("admin-primary-action").addEventListener("click",()=>navigateTab("pending",true));
   async function start(){
     try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");}catch{}
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
@@ -447,13 +562,16 @@
       const role=session.role || session.user?.role;
       state.role=role;
       state.actorId=Number(session.user?.id);
-      catalogButton.hidden=!(["owner","admin"].includes(role));
+      const managerAccess=canManageOffers();
+      document.querySelectorAll("[data-owner-admin]").forEach(el=>el.hidden=!managerAccess);
+      catalogButton.hidden=!managerAccess;
       const status=session.status || session.user?.status;
       if(!["owner","admin","staff"].includes(role) || (status && !["active","approved"].includes(status))){
         show("no-access",true);return;
       }
       await loadDashboard();show("admin-app",true);document.body.classList.add("admin-authenticated");
-      switchTab(history.state?.adminTab||"pending");
+      const tab=history.state?.adminTab;
+      navigateSection(history.state?.adminSection||subtabSection[tab]||"overview",{subtab:tab});
     }catch(e){show("no-access",true);$("no-access-message").textContent=e.message;}
   }
   start();
