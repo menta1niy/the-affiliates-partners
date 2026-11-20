@@ -53,8 +53,8 @@ class CoreComponentsBrowserTests(unittest.TestCase):
                                   pillStyle: css('.pill').borderTopStyle
                                 };
                             }""")
-                            self.assertEqual(values["primary"], "rgb(255, 255, 255)")
-                            self.assertEqual(values["ink"], "rgb(8, 9, 9)")
+                            self.assertEqual(values["primary"], "rgb(228, 163, 74)")
+                            self.assertEqual(values["ink"], "rgb(24, 17, 10)")
                             self.assertGreaterEqual(values["primaryHeight"], 44)
                             self.assertGreaterEqual(values["inputHeight"], 44)
                             self.assertEqual(values["dangerStyle"], "dashed")
@@ -105,7 +105,7 @@ class CoreComponentsBrowserTests(unittest.TestCase):
                     submit: getComputedStyle(el.querySelector('.btn.primary')).backgroundColor,
                 })""")
                 self.assertEqual(values["color"], "rgb(247, 247, 245)")
-                self.assertEqual(values["submit"], "rgb(255, 255, 255)")
+                self.assertEqual(values["submit"], "rgb(228, 163, 74)")
                 self.assertNotEqual(values["background"], "rgb(11, 43, 38)")
                 self.assertTrue(values["border"].startswith("rgba("))
                 dialog.get_by_role("button", name="Закрыть").click()

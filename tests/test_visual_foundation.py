@@ -10,7 +10,7 @@ from tests.test_admin_participant_browser import BrowserHandler
 
 
 class VisualFoundationSmoke(unittest.TestCase):
-    def test_monochrome_tokens_in_both_documents(self):
+    def test_graphite_foundation_and_amber_primary_in_both_documents(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), BrowserHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -47,8 +47,8 @@ class VisualFoundationSmoke(unittest.TestCase):
                                 self.assertEqual(result["accent"], "#FFFFFF")
                                 self.assertEqual(result["glass"], "rgba(255,255,255,.045)")
                                 self.assertIn("Plus Jakarta Sans", result["font"])
-                                self.assertEqual(result["primaryBg"], "rgb(255, 255, 255)")
-                                self.assertEqual(result["primaryInk"], "rgb(8, 9, 9)")
+                                self.assertEqual(result["primaryBg"], "rgb(228, 163, 74)")
+                                self.assertEqual(result["primaryInk"], "rgb(24, 17, 10)")
                                 self.assertEqual(result["themeColor"], "#080909")
                                 self.assertFalse(errors, errors)
                                 page.close()
