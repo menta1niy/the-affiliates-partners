@@ -389,8 +389,24 @@ def overview(user_id, owner_id, *, for_admin=None):
         rows = conn.execute("SELECT o.*,a.stage,a.note,a.updated_at AS status_updated_at FROM manual_assignments a "
                             "JOIN manual_offers o ON o.id=a.offer_id WHERE a.telegram_id=? "
                             "ORDER BY a.updated_at DESC,o.id", (user_id,)).fetchall()
-        offers = [{**_offer(row), "stage": row["stage"], "note": row["note"], "status_updated_at": row["status_updated_at"]}
-                  for row in rows if for_admin is not None or row["active"]]
+        from server.profile import access_reason
+        registration = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (user_id,)).fetchone()
+        identity_present = conn.execute(
+            "SELECT 1 FROM participant_identities WHERE telegram_id=?", (user_id,)).fetchone() is not None
+        offers = []
+        for row in rows:
+            if for_admin is None and not row["active"]:
+                continue
+            offer = {**_offer(row), "stage": row["stage"], "note": row["note"],
+                     "status_updated_at": row["status_updated_at"]}
+            if for_admin is None:
+                reason = access_reason(registration, identity_present, row["category"])
+                offer["can_apply"] = not bool(reason)
+                offer["unavailable_reason"] = reason
+                if reason:
+                    # Hiding a link in HTML alone is not a permission boundary.
+                    offer["referral_url"] = ""
+            offers.append(offer)
         return {"offers": offers, "statistics": {"total": len(offers),
                 "completed": sum(row["stage"] == "completed" for row in offers),
                 "in_progress": sum(row["stage"] in ("in_progress", "submitted") for row in offers)}}

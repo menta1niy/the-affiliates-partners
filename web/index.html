@@ -228,6 +228,7 @@
           <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">АККАУНТ TELEGRAM</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>
           <div class="data-row"><span>Роль</span><strong id="profile-role">—</strong></div>
           <div class="data-row"><span>Статус</span><strong id="profile-status">—</strong></div>
+          <div class="data-row" id="profile-age-row" hidden><span>Возраст</span><strong id="profile-age">—</strong></div>
           <a id="admin-link" class="btn ghost" href="/partners/admin/" hidden>Панель управления ↗</a>
           <details class="participant-technical">
             <summary>Техническая информация</summary>
@@ -241,6 +242,47 @@
               </div>
             </div>
           </details>
+        </section>
+        <section id="participant-identity-panel" class="panel participant-profile-form-panel" hidden aria-labelledby="participant-identity-heading">
+          <div class="section-kicker">РЕКВИЗИТЫ / ДОСТУП К ОФФЕРАМ</div>
+          <h2 id="participant-identity-heading">Данные для выплат<span class="heading-period">.</span></h2>
+          <p class="participant-profile-explain">Укажите ФИО по документу и личный ИНН после одобрения аккаунта. Пока данные не заполнены, оформление назначенных офферов недоступно.</p>
+          <p id="participant-identity-status" class="participant-profile-state" role="status">Реквизиты не заполнены</p>
+          <form id="participant-identity-form" class="participant-profile-edit-form">
+            <div class="participant-profile-fields">
+              <label for="participant-surname">Фамилия<input id="participant-surname" name="surname" type="text" autocomplete="family-name" maxlength="70" required></label>
+              <label for="participant-given-name">Имя<input id="participant-given-name" name="given_name" type="text" autocomplete="given-name" maxlength="70" required></label>
+              <label for="participant-patronymic">Отчество (если есть)<input id="participant-patronymic" name="patronymic" type="text" autocomplete="additional-name" maxlength="70"></label>
+              <label for="participant-inn">ИНН физического лица (12 цифр)<input id="participant-inn" name="inn" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" autocomplete="off" placeholder="12 цифр" required></label>
+            </div>
+            <p id="participant-inn-hint" class="participant-profile-explain">Номер не отображается полностью после сохранения. При изменении реквизитов введите ИНН заново.</p>
+            <button class="btn primary" id="participant-identity-save" type="submit">Сохранить реквизиты</button>
+            <p id="participant-identity-message" class="participant-form-feedback" role="status"></p>
+          </form>
+        </section>
+        <section id="participant-credit-panel" class="panel participant-profile-form-panel" hidden aria-labelledby="participant-credit-heading">
+          <div class="section-kicker">АНКЕТА / АКТУАЛЬНЫЕ ДАННЫЕ</div>
+          <h2 id="participant-credit-heading">Кредитные продукты<span class="heading-period">.</span></h2>
+          <p class="participant-profile-explain">Обновите число действующих кредитных продуктов при изменениях и перед оформлением кредитных офферов. Анкета не определяет вероятность одобрения.</p>
+          <p id="participant-credit-updated" class="participant-profile-state" role="status">Данные загружаются…</p>
+          <form id="participant-credit-form" class="participant-profile-edit-form">
+            <div id="participant-legacy-onboarding" class="participant-profile-legacy" hidden>
+              <p class="participant-profile-explain">Этот аккаунт был создан до появления анкеты. Заполните дату рождения и подтвердите согласия. Ваш внутренний ID не изменится.</p>
+              <label for="participant-legacy-birth">Дата рождения
+                <input id="participant-legacy-birth" type="date" autocomplete="bday">
+              </label>
+              <label class="check"><input type="checkbox" id="participant-legacy-privacy">Согласен(на) на обработку даты рождения и финансовой анкеты для регистрации и подбора предложений.</label>
+              <label class="check"><input type="checkbox" id="participant-legacy-terms">Ознакомился(-ась) с условиями участия, указанными при регистрации.</label>
+            </div>
+            <div class="participant-profile-credit-fields">
+              <label for="participant-credit-cards">Кредитные карты<input id="participant-credit-cards" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
+              <label for="participant-installments">Рассрочки<input id="participant-installments" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
+              <label for="participant-loans">Кредиты<input id="participant-loans" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
+              <label for="participant-mortgages">Ипотека<input id="participant-mortgages" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
+            </div>
+            <button class="btn primary" id="participant-credit-save" type="submit">Обновить анкету</button>
+            <p id="participant-credit-message" class="participant-form-feedback" role="status"></p>
+          </form>
         </section>
         </div>
       </section>

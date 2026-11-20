@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS registration_profiles (
   submitted_at BIGINT NOT NULL,
   credit_updated_at BIGINT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS participant_identities (
+  telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  full_name_encrypted TEXT NOT NULL,
+  inn_encrypted TEXT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS manual_assignments (
   telegram_id BIGINT NOT NULL REFERENCES users(id),
   offer_id TEXT NOT NULL REFERENCES manual_offers(id),
@@ -38,4 +44,5 @@ CREATE TABLE IF NOT EXISTS manual_assignments (
 CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id);
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.registration_profiles TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.participant_identities TO "ta-partners";
 COMMIT;

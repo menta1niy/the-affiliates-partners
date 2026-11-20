@@ -172,6 +172,12 @@ def initialize():
           submitted_at INTEGER NOT NULL,
           credit_updated_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS participant_identities (
+          telegram_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          full_name_encrypted TEXT NOT NULL,
+          inn_encrypted TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS crm_events (event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL,
           event_type TEXT NOT NULL, received_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_lead_bindings (crm_lead_id TEXT PRIMARY KEY,
@@ -507,7 +513,7 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
             else:
                 assignee = actor
         else:
-            if user["role"] not in ("owner", "admin", "staff", "referrer"):
+            if user["role"] not in ("owner", "admin", "staff", "referrer", "lead"):
                 raise Problem(403, "Недостаточно прав")
             if assignee is not None:
                 raise Problem(400, "Недопустимый ответственный")
@@ -552,7 +558,7 @@ def revoke_invitation(actor, owner_id, code):
     with transaction() as conn:
         ensure_owner(conn, owner_id)
         user = get_user(conn, actor)
-        if not user or user["status"] != "active" or user["role"] not in ("owner", "admin", "staff", "referrer"):
+        if not user or user["status"] != "active" or user["role"] not in ("owner", "admin", "staff", "referrer", "lead"):
             raise Problem(403, "Недостаточно прав")
         invitation = conn.execute("SELECT kind,issuer_id,active FROM invitations WHERE code=?", (code,)).fetchone()
         if invitation is None:
@@ -615,7 +621,7 @@ def valid_invitation_source(conn, sender_id, code):
         return (row["blogger_active"] == 1 and row["blogger_issuer"] == row["issuer_id"]
                 and row["issuer_role"] in ("owner", "admin", "staff") )
     return (row["kind"] == "referral" and row["issuer_id"] != sender_id
-            and row["issuer_role"] in ("owner", "admin", "staff", "referrer"))
+            and row["issuer_role"] in ("owner", "admin", "staff", "referrer", "lead"))
 
 
 def record_start(update_id, sender_id, code):

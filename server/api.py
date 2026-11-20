@@ -13,6 +13,7 @@ from server import db
 from server import integration
 from server import tasks
 from server import mvp
+from server import profile as participant_profile
 
 
 def storage_error(exc):
@@ -70,7 +71,8 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/admin/dashboard", "/api/admin/users", "/api/admin/participant", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
                   "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment",
-                  "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment"}
+                  "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
+                  "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -153,6 +155,7 @@ class Handler(BaseHTTPRequestHandler):
                 pending_source = profile.pop("pending_source_info", None)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
                 result["registration"] = db.registration_profile(user["id"])
+                result["identity"] = participant_profile.profile_view(user["id"])
                 if pending_source:
                     result["source_info"] = pending_source
                 result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
@@ -200,6 +203,12 @@ class Handler(BaseHTTPRequestHandler):
                 result = mvp.bulk_assignment(user["id"], owner, body)
             elif route == "/api/mvp/overview":
                 result = mvp.overview(user["id"], owner)
+            elif route == "/api/profile/identity":
+                result = participant_profile.save_identity(user["id"], body)
+            elif route == "/api/profile/credit-survey":
+                result = participant_profile.update_credit(user["id"], body)
+            elif route == "/api/profile/onboarding":
+                result = participant_profile.complete_legacy_onboarding(user["id"], body)
             elif route == "/api/offers":
                 get_offers = getattr(db, "list_assigned_offers", None)
                 if get_offers is None:

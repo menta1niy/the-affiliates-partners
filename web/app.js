@@ -5,6 +5,15 @@
   const roleLabels = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник"};
   const statusLabels = {pending:"На рассмотрении",approved:"Подтверждён",active:"Активен",rejected:"Отклонён",blocked:"Заблокирован",invited:"Не зарегистрирован",unregistered:"Не зарегистрирован",new:"Не зарегистрирован"};
   let current = null;
+  const gateReasons={
+    underage:"Оформление недоступно до 18 лет. Реферальные приглашения остаются доступны.",
+    identity:"Сначала заполните ФИО и ИНН в профиле.",
+    credit_review:"Перед оформлением обновите кредитную анкету в профиле.",
+    registration:"Завершите регистрацию и дождитесь одобрения."
+  };
+  function unavailableReason(offer){
+    return offer?.can_apply===false ? gateReasons[offer.unavailable_reason]||"Оформление сейчас недоступно." : "";
+  }
   let referralRequest = 0;
   let offersRequest = 0;
   let crmStatusRequest = 0;
@@ -373,8 +382,22 @@
       hint.textContent="Это возможные этапы. Отметки о выполнении будут доступны после подключения подтверждений.";
       section.append(hint);offerDialogContent.append(section);
     }
-    const link=offerExternalLink(offer.referral_url);
-    if(link)offerDialogContent.append(link);
+    const denied=unavailableReason(offer);
+    if(denied){
+      const hint=document.createElement("p");hint.className="participant-offer-blocked-hint";hint.textContent=denied;
+      const button=document.createElement("button");button.className="btn participant-offer-unavailable";
+      button.type="button";button.disabled=true;button.textContent="Недоступно";
+      offerDialogContent.append(hint,button);
+      if(offer.unavailable_reason!=="underage"&&participantTabsEnabled){
+        const action=document.createElement("button");action.type="button";action.className="btn ghost participant-offer-profile-action";
+        action.textContent="Перейти в профиль →";
+        action.addEventListener("click",()=>{closeOfferDialog();setParticipantView("profile",true);});
+        offerDialogContent.append(action);
+      }
+    }else{
+      const link=offerExternalLink(offer.referral_url);
+      if(link)offerDialogContent.append(link);
+    }
     if(!offerDialog.open)offerDialog.showModal();
   }
   function renderManualOffers(){
@@ -414,7 +437,14 @@
       const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
       button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
-      item.append(top,summary,nextOfferAction(offer.stage),button);list.append(item);
+      item.append(top,summary,nextOfferAction(offer.stage));
+      if(unavailableReason(offer)){
+        const restriction=document.createElement("div");restriction.className="participant-offer-access-status";
+        const pill=document.createElement("span");pill.className="participant-offer-access-pill";pill.textContent="Недоступно";
+        const explanation=document.createElement("small");explanation.textContent=unavailableReason(offer);
+        restriction.append(pill,explanation);item.append(restriction);
+      }
+      item.append(button);list.append(item);
     }
     root.append(list);
   }
@@ -559,6 +589,49 @@
     text("profile-avatar",displayName.trim().slice(0,1).toUpperCase());
     text("profile-username",user.username?"@"+user.username:"Telegram");
     text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : displayRegistrationId(user));text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
+    const canEditProfile=active && ["lead","referrer"].includes(role) && session.open_registration===true;
+    show("participant-identity-panel",canEditProfile);
+    show("participant-credit-panel",canEditProfile);
+    show("profile-age-row",Boolean(session.registration?.age!==undefined&&session.registration?.age!==null));
+    if(session.registration?.age!==undefined)text("profile-age",session.registration.age+" лет");
+    if(canEditProfile){
+      const identity=session.identity||{complete:false};
+      const legacyOnboarding=!session.registration;
+      show("participant-legacy-onboarding",legacyOnboarding);
+      $("participant-legacy-birth").required=legacyOnboarding;
+      $("participant-legacy-privacy").required=legacyOnboarding;
+      $("participant-legacy-terms").required=legacyOnboarding;
+      $("participant-identity-save").disabled=legacyOnboarding;
+      $("participant-credit-save").textContent=legacyOnboarding?"Завершить анкету":"Обновить анкету";
+      text("participant-identity-status",identity.complete
+        ?"Реквизиты сохранены · ИНН "+identity.inn_masked
+        :legacyOnboarding?"Сначала завершите анкету ниже. Ваш ID сохранится."
+        :"Реквизиты не заполнены · оформление недоступно");
+      $("participant-surname").value=identity.surname||"";
+      $("participant-given-name").value=identity.given_name||"";
+      $("participant-patronymic").value=identity.patronymic||"";
+      $("participant-inn").value="";
+      const registration=session.registration;
+      if(registration?.credit_products){
+        for(const [name,id] of [["credit_cards","participant-credit-cards"],["installments","participant-installments"],
+                                 ["loans","participant-loans"],["mortgages","participant-mortgages"]]){
+          $(id).value=String(registration.credit_products[name]??0);
+        }
+      }else if(legacyOnboarding){
+        for(const id of ["participant-credit-cards","participant-installments","participant-loans","participant-mortgages"]){
+          $(id).value="0";
+        }
+      }
+      const updated=Number(registration?.credit_updated_at);
+      const currentAge=Number(registration?.age);
+      const recent=Number.isFinite(updated)&&updated>0&&Date.now()/1000-updated<=30*86400;
+      text("participant-credit-updated",Number.isFinite(updated)&&updated>0
+        ?"Последнее обновление: "+new Date(updated*1000).toLocaleDateString("ru-RU")+(recent?" · актуально":" · нужно обновить")
+        :"Анкета не заполнена");
+      if(Number.isFinite(currentAge)&&currentAge<18){
+        text("participant-identity-status","Оформление офферов недоступно до 18 лет; приглашать друзей можно.");
+      }
+    }
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
@@ -634,6 +707,52 @@
     } catch(e) {
       text("registration-message",e.message);
     } finally {button.disabled=false;}
+  });
+  $("participant-identity-form").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const save=$("participant-identity-save");save.disabled=true;
+    text("participant-identity-message","Сохраняем реквизиты…");
+    try{
+      await api("/profile/identity",{
+        surname:$("participant-surname").value.trim(),
+        given_name:$("participant-given-name").value.trim(),
+        patronymic:$("participant-patronymic").value.trim(),
+        inn:$("participant-inn").value.trim()
+      });
+      text("participant-identity-message","Реквизиты сохранены.");
+      await refresh();
+    }catch(e){text("participant-identity-message",e.message);}
+    finally{save.disabled=false;}
+  });
+  $("participant-credit-form").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const save=$("participant-credit-save");save.disabled=true;
+    text("participant-credit-message","Сохраняем обновления…");
+    try{
+      const values={};
+      for(const [name,id] of [["credit_cards","participant-credit-cards"],["installments","participant-installments"],
+                              ["loans","participant-loans"],["mortgages","participant-mortgages"]]){
+        const input=$(id);const count=Number(input.value);
+        if(!input.value.trim()||!Number.isInteger(count)||count<0||count>50)
+          throw new Error("Укажите целое количество каждого вида продуктов от 0 до 50.");
+        values[name]=count;
+      }
+      const legacy=!current?.registration;
+      if(legacy){
+        if(ageFromBirthDate($("participant-legacy-birth").value)===null)
+          throw new Error("Укажите действительную дату рождения.");
+        values.birth_date=$("participant-legacy-birth").value;
+        values.consent=true;
+        values.privacy_accepted=$("participant-legacy-privacy").checked;
+        values.terms_accepted=$("participant-legacy-terms").checked;
+        if(!values.privacy_accepted||!values.terms_accepted)
+          throw new Error("Подтвердите согласие и ознакомление с правилами.");
+      }
+      await api(legacy?"/profile/onboarding":"/profile/credit-survey",values);
+      text("participant-credit-message","Анкета актуализирована.");
+      await refresh();
+    }catch(e){text("participant-credit-message",e.message);}
+    finally{save.disabled=false;}
   });
   $("copy-referral").addEventListener("click",async () => {
     const link=$("referral-link").value;
