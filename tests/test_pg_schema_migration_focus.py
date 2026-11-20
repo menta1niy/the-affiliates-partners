@@ -40,6 +40,11 @@ class SchemaMigrationFocused(unittest.TestCase):
                                                         "status": "confirmed", "reversed": False}]})
                 with closing(sqlite3.connect(path)) as conn:
                     tasks._schema(conn)
+                    # The legacy test fixture predates standalone offers, finance,
+                    # and referral tables. Include the current SQLite schema before
+                    # comparing every table in the PostgreSQL migration contract.
+                    from server import finance
+                    finance.schema(conn)
                     conn.execute("INSERT INTO crm_bloggers(blogger_uuid,channel,issuer_id,active) VALUES(?,?,?,1)",
                                  ("99999999-9999-4999-8999-999999999999", "@synthetic_channel", owner["id"]))
                     conn.execute("INSERT INTO participant_task_reports(report_id,telegram_id,crm_lead_id,offer_id,action,note,created_at) "

@@ -55,8 +55,16 @@ def copy(sqlite_path, target_url):
             dst.execute(SCHEMA)
             validate_source_schema(src, dst)
             for table in TABLES:
+                if table == "internal_id_sequence":
+                    # initialize() intentionally seeds (singleton=1,next_id=100).
+                    # This is schema metadata, not pre-existing participant data.
+                    seed = dst.execute("SELECT singleton,next_id FROM internal_id_sequence").fetchall()
+                    if seed and (len(seed) != 1 or tuple(seed[0]) != (1, 100)):
+                        raise ValueError("Target PostgreSQL must be empty: " + table)
+                    continue
                 if dst.execute(sql.SQL("SELECT 1 FROM {} LIMIT 1").format(sql.Identifier(table))).fetchone():
                     raise ValueError("Target PostgreSQL must be empty: " + table)
+            dst.execute("DELETE FROM internal_id_sequence WHERE singleton=1 AND next_id=100")
             copied = {}
             for table in TABLES:
                 if not src.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
