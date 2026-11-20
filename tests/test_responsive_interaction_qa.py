@@ -145,7 +145,12 @@ class ResponsiveInteractionQA(unittest.TestCase):
                           height:e.getBoundingClientRect().height,
                           radius:getComputedStyle(e).borderTopLeftRadius,
                           padding:getComputedStyle(e).padding,
-                          background:getComputedStyle(e).backgroundImage
+                          background:getComputedStyle(e).backgroundImage,
+                          title:(() => {
+                            const h=e.querySelector('h1'),r=h.getBoundingClientRect(),s=getComputedStyle(h);
+                            return {font:s.fontSize,weight:s.fontWeight,lineHeight:s.lineHeight,
+                              height:r.height,width:r.width,scrollWidth:h.scrollWidth,nowrap:s.whiteSpace};
+                          })()
                         })""")
                         page.locator('#participant-nav [data-view="profile"]').click()
                         profile=page.locator(".participant-screen-profile")
@@ -154,13 +159,25 @@ class ResponsiveInteractionQA(unittest.TestCase):
                           height:e.getBoundingClientRect().height,
                           radius:getComputedStyle(e).borderTopLeftRadius,
                           padding:getComputedStyle(e).padding,
-                          background:getComputedStyle(e).backgroundImage
+                          background:getComputedStyle(e).backgroundImage,
+                          title:(() => {
+                            const h=e.querySelector('h1'),r=h.getBoundingClientRect(),s=getComputedStyle(h);
+                            return {font:s.fontSize,weight:s.fontWeight,lineHeight:s.lineHeight,
+                              height:r.height,width:r.width,scrollWidth:h.scrollWidth,nowrap:s.whiteSpace};
+                          })()
                         })""")
                         layout={"offers":offer_layout,"profile":profile_layout}
                         self.assertAlmostEqual(offer_layout["height"],profile_layout["height"],delta=1,msg=str(layout))
                         self.assertEqual(offer_layout["radius"],profile_layout["radius"])
                         self.assertEqual(offer_layout["padding"],profile_layout["padding"])
                         self.assertEqual(offer_layout["background"],profile_layout["background"])
+                        self.assertEqual(offer_layout["title"]["font"],profile_layout["title"]["font"])
+                        self.assertEqual(offer_layout["title"]["weight"],profile_layout["title"]["weight"])
+                        self.assertEqual(offer_layout["title"]["nowrap"],"nowrap")
+                        self.assertEqual(profile_layout["title"]["nowrap"],"nowrap")
+                        for current in (offer_layout,profile_layout):
+                            self.assertLessEqual(current["title"]["height"],float(current["title"]["lineHeight"].replace("px",""))+1)
+                            self.assertLessEqual(current["title"]["scrollWidth"],current["title"]["width"]+1)
                         page.close()
                 for width in (320, 390, 1440):
                     with self.subTest(admin=True, width=width):
