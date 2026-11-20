@@ -171,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
                 if pending_source:
                     result["source_info"] = pending_source
                 result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
+                from server.registration import CONSENT_VERSION
+                result["legal_version"] = os.environ.get("PARTNERS_LEGAL_APPROVED_VERSION", "").strip() or CONSENT_VERSION
             elif route == "/api/register":
                 if body.get("consent") is not True:
                     return self.send_json(400, {"error": "Необходимо согласие"})

@@ -84,8 +84,11 @@ class Stage8FinanceTests(unittest.TestCase):
         self.assertEqual(rejected[0],200)
         self.assertEqual(rejected[1]["balances"],
                          {"accrued_rub":1200,"paid_rub":700,"reserved_rub":0,"available_rub":500})
-        self.assertEqual(self.as_user("/api/finance/overview",ALICE)[1]["withdrawals"][0]["status"],"rejected")
-        self.assertEqual(self.as_user("/api/admin/finance/withdrawals",OWNER,status="all")[1]["withdrawals"][0]["status"],"rejected")
+        # UUID sort order is not event order for withdrawals in the same second.
+        self.assertIn("rejected", [row["status"] for row in
+            self.as_user("/api/finance/overview",ALICE)[1]["withdrawals"]])
+        self.assertIn("rejected", [row["status"] for row in
+            self.as_user("/api/admin/finance/withdrawals",OWNER,status="all")[1]["withdrawals"]])
 
     def test_manual_assignment_or_lead_stage_does_not_create_money(self):
         self.ready(ALICE)

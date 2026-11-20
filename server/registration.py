@@ -4,6 +4,7 @@ This data is intentionally distinct from Telegram display names, referral
 attribution, bank approvals and later payout-identification documents.
 """
 import re
+import os
 from datetime import date
 
 
@@ -21,6 +22,14 @@ def normalize(payload):
             or payload.get("privacy_accepted") is not True
             or payload.get("terms_accepted") is not True):
         raise Problem(400, "Для регистрации необходимо принять условия и согласие на обработку данных")
+    approved_version = os.environ.get("PARTNERS_LEGAL_APPROVED_VERSION", "").strip()
+    if not approved_version and os.environ.get("PARTNERS_REQUIRE_APPROVED_LEGAL", "").strip().lower() == "true":
+        raise Problem(503, "Публичная регистрация недоступна до утверждения юридических документов")
+    if approved_version:
+        if approved_version.endswith("-draft") or not re.fullmatch(r"partners-legal-v[0-9]+-[0-9]{4}-[0-9]{2}", approved_version):
+            raise Problem(503, "Не настроена утверждённая версия юридических документов")
+        if payload.get("legal_version") != approved_version:
+            raise Problem(409, "Условия обновились. Ознакомьтесь с документами и подтвердите согласия заново")
     birth_date = payload.get("birth_date")
     if not isinstance(birth_date, str) or not DATE_PATTERN.fullmatch(birth_date):
         raise Problem(400, "Введите дату рождения в формате ГГГГ-ММ-ДД")
@@ -36,7 +45,7 @@ def normalize(payload):
         if type(count) is not int or not 0 <= count <= MAX_CREDIT_PRODUCTS_PER_TYPE:
             raise Problem(400, "Укажите количество действующих кредитных продуктов (0–50)")
         normalized[field] = count
-    normalized["consent_version"] = CONSENT_VERSION
+    normalized["consent_version"] = approved_version or CONSENT_VERSION
     return normalized
 
 

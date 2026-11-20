@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from check_legal_release import validate as validate_legal_release
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,7 @@ def git(*args: str) -> str:
 
 
 def main() -> None:
+    legal_version = validate_legal_release(ROOT)
     if git("status", "--porcelain", "--untracked-files=all", "--", "web"):
         raise SystemExit("Web source has uncommitted changes: commit and validate first")
     commit = git("rev-parse", "HEAD")
@@ -61,6 +63,7 @@ def main() -> None:
         raise SystemExit("Demo preview asset must not be in the release")
     manifest = {
         "commit": commit,
+        "legal_version": legal_version,
         "theme": "monochrome-glass-v1",
         "files": {
             p.relative_to(SOURCE).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

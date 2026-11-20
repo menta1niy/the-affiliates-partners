@@ -107,9 +107,10 @@
               <summary>Основные правила участия</summary>
               <p>Заявка рассматривается вручную. До одобрения офферы недоступны. После одобрения для оформления потребуется указать ФИО и ИНН в профиле. Оформление любых офферов для пользователей младше 18 лет запрещено. Вознаграждения начисляются только после подтверждения оснований для выплаты.</p>
             </details>
-            <label class="check participant-registration-check"><input type="checkbox" id="consent" required><span>Согласен(на) на обработку перечисленных данных для регистрации, модерации и подбора предложений.</span></label>
-            <label class="check participant-registration-check"><input type="checkbox" id="register-terms-consent" required><span>Ознакомился(-ась) с основными правилами участия выше и принимаю их.</span></label>
-            <p class="participant-registration-disclaimer">Развёрнутые юридические документы подлежат утверждению до публичного запуска обновлённой регистрации.</p>
+            <p class="participant-registration-disclaimer">Документы для ознакомления (проекты до утверждения): <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика обработки данных</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие на обработку</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия участия</a>, <a href="/partners/legal/referrals.html" target="_blank" rel="noopener noreferrer">Реферальная программа</a>. Версия: <span id="register-legal-version">—</span>.</p>
+            <label class="check participant-registration-check"><input type="checkbox" id="consent" required><span>Даю отдельное согласие на обработку персональных данных для регистрации, модерации и участия в офферах. Ознакомился(-ась) с <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">текстом согласия</a> и <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">политикой обработки данных</a>.</span></label>
+            <label class="check participant-registration-check"><input type="checkbox" id="register-terms-consent" required><span>Ознакомился(-ась) с <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условиями участия</a> и принимаю их. Согласие на рекламные рассылки здесь не запрашивается.</span></label>
+            <p class="participant-registration-disclaimer">Юридические тексты находятся на утверждении. До публичного релиза необходимо определить оператора данных, реквизиты, сроки хранения и новую версию согласий.</p>
           </div>
           <button id="register-submit" class="btn primary participant-registration-submit" type="submit">Отправить заявку на рассмотрение</button>
         </form>
@@ -157,6 +158,7 @@
           <p id="blogger-copy-feedback" role="status" class="muted"></p>
         </div>
         <p id="blogger-terms" class="participant-profile-state">Условия рекламной кампании загружаются.</p>
+        <p class="participant-legal-links">Документы: <a href="/partners/legal/bloggers.html" target="_blank" rel="noopener noreferrer">сотрудничество с блогерами</a> · <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">обработка данных</a>.</p>
         <div class="participant-finance-history"><h3>Рекламные начисления</h3><div id="blogger-history" aria-live="polite"></div></div>
       </section>
       <section id="account" hidden>
@@ -299,6 +301,7 @@
           <div class="data-row"><span>Статус</span><strong id="profile-status">—</strong></div>
           <div class="data-row" id="profile-age-row" hidden><span>Возраст</span><strong id="profile-age">—</strong></div>
           <a id="admin-link" class="btn ghost" href="/partners/admin/" hidden>Панель управления ↗</a>
+          <p class="participant-legal-links">Юридическая информация: <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">обработка данных</a> · <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условия участия</a> · <a href="/partners/legal/referrals.html" target="_blank" rel="noopener noreferrer">рефералы</a>.</p>
           <details class="participant-technical">
             <summary>Техническая информация</summary>
             <div class="participant-technical-body">
@@ -364,8 +367,9 @@
               <label for="participant-legacy-birth">Дата рождения
                 <input id="participant-legacy-birth" type="date" autocomplete="bday">
               </label>
-              <label class="check"><input type="checkbox" id="participant-legacy-privacy">Согласен(на) на обработку даты рождения и финансовой анкеты для регистрации и подбора предложений.</label>
-              <label class="check"><input type="checkbox" id="participant-legacy-terms">Ознакомился(-ась) с условиями участия, указанными при регистрации.</label>
+              <p class="participant-registration-disclaimer">Документы: <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия</a>. Версия: <span id="legacy-legal-version">—</span>.</p>
+              <label class="check"><input type="checkbox" id="participant-legacy-privacy">Даю согласие на обработку данных по <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">отдельному документу</a>.</label>
+              <label class="check"><input type="checkbox" id="participant-legacy-terms">Принимаю <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условия участия</a>.</label>
             </div>
             <div class="participant-profile-credit-fields">
               <label for="participant-credit-cards">Кредитные карты<input id="participant-credit-cards" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>

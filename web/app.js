@@ -780,6 +780,10 @@
   }
   function render(session) {
     current = session;
+    for(const id of ["register-legal-version","legacy-legal-version"]){
+      const element=$(id);
+      if(element)element.textContent=session.legal_version||"Черновик — на утверждении";
+    }
     window.renderOwnerLeadPreview?.(session);
     taskNotice("");
     const user = session.user || {};
@@ -937,6 +941,7 @@
     try {
       if(ageFromBirthDate($("register-birth-date").value)===null)throw new Error("Проверьте дату рождения.");
       const values={birth_date:$("register-birth-date").value,consent:$("consent").checked,
+        legal_version:current?.legal_version,
         privacy_accepted:$("consent").checked,
         terms_accepted:$("register-terms-consent").checked};
       for(const [name,id] of [["credit_cards","register-credit-cards"],["installments","register-installments"],
@@ -1006,6 +1011,7 @@
           throw new Error("Укажите действительную дату рождения.");
         values.birth_date=$("participant-legacy-birth").value;
         values.consent=true;
+        values.legal_version=current?.legal_version;
         values.privacy_accepted=$("participant-legacy-privacy").checked;
         values.terms_accepted=$("participant-legacy-terms").checked;
         if(!values.privacy_accepted||!values.terms_accepted)
