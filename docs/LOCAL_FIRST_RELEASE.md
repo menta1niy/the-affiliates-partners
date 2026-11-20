@@ -12,23 +12,30 @@ source history. Aeza runs selected revisions and stores runtime state.
 
 ## Mini App release
 
-User and admin pages share the consolidated web/style.css. The darkest #051F20 is the
-main background. #0B2B26 is used for cards, #163832 for inputs,
-#235347 for selected/accent bars, #8EB69B for CTA/success, and
-#DAF1DE for primary text. Accent bars receive a restrained matte-glass blur.
+User and admin pages share the consolidated `web/style.css` and the currently
+approved **Rounded Float / Amber v3.2** system: graphite background `#080909`,
+surface `#131416`, text `#F7F7F5`, and interactive amber `#E4A34A`.
+The four-item participant dock has an icon-only floating mobile layout.
 
 1. Modify source in an isolated local worktree and commit only after checks.
 2. Run Python unit tests and JavaScript syntax checks locally.
-3. Build a reproducible static package with:
+3. Before a public build, complete the legal/operator approval and local preflight:
+
+       python -m tools.stage13_preflight --require-ready
+
+   This currently fails intentionally: legal approval, disposable PostgreSQL
+   restore/privilege checks, real Telegram WebView testing and owner release
+   permission remain outstanding. Do not bypass the guard with fake approvals.
+4. After approval and explicit owner authorization, build a reproducible static package with:
 
        python tools/build_static_release.py D:\GPT\_ta-partners-releases
 
-4. Publish a reviewed GitHub branch. Do not auto-deploy feature branches.
-5. Transfer only the archive and SHA-256 manifest by SFTP or approved SSH.
+5. Publish a reviewed GitHub branch. Do not auto-deploy feature branches.
+6. Transfer only the archive and SHA-256 manifest by SFTP or approved SSH.
    On Aeza, execute deployment/install-static-release.sh with the archive
    path and its exact SHA-256. The installer verifies its contents and
    switches the public static release, preserving the previous files.
-6. Verify both HTTPS pages, all JS/CSS assets, Telegram chrome and
+7. Verify both HTTPS pages, all JS/CSS assets, Telegram chrome and
    protected API rejection tests.
 
 The existing deployment/deploy.sh targets legacy service names and a

@@ -28,6 +28,12 @@ REQUIRED = {
     "admin/admin.js",
     "style.css",
     "telegram-layout.js",
+    "legal/legal.css",
+    "legal/privacy.html",
+    "legal/data-consent.html",
+    "legal/terms.html",
+    "legal/referrals.html",
+    "legal/bloggers.html",
 }
 
 
@@ -64,7 +70,7 @@ def main() -> None:
     manifest = {
         "commit": commit,
         "legal_version": legal_version,
-        "theme": "monochrome-glass-v1",
+        "theme": "rounded-float-amber-v3.2",
         "files": {
             p.relative_to(SOURCE).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in files

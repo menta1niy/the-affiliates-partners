@@ -53,7 +53,9 @@ files = manifest["files"]
 if not isinstance(files, dict) or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit", "")):
     raise SystemExit("Invalid release manifest")
 expected = {"index.html", "admin/index.html", "app.js", "admin/admin.js",
-            "style.css", "telegram-layout.js"}
+            "style.css", "telegram-layout.js", "legal/legal.css",
+            "legal/privacy.html", "legal/data-consent.html", "legal/terms.html",
+            "legal/referrals.html", "legal/bloggers.html"}
 if not expected.issubset(files):
     raise SystemExit("Required files absent from manifest")
 actual = {p.relative_to(root / "web").as_posix() for p in (root / "web").rglob("*") if p.is_file()}
@@ -71,11 +73,21 @@ for html in (root / "web" / "index.html", root / "web" / "admin" / "index.html")
     source = html.read_text("utf-8")
     if 'href="/partners/style.css"' not in source or "theme-green.css" in source:
         raise SystemExit("Mini App must load only the consolidated stylesheet")
-if manifest.get("theme") != "monochrome-glass-v1":
+if manifest.get("theme") != "rounded-float-amber-v3.2":
     raise SystemExit("Unexpected visual theme identifier")
 css = (root / "web" / "style.css").read_text("utf-8")
 if "--color-bg: #080909" not in css or "--color-accent: #FFFFFF" not in css:
     raise SystemExit("Monochrome glass design tokens missing")
+if not re.fullmatch(r"partners-legal-v[0-9]+-[0-9]{4}-[0-9]{2}", manifest.get("legal_version", "")):
+    raise SystemExit("Approved legal revision missing from release manifest")
+for name in ("privacy", "data-consent", "terms", "referrals", "bloggers"):
+    page = (root / "web" / "legal" / (name + ".html")).read_text("utf-8")
+    if ("ПРОЕКТ" in page or "НЕ УТВЕРЖДЕНО" in page or
+            "placeholder" in page or "partners-registration-v1-2026-11-draft" in page):
+        raise SystemExit("Draft legal document in public archive")
+for field in ("--accent-amber: #E4A34A", "--lead-nav-columns: 4"):
+    if field not in css:
+        raise SystemExit("Amber UI design tokens or navigation mismatch")
 print("VALIDATED_COMMIT", manifest["commit"])
 PY
 

@@ -26,12 +26,15 @@ class BrowserHandler(Handler):
                  '/partners/style.css': 'web/style.css', '/partners/telegram-layout.js': 'web/telegram-layout.js',
                  '/partners/ap-mark.png': 'web/ap-mark.png',
                  '/partners/fonts/unbounded-variable.ttf': 'web/fonts/unbounded-variable.ttf'}
+        for name in ('privacy', 'data-consent', 'terms', 'referrals', 'bloggers'):
+            files[f'/partners/legal/{name}.html'] = f'web/legal/{name}.html'
+        files['/partners/legal/legal.css'] = 'web/legal/legal.css'
         target = files.get(self.path)
         if not target:
             return super().do_GET()
         data = (ROOT / target).read_bytes()
         self.send_response(200)
-        self.send_header('Content-Type', 'font/ttf' if target.endswith('.ttf') else 'image/png' if target.endswith('.png') else 'text/javascript' if target.endswith('.js') else 'text/css' if target.endswith('.css') else 'text/html')
+        self.send_header('Content-Type', 'font/ttf' if target.endswith('.ttf') else 'image/png' if target.endswith('.png') else 'text/javascript' if target.endswith('.js') else 'text/css' if target.endswith('.css') else 'text/html; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
         self.wfile.write(data)
