@@ -2832,3 +2832,179 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-offers .offer-item > .offer-logo-watermark,
   .admin-control .admin-catalog-card > .offer-logo-watermark {opacity:.12;}
 }
+
+/* Stage 4: hand-picked, batched assignments. Compact and legible at 320px. */
+.admin-control .admin-assignment-modes {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;margin:0;min-width:0;
+}
+.admin-control .admin-assignment-modes .btn {
+  min-height:48px;padding:9px 12px;
+  border-radius:var(--float-control-radius);
+  font-size:12px;font-weight:700;line-height:1.4;
+}
+.admin-control .admin-assignment-modes .btn[aria-pressed="true"] {
+  background:var(--accent-amber);color:var(--accent-amber-ink);
+  border-color:var(--accent-amber-edge);
+}
+.admin-control .admin-assignment-block {
+  display:grid;gap:13px;min-width:0;
+  padding:17px;
+  background:var(--float-fill);
+  border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+}
+.admin-control .admin-assignment-block[hidden],
+.admin-control #admin-assignment-offer-target[hidden],
+.admin-control #admin-assignment-selected-lead[hidden],
+.admin-control #admin-assignment-result[hidden] {display:none!important;}
+.admin-control .admin-assignment-block-heading {
+  display:flex;align-items:center;gap:10px;min-width:0;
+}
+.admin-control .admin-assignment-step {
+  flex:none;display:grid;place-items:center;
+  width:29px;height:29px;
+  border:1px solid var(--accent-amber-edge);
+  border-radius:10px;
+  color:var(--accent-amber);
+  font-family:var(--font-display);font-size:11px;
+}
+.admin-control .admin-assignment-block-heading h3 {
+  margin:0;min-width:0;font-family:var(--font-display);
+  font-size:clamp(13px,2vw,17px);line-height:1.45;
+}
+.admin-control .admin-assignment-filter-row {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:end;gap:11px;min-width:0;
+}
+.admin-control .admin-assignment-filter-row label,
+.admin-control #admin-assignment-offer-target > label {
+  display:grid;gap:7px;margin:0;min-width:0;
+  color:var(--color-secondary);
+  font-size:12px;font-weight:650;line-height:1.4;
+}
+.admin-control .admin-assignment-filter-row :is(input,select),
+.admin-control #admin-assignment-offer-target select {
+  width:100%;min-width:0;max-width:none;min-height:44px;
+  border-radius:12px;padding:9px 11px;
+  background:#1B1D20;color:var(--color-text);
+  font-size:13px;
+}
+.admin-control .admin-assignment-users,
+.admin-control .admin-assignment-choices {
+  display:grid;gap:8px;min-width:0;
+}
+.admin-control .admin-assignment-user.admin-assignment-choice,
+.admin-control .admin-assignment-choice {
+  display:flex;align-items:center;justify-content:flex-start;
+  gap:11px;min-width:0;min-height:59px;margin:0;
+  padding:11px 13px;
+  background:rgba(255,255,255,.028);
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:14px;cursor:pointer;
+  transition:background-color var(--control-duration),border-color var(--control-duration);
+}
+.admin-control .admin-assignment-choice:has(input:checked) {
+  background:rgba(228,163,74,.095);
+  border-color:var(--accent-amber-edge);
+}
+.admin-control .admin-assignment-choice input {
+  flex:0 0 20px;width:20px;height:20px;
+  min-width:20px;min-height:20px;
+  margin:0;padding:0;accent-color:var(--accent-amber);
+}
+.admin-control .admin-assignment-choice input:focus-visible {
+  outline:2px solid var(--accent-amber);outline-offset:4px;
+}
+.admin-control .admin-assignment-choice-copy {
+  display:grid;gap:4px;min-width:0;flex:1;
+}
+.admin-control .admin-assignment-choice-copy strong {
+  color:var(--color-text);
+  font-size:13px;font-weight:700;line-height:1.4;
+  overflow-wrap:anywhere;
+}
+.admin-control .admin-assignment-choice-copy small {
+  color:var(--color-secondary);
+  font-size:11px;line-height:1.45;overflow-wrap:anywhere;
+}
+.admin-control .admin-assignment-choice:has(input:disabled) {
+  opacity:.52;cursor:not-allowed;
+}
+.admin-control .admin-assignment-selected-lead {
+  margin:0;padding:10px 12px;
+  color:var(--accent-amber);font-size:12px;font-weight:650;
+  border:1px solid var(--accent-amber-edge);
+  border-radius:12px;background:var(--accent-amber-glow);
+  overflow-wrap:anywhere;
+}
+.admin-control .admin-assignment-pages {
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  color:var(--color-secondary);font-size:12px;
+}
+.admin-control .admin-assignment-pages .btn {min-height:44px;padding:9px 13px;}
+.admin-control .admin-assignment-footer {
+  display:grid;gap:11px;min-width:0;
+  padding:17px;
+  border:1px solid var(--accent-amber-edge);
+  border-radius:var(--float-inner-radius);
+  background:linear-gradient(125deg,rgba(228,163,74,.09),rgba(255,255,255,.018) 66%),#161719;
+}
+.admin-control .admin-assignment-footer p {
+  margin:0;color:var(--color-text);font-size:13px;font-weight:700;
+}
+.admin-control .admin-assignment-footer small {
+  color:var(--color-secondary);font-size:11px;line-height:1.55;
+}
+.admin-control .admin-assignment-footer-actions {
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+.admin-control .admin-assignment-footer-actions .btn {
+  min-height:44px;padding:9px 13px;font-size:12px;
+}
+.admin-control #admin-assignment-review {margin-left:auto;}
+.admin-control #admin-assignment-result {margin:0;font-size:13px;line-height:1.55;}
+.admin-control .admin-bulk-dialog {
+  box-sizing:border-box;
+  width:min(450px,calc(100vw - 24px));max-width:450px;
+  max-height:calc(100dvh - 32px);
+  overflow-y:auto;
+  margin:auto;padding:24px;
+  background:#17191B;color:var(--color-text);
+  border:1px solid var(--float-border);
+  border-radius:var(--float-panel-radius);
+  box-shadow:0 24px 65px rgba(0,0,0,.65);
+}
+.admin-control .admin-bulk-dialog::backdrop {background:rgba(0,0,0,.77);backdrop-filter:blur(4px);}
+.admin-control .admin-bulk-dialog h2 {font-size:clamp(19px,4.5vw,24px);margin:8px 0 11px;}
+.admin-control .admin-bulk-dialog p {
+  margin:0 0 13px;font-size:13px;line-height:1.6;color:var(--color-secondary);
+}
+.admin-control .admin-bulk-preview-stats {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:15px 0;
+}
+.admin-control .admin-bulk-stat {
+  display:grid;align-content:center;gap:7px;min-width:0;
+  min-height:78px;padding:10px;
+  background:rgba(255,255,255,.045);border:1px solid var(--float-border);
+  border-radius:13px;
+}
+.admin-control .admin-bulk-stat span {font-size:10px;color:var(--color-secondary);line-height:1.4;}
+.admin-control .admin-bulk-stat strong {font-family:var(--font-display);font-size:19px;color:var(--accent-amber);}
+.admin-control .admin-bulk-dialog-actions {display:flex;gap:8px;flex-wrap:wrap;}
+.admin-control .admin-bulk-dialog-actions .btn {flex:1 1 120px;min-height:44px;}
+@media(max-width:540px) {
+  .admin-control .admin-assignment-block {padding:13px;gap:11px;border-radius:17px;}
+  .admin-control .admin-assignment-filter-row {grid-template-columns:minmax(0,1fr);gap:10px;}
+  .admin-control .admin-assignment-choice {padding:10px 11px;}
+  .admin-control .admin-assignment-footer {padding:13px;border-radius:17px;}
+  .admin-control .admin-assignment-footer-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .admin-control #admin-assignment-review {grid-column:1/-1;width:100%;margin:0;}
+  .admin-control .admin-bulk-dialog {
+    width:calc(100vw - 20px);max-width:calc(100vw - 20px);
+    padding:19px 16px;border-radius:20px;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .admin-control .admin-assignment-choice {transition:none;}
+}

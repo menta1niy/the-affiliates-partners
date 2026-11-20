@@ -161,6 +161,78 @@ class StandaloneMvpTests(HttpHarness):
             self.assertEqual(record["logo_hash"],"")
             self.assertEqual(record["lead_stages"],'["application_sent","meeting_scheduled","product_received"]')
 
+    def test_bulk_offer_to_leads_preview_is_atomic_and_preserves_stages(self):
+        self.register_open_user(ALICE)
+        self.register_open_user(BOB)
+        offer=self.create_offer()
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment",OWNER,user_id=ALICE,
+            offer_id=offer,stage="in_progress",note="Встреча в среду")[0],200)
+        request={"mode":"offer_to_leads","offer_id":offer,"user_ids":[ALICE,BOB,ALICE]}
+        with db.transaction() as conn:
+            before=conn.execute("SELECT count(*) FROM audit").fetchone()[0]
+        status,preview=self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**request,preview=True)
+        self.assertEqual(status,200,preview)
+        self.assertEqual(preview,{"preview":True,"requested":2,"to_create":1,
+                                  "already_assigned":1,"created":0})
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM audit").fetchone()[0],before)
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],1)
+        status,created=self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**request)
+        self.assertEqual(status,200,created)
+        self.assertEqual(created["created"],1)
+        self.assertEqual(created["already_assigned"],1)
+        with db.transaction() as conn:
+            old=conn.execute("SELECT stage,note FROM manual_assignments WHERE telegram_id=?",(ALICE,)).fetchone()
+            self.assertEqual((old["stage"],old["note"]),("in_progress","Встреча в среду"))
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],2)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**request)[1]["created"],0)
+
+    def test_bulk_lead_to_offers_and_rejection_never_partially_writes(self):
+        self.register_open_user(ALICE)
+        offer_a=self.create_offer()
+        offer_b=self.create_offer(name="Вторая карта",category="Кредитные карты")
+        disabled=self.create_offer(name="Отключён",active=False)
+        valid={"mode":"lead_to_offers","user_id":ALICE,"offer_ids":[offer_a,offer_b]}
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**valid,preview=True)[1]["to_create"],2)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**valid)[1]["created"],2)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**valid)[1]["already_assigned"],2)
+        invalid={"mode":"lead_to_offers","user_id":ALICE,"offer_ids":[offer_a,disabled]}
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**invalid)[0],409)
+        self.assertEqual(self.as_user("/api/register",BOB,consent=True)[0],200)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,
+            mode="offer_to_leads",offer_id=offer_a,user_ids=[ALICE,BOB])[0],409)
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],2)
+        for bad in (
+            {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[]},
+            {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[True]},
+            {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[ALICE]*201},
+            {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[ALICE],"preview":1},
+            {"mode":"lead_to_offers","user_id":ALICE,"offer_ids":[offer_a,42]},
+            {"mode":"lead_to_offers","user_id":ALICE,"offer_ids":["manual_not_valid"]},
+            {"mode":"lead_to_offers","user_id":True,"offer_ids":[offer_a]},
+            {"mode":"auto_assign","offer_id":offer_a,"user_ids":[ALICE]},
+        ):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**bad)[0],400)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",ALICE,**valid)[0],403)
+
+    def test_assignment_candidates_search_filters_and_pagination(self):
+        self.register_open_user(ALICE)
+        self.register_open_user(BOB)
+        status,data=self.as_user("/api/admin/mvp/assignment-candidates",OWNER)
+        self.assertEqual(status,200,data)
+        self.assertEqual({user["id"] for user in data["users"]},{ALICE,BOB})
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",OWNER,
+            query=str(ALICE))[1]["total"],1)
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",OWNER,
+            role_filter="referrer")[1]["total"],0)
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",OWNER,
+            page=2)[1]["users"],[])
+        for bad in ({"page":True},{"page":0},{"role_filter":"owner"},{"query":"x"*121}):
+            self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",OWNER,**bad)[0],400)
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",ALICE)[0],403)
+
 
 if __name__=='__main__':
     unittest.main()

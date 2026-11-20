@@ -69,7 +69,8 @@ class Handler(BaseHTTPRequestHandler):
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
                   "/api/admin/dashboard", "/api/admin/users", "/api/admin/participant", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
-                  "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment"}
+                  "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment",
+                  "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -192,6 +193,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = mvp.save_offer(user["id"], owner, body)
             elif route == "/api/admin/mvp/assignment":
                 result = mvp.assignment(user["id"], owner, body)
+            elif route == "/api/admin/mvp/assignment-candidates":
+                result = mvp.assignment_candidates(user["id"], owner, body)
+            elif route == "/api/admin/mvp/bulk-assignment":
+                result = mvp.bulk_assignment(user["id"], owner, body)
             elif route == "/api/mvp/overview":
                 result = mvp.overview(user["id"], owner)
             elif route == "/api/offers":

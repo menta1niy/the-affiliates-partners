@@ -17,6 +17,7 @@ from server import db
 
 STAGES = {"assigned", "in_progress", "submitted", "completed", "rejected"}
 OFFER_ID = re.compile(r"^manual_[0-9a-f]{20}$")
+MAX_BULK_ASSIGNMENTS = 200
 LOGO_HASH = re.compile(r"^[0-9a-f]{64}$")
 LOGO_DATA = re.compile(r"^data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
 MAX_LOGO_UPLOAD = 1024 * 1024
@@ -265,6 +266,113 @@ def assignment(actor, owner_id, data):
             conn.execute("DELETE FROM manual_assignments WHERE telegram_id=? AND offer_id=?", (user_id, offer_id))
         db.audit(conn, actor, "manual_assignment", user_id, f"offer={offer_id};stage={stage if enabled else 'removed'}")
         return {"changed": True}
+
+
+def assignment_candidates(actor, owner_id, data):
+    """Page through eligible participants without leaking other agencies' leads."""
+    page = data.get("page", 1)
+    query = data.get("query", "")
+    role = data.get("role_filter", "all")
+    if type(page) is not int or not 1 <= page <= 100000:
+        raise db.Problem(400, "Некорректная страница")
+    if not isinstance(query, str) or len(query) > 120:
+        raise db.Problem(400, "Некорректный поиск")
+    if role not in ("all", "lead", "referrer"):
+        raise db.Problem(400, "Некорректный фильтр")
+    db.initialize()
+    with db.transaction() as conn:
+        staff = _admin(conn, actor, owner_id)
+        schema(conn)
+        conditions = ["status='active'", "role IN ('lead','referrer')"]
+        params = []
+        agency = db.admin_agency(staff)
+        if agency is not None:
+            conditions.append("agency_id=?")
+            params.append(agency)
+        if role != "all":
+            conditions.append("role=?")
+            params.append(role)
+        if query.strip():
+            escaped = query.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            terms = ("CAST(id AS TEXT)", "CAST(internal_id AS TEXT)",
+                     "LOWER(COALESCE(first_name,''))", "LOWER(COALESCE(last_name,''))",
+                     "LOWER(COALESCE(username,''))")
+            conditions.append("(" + " OR ".join(f"{term} LIKE ? ESCAPE '\\'" for term in terms) + ")")
+            params.extend([f"%{escaped}%"] * len(terms))
+        where = " WHERE " + " AND ".join(conditions)
+        total = conn.execute("SELECT count(*) FROM users" + where, tuple(params)).fetchone()[0]
+        rows = conn.execute("SELECT * FROM users" + where + " ORDER BY registered_at DESC,id DESC "
+                            "LIMIT 50 OFFSET ?", tuple(params) + (50 * (page - 1),)).fetchall()
+        return {"users": [db.public_user(user) for user in rows], "total": total,
+                "page": page, "page_size": 50, "has_next": page * 50 < total}
+
+
+def bulk_assignment(actor, owner_id, data):
+    """Atomic add-only assignment, with side-effect-free preview and deduplication."""
+    mode = data.get("mode")
+    preview = data.get("preview", False)
+    if mode not in ("offer_to_leads", "lead_to_offers") or type(preview) is not bool:
+        raise db.Problem(400, "Некорректный режим назначения")
+    if mode == "offer_to_leads":
+        offer_id = data.get("offer_id")
+        raw = data.get("user_ids")
+        if not isinstance(offer_id, str) or not OFFER_ID.fullmatch(offer_id):
+            raise db.Problem(400, "Некорректный оффер")
+        if (not isinstance(raw, list) or not 1 <= len(raw) <= MAX_BULK_ASSIGNMENTS or
+                any(type(item) is not int or item <= 0 for item in raw)):
+            raise db.Problem(400, "Некорректный список участников")
+        user_ids = list(dict.fromkeys(raw))
+        offer_ids = [offer_id]
+        pairs = [(user_id, offer_id) for user_id in user_ids]
+    else:
+        user_id = data.get("user_id")
+        raw = data.get("offer_ids")
+        if type(user_id) is not int or user_id <= 0:
+            raise db.Problem(400, "Некорректный участник")
+        if (not isinstance(raw, list) or not 1 <= len(raw) <= MAX_BULK_ASSIGNMENTS or
+                any(not isinstance(item, str) or not OFFER_ID.fullmatch(item) for item in raw)):
+            raise db.Problem(400, "Некорректный список офферов")
+        offer_ids = list(dict.fromkeys(raw))
+        user_ids = [user_id]
+        pairs = [(user_id, offer_id) for offer_id in offer_ids]
+    db.initialize()
+    with db.transaction() as conn:
+        staff = _admin(conn, actor, owner_id)
+        schema(conn)
+        for user_id in user_ids:
+            target = _participant(conn, staff, user_id)
+            if target["status"] != "active":
+                raise db.Problem(409, "Сначала одобрите всех выбранных участников")
+        for offer_id in offer_ids:
+            offer = conn.execute("SELECT active FROM manual_offers WHERE id=?", (offer_id,)).fetchone()
+            if not offer:
+                raise db.Problem(404, "Оффер не найден")
+            if not offer["active"]:
+                raise db.Problem(409, "Среди выбранных есть отключённый оффер")
+        existing = 0
+        to_create = []
+        for user_id, offer_id in pairs:
+            assigned = conn.execute("SELECT 1 FROM manual_assignments WHERE telegram_id=? AND offer_id=?",
+                                    (user_id, offer_id)).fetchone()
+            if assigned:
+                existing += 1
+            else:
+                to_create.append((user_id, offer_id))
+        if preview:
+            return {"preview": True, "requested": len(pairs), "to_create": len(to_create),
+                    "already_assigned": existing, "created": 0}
+        now = int(time.time())
+        created = 0
+        for user_id, offer_id in to_create:
+            cursor = conn.execute("INSERT INTO manual_assignments(telegram_id,offer_id,stage,note,updated_at) "
+                                  "VALUES(?,?,'assigned','',?) ON CONFLICT(telegram_id,offer_id) DO NOTHING",
+                                  (user_id, offer_id, now))
+            if cursor.rowcount:
+                created += 1
+                db.audit(conn, actor, "manual_assignment_bulk", user_id,
+                         "offer=" + offer_id + ";stage=assigned")
+        return {"preview": False, "requested": len(pairs), "to_create": 0,
+                "already_assigned": existing, "created": created}
 
 
 def overview(user_id, owner_id, *, for_admin=None):

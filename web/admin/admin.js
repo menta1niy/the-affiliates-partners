@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
   const state = {users:[],pending:[],invites:[],tab:"pending",section:"overview",role:"",actorId:null,
-    pages:{users:1,pending:1,assignments:1},requests:{users:0,pending:0,assignments:0}};
+    pages:{users:1,pending:1},requests:{users:0,pending:0,assignments:0}};
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
@@ -543,32 +543,212 @@
       }
     }catch(e){root.replaceChildren(make("p",e.message,"message error"));}
   }
-  async function renderAssignmentsView(page=1){
-    if(!canManageOffers())return;
-    const requestId=++state.requests.assignments;
+  const assignmentUI={
+    mode:"offer_to_leads",catalog:[],offerId:"",lead:null,
+    chosenUsers:new Map(),chosenOffers:new Set(),people:[],page:1,total:0,
+    previewPayload:null,loading:false
+  };
+  function assignmentMessage(message,isError=false){
+    const node=$("admin-assignment-result");node.textContent=message;
+    node.hidden=!message;node.classList.toggle("error",isError);
+  }
+  function filteredAssignmentOffers(){
+    const query=$("admin-assignment-offer-search").value.trim().toLocaleLowerCase("ru");
+    const category=$("admin-assignment-category-filter").value;
+    return assignmentUI.catalog.filter(offer=>offer.active &&
+      (!category || offer.category===category) &&
+      (!query || (offer.name+" "+offer.category).toLocaleLowerCase("ru").includes(query)));
+  }
+  function renderAssignmentCatalog(){
+    const categories=[...new Set(assignmentUI.catalog.filter(offer=>offer.active).map(offer=>offer.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru"));
+    const categoryFilter=$("admin-assignment-category-filter");
+    const selectedCategory=categoryFilter.value;
+    categoryFilter.replaceChildren(new Option("Все категории",""));
+    for(const category of categories)categoryFilter.add(new Option(category,category));
+    categoryFilter.value=categories.includes(selectedCategory)?selectedCategory:"";
+    const offers=filteredAssignmentOffers();
+    const target=$("admin-assignment-offer");
+    target.replaceChildren(new Option("Выберите предложение",""));
+    for(const offer of offers)target.add(new Option(offer.name+" · "+number(offer.payout_rub)+" ₽",offer.id));
+    if(!offers.some(offer=>offer.id===assignmentUI.offerId)) {
+      assignmentUI.offerId="";
+      assignmentUI.chosenUsers.clear();
+    }
+    target.value=assignmentUI.offerId;
+    const list=$("admin-assignment-offers");
+    list.replaceChildren();
+    if(!offers.length)list.append(make("p","Нет доступных офферов по этим фильтрам.","muted"));
+    for(const offer of offers){
+      const label=make("label",undefined,"admin-assignment-choice");
+      const control=make("input");control.type="checkbox";control.value=offer.id;
+      control.disabled=!assignmentUI.lead;
+      control.checked=assignmentUI.chosenOffers.has(offer.id);
+      control.addEventListener("change",()=>{
+        if(control.checked){
+          if(assignmentUI.chosenOffers.size>=200){
+            control.checked=false;assignmentMessage("За одну операцию можно выбрать не больше 200 офферов.",true);return;
+          }
+          assignmentUI.chosenOffers.add(offer.id);
+        }else assignmentUI.chosenOffers.delete(offer.id);
+        assignmentMessage("");updateAssignmentSummary();
+      });
+      const text=make("span",undefined,"admin-assignment-choice-copy");
+      text.append(make("strong",offer.name),make("small",(offer.category||"Оффер")+" · "+number(offer.payout_rub)+" ₽"));
+      label.append(control,text);list.append(label);
+    }
+    updateAssignmentSummary();
+  }
+  function updateAssignmentSummary(){
+    const inOfferMode=assignmentUI.mode==="offer_to_leads";
+    const selected=inOfferMode?assignmentUI.chosenUsers.size:assignmentUI.chosenOffers.size;
+    const targetReady=inOfferMode?Boolean(assignmentUI.offerId):Boolean(assignmentUI.lead);
+    $("admin-assignment-selected-count").textContent=selected
+      ?"Выбрано: "+selected+(inOfferMode?" участников":" офферов")
+      :"Пока ничего не выбрано";
+    $("admin-assignment-review").disabled=!selected||!targetReady||assignmentUI.loading;
+    $("admin-assignment-select-all").disabled=!targetReady||assignmentUI.loading;
+    $("admin-assignment-clear").disabled=!selected||assignmentUI.loading;
+  }
+  function renderAssignmentPeople(){
     const root=$("admin-assignment-users");
-    root.replaceChildren(make("p","Загружаем лидов…","muted"));
+    const single=assignmentUI.mode==="lead_to_offers";
+    root.replaceChildren();
+    if(!assignmentUI.people.length)root.append(make("p","Подходящих активных участников не найдено.","muted"));
+    for(const person of assignmentUI.people){
+      const id=Number(person.id);
+      const row=make("label",undefined,"admin-assignment-user admin-assignment-choice");
+      const input=make("input");input.type=single?"radio":"checkbox";input.name="assignment-user-choice";
+      input.value=String(id);
+      input.checked=single?assignmentUI.lead?.id===id:assignmentUI.chosenUsers.has(id);
+      input.setAttribute("aria-label",(single?"Выбрать лида ":"Назначить оффер участнику ")+personName(person));
+      input.addEventListener("change",()=>{
+        if(single){
+          if(assignmentUI.lead?.id!==id)assignmentUI.chosenOffers.clear();
+          assignmentUI.lead={...person,id};
+          $("admin-assignment-selected-lead").textContent="Выбран: "+personName(person)+" · ID "+(person.internal_id??"—");
+          $("admin-assignment-selected-lead").hidden=false;
+          renderAssignmentCatalog();
+          renderAssignmentPeople();
+        }else{
+          if(input.checked){
+            if(assignmentUI.chosenUsers.size>=200){
+              input.checked=false;assignmentMessage("За одну операцию можно выбрать не больше 200 участников.",true);return;
+            }
+            assignmentUI.chosenUsers.set(id,person);
+          }else assignmentUI.chosenUsers.delete(id);
+        }
+        assignmentMessage("");updateAssignmentSummary();
+      });
+      const copy=make("span",undefined,"admin-assignment-choice-copy");
+      copy.append(make("strong",personName(person)),make("small",
+        "ID "+(person.internal_id??"—")+" · "+(person.username?"@"+person.username+" · ":"")+(roles[roleOf(person)]||roleOf(person))));
+      row.append(input,copy);
+      root.append(row);
+    }
+    const pages=$("admin-assignment-pagination");pages.replaceChildren();
+    pages.append(make("span","Страница "+assignmentUI.page+" · всего "+number(assignmentUI.total)));
+    const previous=action("Назад",()=>loadAssignmentPeople(assignmentUI.page-1));
+    previous.disabled=assignmentUI.page<=1;
+    const next=action("Далее",()=>loadAssignmentPeople(assignmentUI.page+1));
+    next.disabled=assignmentUI.page*50>=assignmentUI.total;
+    pages.append(previous,next);
+    updateAssignmentSummary();
+  }
+  async function loadAssignmentPeople(page=1){
+    if(!canManageOffers() || state.section!=="assignments")return;
+    const requestId=++state.requests.assignments;
+    $("admin-assignment-users").replaceChildren(make("p","Загружаем участников…","muted"));
+    $("admin-assignment-pagination").replaceChildren();
     try{
-      const data=await api("/admin/users",{page,query:$("admin-assignment-search").value.trim()});
+      const result=await api("/admin/mvp/assignment-candidates",{
+        page,query:$("admin-assignment-search").value.trim(),
+        role_filter:$("admin-assignment-role-filter").value
+      });
       if(requestId!==state.requests.assignments || state.section!=="assignments")return;
-      state.pages.assignments=page;
-      const people=(data.users||[]).filter(u=>["lead","referrer"].includes(roleOf(u)));
-      root.replaceChildren();
-      if(!people.length){root.append(make("p","Лиды не найдены.","empty"));}
-      for(const user of people){
-        const item=make("div",undefined,"admin-assignment-user");
-        const info=make("div");
-        info.append(make("strong",personName(user)),make("span",
-          "ID "+(user.internal_id??"—")+" · "+(statuses[statusOf(user)]||statusOf(user))));
-        item.append(info,action("Назначения",()=>openParticipant(user),"ghost"));
-        root.append(item);
+      assignmentUI.page=page;assignmentUI.total=Number(result.total)||0;
+      assignmentUI.people=Array.isArray(result.users)?result.users:[];
+      renderAssignmentPeople();
+    }catch(e){
+      if(requestId===state.requests.assignments){
+        $("admin-assignment-users").replaceChildren(make("p",e.message,"message error"));
+        assignmentMessage(e.message,true);
       }
-      const nav=make("div",undefined,"admin-assignment-pages");
-      nav.append(make("span","Страница "+page+" · всего "+number(data.total||0)));
-      const prev=action("Назад",()=>renderAssignmentsView(page-1));prev.disabled=page<=1;
-      const next=action("Далее",()=>renderAssignmentsView(page+1));next.disabled=!data.has_next;
-      nav.append(prev,next);root.append(nav);
-    }catch(e){if(requestId===state.requests.assignments)root.replaceChildren(make("p",e.message,"message error"));}
+    }
+  }
+  function changeAssignmentMode(mode){
+    if(!["offer_to_leads","lead_to_offers"].includes(mode))return;
+    assignmentUI.mode=mode;assignmentMessage("");
+    const single=mode==="lead_to_offers";
+    document.querySelectorAll("[data-assign-mode]").forEach(button=>
+      button.setAttribute("aria-pressed",String(button.dataset.assignMode===mode)));
+    $("admin-assignment-offer-heading").textContent=single?"Фильтры предложений":"Выберите оффер";
+    $("admin-assignment-lead-heading").textContent=single?"Выберите одного лида":"Выберите лидов";
+    $("admin-assignment-offer-target").hidden=single;
+    $("admin-assignment-offers-panel").hidden=!single;
+    $("admin-assignment-selected-lead").hidden=!single||!assignmentUI.lead;
+    if(single && assignmentUI.lead){
+      $("admin-assignment-selected-lead").textContent="Выбран: "+personName(assignmentUI.lead)+" · ID "+(assignmentUI.lead.internal_id??"—");
+    }
+    renderAssignmentCatalog();
+    renderAssignmentPeople();
+  }
+  async function renderAssignmentsView(){
+    if(!canManageOffers())return;
+    assignmentMessage("");
+    try{
+      const data=await api("/admin/mvp/catalog");
+      if(state.section!=="assignments")return;
+      assignmentUI.catalog=Array.isArray(data.offers)?data.offers:[];
+      changeAssignmentMode(assignmentUI.mode);
+      await loadAssignmentPeople(1);
+    }catch(e){assignmentMessage(e.message,true);}
+  }
+  function assignmentSelectionPayload(){
+    if(assignmentUI.mode==="offer_to_leads"){
+      return {mode:"offer_to_leads",offer_id:assignmentUI.offerId,
+        user_ids:[...assignmentUI.chosenUsers.keys()]};
+    }
+    return {mode:"lead_to_offers",user_id:assignmentUI.lead?.id,
+      offer_ids:[...assignmentUI.chosenOffers]};
+  }
+  async function reviewAssignments(){
+    if(assignmentUI.loading)return;
+    const payload=assignmentSelectionPayload();
+    const selected=payload.user_ids||payload.offer_ids;
+    if(!selected?.length || (payload.mode==="offer_to_leads"?!payload.offer_id:!payload.user_id)){
+      assignmentMessage("Сначала выберите основной оффер или лида и участников назначения.",true);return;
+    }
+    assignmentUI.loading=true;updateAssignmentSummary();assignmentMessage("");
+    try{
+      const result=await api("/admin/mvp/bulk-assignment",{...payload,preview:true});
+      assignmentUI.previewPayload=payload;
+      const dialog=$("admin-bulk-confirm");
+      $("admin-bulk-summary").textContent=payload.mode==="offer_to_leads"
+        ?"Один оффер для "+result.requested+" участников."
+        :result.requested+" офферов для "+personName(assignmentUI.lead)+".";
+      const stats=$("admin-bulk-preview-stats");stats.replaceChildren();
+      for(const [name,value] of [["Выбрано",result.requested],["Новых",result.to_create],["Уже назначено",result.already_assigned]]){
+        const item=make("div",undefined,"admin-bulk-stat");
+        item.append(make("span",name),make("strong",number(value)));stats.append(item);
+      }
+      $("admin-bulk-commit").disabled=result.to_create===0;
+      $("admin-bulk-commit").textContent=result.to_create?"Назначить "+result.to_create:"Новых назначений нет";
+      if(!dialog.open)dialog.showModal();
+    }catch(e){assignmentMessage(e.message,true);}
+    finally{assignmentUI.loading=false;updateAssignmentSummary();}
+  }
+  async function commitAssignments(){
+    if(assignmentUI.loading || !assignmentUI.previewPayload)return;
+    assignmentUI.loading=true;$("admin-bulk-commit").disabled=true;
+    try{
+      const result=await api("/admin/mvp/bulk-assignment",assignmentUI.previewPayload);
+      $("admin-bulk-confirm").close();assignmentUI.previewPayload=null;
+      assignmentUI.chosenUsers.clear();assignmentUI.chosenOffers.clear();
+      assignmentMessage("Добавлено: "+result.created+". Уже было назначено: "+result.already_assigned+".");
+      notice("Ручные назначения сохранены: "+result.created);
+      updateAssignmentSummary();
+    }catch(e){assignmentMessage(e.message,true);$("admin-bulk-commit").disabled=false;}
+    finally{assignmentUI.loading=false;updateAssignmentSummary();}
   }
   function setSubtab(tab){
     if(!Object.hasOwn(subtabSection,tab))return;
@@ -655,11 +835,48 @@
   });
   $("user-filter").addEventListener("change",()=>loadUsersPage("users",1));
   $("role-filter").addEventListener("change",()=>loadUsersPage("users",1));
+  document.querySelectorAll("[data-assign-mode]").forEach(button=>
+    button.addEventListener("click",()=>changeAssignmentMode(button.dataset.assignMode)));
+  $("admin-assignment-offer").addEventListener("change",event=>{
+    if(assignmentUI.offerId!==event.target.value)assignmentUI.chosenUsers.clear();
+    assignmentUI.offerId=event.target.value;assignmentMessage("");updateAssignmentSummary();
+    renderAssignmentPeople();
+  });
   let assignmentSearchDelay;
   $("admin-assignment-search").addEventListener("input",()=>{
     clearTimeout(assignmentSearchDelay);
-    assignmentSearchDelay=setTimeout(()=>renderAssignmentsView(1),220);
+    ++state.requests.assignments;
+    assignmentSearchDelay=setTimeout(()=>loadAssignmentPeople(1),220);
   });
+  $("admin-assignment-role-filter").addEventListener("change",()=>loadAssignmentPeople(1));
+  $("admin-assignment-offer-search").addEventListener("input",()=>renderAssignmentCatalog());
+  $("admin-assignment-category-filter").addEventListener("change",()=>renderAssignmentCatalog());
+  $("admin-assignment-select-all").addEventListener("click",()=>{
+    if(assignmentUI.mode==="offer_to_leads"){
+      const next=new Map(assignmentUI.chosenUsers);
+      for(const person of assignmentUI.people)next.set(Number(person.id),person);
+      if(next.size>200){assignmentMessage("За одну операцию можно выбрать не больше 200 участников.",true);return;}
+      assignmentUI.chosenUsers=next;renderAssignmentPeople();
+    }else{
+      const next=new Set(assignmentUI.chosenOffers);
+      for(const offer of filteredAssignmentOffers())next.add(offer.id);
+      if(next.size>200){assignmentMessage("За одну операцию можно выбрать не больше 200 офферов.",true);return;}
+      assignmentUI.chosenOffers=next;renderAssignmentCatalog();
+    }
+    assignmentMessage("");updateAssignmentSummary();
+  });
+  $("admin-assignment-clear").addEventListener("click",()=>{
+    if(assignmentUI.mode==="offer_to_leads"){
+      assignmentUI.chosenUsers.clear();renderAssignmentPeople();
+    }else{
+      assignmentUI.chosenOffers.clear();renderAssignmentCatalog();
+    }
+    assignmentMessage("");updateAssignmentSummary();
+  });
+  $("admin-assignment-review").addEventListener("click",reviewAssignments);
+  $("admin-bulk-cancel").addEventListener("click",()=>$("admin-bulk-confirm").close());
+  $("admin-bulk-confirm").addEventListener("close",()=>{assignmentUI.previewPayload=null;});
+  $("admin-bulk-commit").addEventListener("click",commitAssignments);
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   const catalogButton=$("mvp-catalog-anchor");
   catalogButton.id="mvp-catalog-open";

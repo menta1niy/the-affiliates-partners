@@ -113,6 +113,25 @@ class AdminAgencyScopeTests(unittest.TestCase):
         self.assertEqual(self.as_user('/api/admin/participant',self.admin,user_id=self.lead_a)[1]['manual']['statistics']['total'],1)
         self.assertEqual(self.as_user('/api/admin/participant',self.other_admin,user_id=self.lead_a)[0],403)
 
+    def test_bulk_assignment_filters_tenants_and_rejects_cross_agency_atomically(self):
+        payload={"name":"Тестовый оффер","category":"Дебетовые карты","target_action":"Оформить",
+                 "payout_rub":900,"hold_days":7}
+        status,created=self.as_user("/api/admin/mvp/offer",OWNER,**payload)
+        self.assertEqual(status,200,created)
+        offer=created["offer_id"]
+        status,candidates=self.as_user("/api/admin/mvp/assignment-candidates",self.admin)
+        self.assertEqual(status,200,candidates)
+        self.assertEqual([user["id"] for user in candidates["users"]],[self.lead_a])
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",self.other_admin,
+            query=str(self.lead_a))[1]["total"],0)
+        request={"mode":"offer_to_leads","offer_id":offer,"user_ids":[self.lead_a,self.lead_b]}
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[0],403)
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],0)
+        request["user_ids"]=[self.lead_a]
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[1]["created"],1)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.staff_a,**request)[0],403)
+
     def test_cross_agency_access_denied_and_local_assignment_allowed(self):
         for path, payload in [
             ('/api/admin/decision', {'user_id': self.lead_b, 'decision': 'block', 'reason': 'test'}),

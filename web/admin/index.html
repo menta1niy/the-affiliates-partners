@@ -111,12 +111,56 @@
         </section>
         <section data-workspace="assignments" class="admin-workspace" aria-label="Назначения офферов" hidden>
           <div class="admin-section-title">
-            <div><div class="section-kicker">РУЧНАЯ ВЫДАЧА</div><h2>Назначения<span>.</span></h2></div>
+            <div><div class="section-kicker">МАССОВЫЕ ОПЕРАЦИИ</div><h2>Подбор офферов<span>.</span></h2></div>
           </div>
-          <p class="admin-workspace-description">Найдите лида и откройте его карточку, чтобы назначить, снять или изменить статус оффера. Массовое назначение — следующий функциональный этап.</p>
-          <label class="admin-assignment-search-label" for="admin-assignment-search">Поиск лида</label>
-          <input type="search" id="admin-assignment-search" placeholder="Имя, username, внутренний ID" autocomplete="off">
-          <div id="admin-assignment-users" class="admin-assignment-users" aria-live="polite"></div>
+          <p class="admin-workspace-description">Назначайте офферы вручную. Уже назначенные предложения сохраняют свои статусы и комментарии.</p>
+          <div class="admin-assignment-modes" role="group" aria-label="Способ назначения">
+            <button type="button" class="btn ghost" data-assign-mode="offer_to_leads" aria-pressed="true">Оффер → лидам</button>
+            <button type="button" class="btn ghost" data-assign-mode="lead_to_offers" aria-pressed="false">Лиду → офферы</button>
+          </div>
+          <div class="admin-assignment-block admin-assignment-offer-tools">
+            <div class="admin-assignment-block-heading"><span class="admin-assignment-step">01</span><h3 id="admin-assignment-offer-heading">Выберите оффер</h3></div>
+            <div class="admin-assignment-filter-row">
+              <label>Поиск оффера<input type="search" id="admin-assignment-offer-search" placeholder="Название или категория" autocomplete="off"></label>
+              <label>Категория<select id="admin-assignment-category-filter"><option value="">Все категории</option></select></label>
+            </div>
+            <div id="admin-assignment-offer-target">
+              <label for="admin-assignment-offer">Оффер для назначения</label>
+              <select id="admin-assignment-offer" aria-label="Выберите оффер для лидов"></select>
+            </div>
+          </div>
+          <div class="admin-assignment-block">
+            <div class="admin-assignment-block-heading"><span class="admin-assignment-step">02</span><h3 id="admin-assignment-lead-heading">Выберите лидов</h3></div>
+            <div class="admin-assignment-filter-row">
+              <label for="admin-assignment-search">Поиск лида
+                <input type="search" id="admin-assignment-search" placeholder="Имя, username, внутренний ID" autocomplete="off">
+              </label>
+              <label for="admin-assignment-role-filter">Тип участника
+                <select id="admin-assignment-role-filter">
+                  <option value="all">Лиды и рефереры</option>
+                  <option value="lead">Лиды</option>
+                  <option value="referrer">Рефереры</option>
+                </select>
+              </label>
+            </div>
+            <p id="admin-assignment-selected-lead" class="admin-assignment-selected-lead" hidden></p>
+            <div id="admin-assignment-users" class="admin-assignment-users" aria-live="polite"></div>
+            <div id="admin-assignment-pagination" class="admin-assignment-pages"></div>
+          </div>
+          <div id="admin-assignment-offers-panel" class="admin-assignment-block" hidden>
+            <div class="admin-assignment-block-heading"><span class="admin-assignment-step">03</span><h3>Выберите предложения для лида</h3></div>
+            <div id="admin-assignment-offers" class="admin-assignment-choices" aria-live="polite"></div>
+          </div>
+          <div class="admin-assignment-footer">
+            <p id="admin-assignment-selected-count" role="status">Пока ничего не выбрано</p>
+            <div class="admin-assignment-footer-actions">
+              <button type="button" class="btn ghost" id="admin-assignment-select-all">Выбрать все</button>
+              <button type="button" class="btn ghost" id="admin-assignment-clear">Очистить выбор</button>
+              <button type="button" class="btn primary" id="admin-assignment-review" disabled>Проверить назначения</button>
+            </div>
+            <small>«Выбрать все» действует на текущие результаты фильтра и страницу. Выбор с других страниц сохраняется (не более 200).</small>
+          </div>
+          <div id="admin-assignment-result" class="message" role="status" hidden></div>
         </section>
         <section data-workspace="people" class="admin-workspace" aria-label="Управление пользователями" hidden>
           <div class="admin-subtabs" role="group" aria-label="Разделы пользователей">
@@ -170,6 +214,20 @@
       <dialog id="participant-detail" class="admin-profile-dialog" aria-label="Карточка участника">
         <div class="admin-dialog-toolbar"><span class="section-kicker">ПРОФИЛЬ УЧАСТНИКА / CONTROL</span><form method="dialog"><button class="btn ghost" type="submit">Закрыть ✕</button></form></div>
         <div id="participant-detail-content" aria-live="polite"></div>
+      </dialog>
+      <dialog id="admin-bulk-confirm" class="admin-bulk-dialog" aria-labelledby="admin-bulk-title">
+        <div class="admin-dialog-toolbar">
+          <span class="section-kicker">ПРОВЕРКА / CONTROL</span>
+          <form method="dialog"><button type="submit" class="btn ghost">Закрыть</button></form>
+        </div>
+        <h2 id="admin-bulk-title">Подтвердить назначения</h2>
+        <p id="admin-bulk-summary"></p>
+        <div id="admin-bulk-preview-stats" class="admin-bulk-preview-stats"></div>
+        <p class="admin-bulk-warning">Повторное назначение не изменяет действующие статусы, заметки и историю.</p>
+        <div class="admin-bulk-dialog-actions">
+          <button type="button" class="btn ghost" id="admin-bulk-cancel">Отмена</button>
+          <button type="button" class="btn primary" id="admin-bulk-commit">Назначить</button>
+        </div>
       </dialog>
       <footer>THE AFFILIATES <span>PARTNERS / ADMINISTRATION</span></footer>
     </main>

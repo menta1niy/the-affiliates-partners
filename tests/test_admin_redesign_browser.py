@@ -14,6 +14,7 @@ from tests.test_admin_participant_browser import BrowserHandler
 BOOTSTRAP = r"""(() => {
   const params = new URLSearchParams(location.hash.slice(1));
   const role = params.get('role') || 'owner';
+  const stage4 = params.get('stage4') === '1';
   const actor = {id:758398804,first_name:'Александр',role,status:'active'};
   const people = [
     {id:881031,internal_id:112,first_name:'Тестовый участник с длинным именем',
@@ -25,6 +26,19 @@ BOOTSTRAP = r"""(() => {
   const sampleOffer = {id:'manual_a',name:'Дебетовая карта Альфа Банк — длинное наименование',
     category:'Дебетовые карты',payout_rub:3000,hold_days:14,
     target_action:'Активировать карту',active:true,stage:'assigned'};
+  const stage4Offers = [sampleOffer,
+    {id:'manual_b',name:'Кредитный продукт — тест',category:'МФО',payout_rub:600,
+     hold_days:7,active:true,target_action:'Оформить'},
+    {id:'manual_c',name:'Отключённый оффер',category:'Дебетовые карты',
+     payout_rub:500,hold_days:5,active:false}];
+  const stage4People = [
+    {id:881032,internal_id:113,first_name:'Второй',username:'second_participant',
+     role:'lead',status:'active'},
+    {id:881033,internal_id:114,first_name:'Третий',username:'third_referrer',
+     role:'referrer',status:'active'}
+  ];
+  const savedAssignments = new Set();
+  window.__assignmentCalls = [];
   const baseFetch=window.fetch.bind(window);
   window.fetch = (url, opts) => {
     const path=String(url).replace('/partners/api','');
@@ -38,7 +52,27 @@ BOOTSTRAP = r"""(() => {
       data={users:filtered,total:filtered.length,has_next:false};
     }
     if(path==='/admin/audit') data={events:[]};
-    if(path==='/admin/mvp/catalog') data={offers:[sampleOffer]};
+    if(path==='/admin/mvp/catalog') data={offers:stage4?stage4Offers:[sampleOffer]};
+    if(path==='/admin/mvp/assignment-candidates'){
+      const body=JSON.parse(opts?.body||'{}');
+      const query=String(body.query||'').toLowerCase();
+      const filtered=(stage4?stage4People:people.filter(p=>p.status==='active'))
+        .filter(p=>(body.role_filter==='all'||!body.role_filter||p.role===body.role_filter)
+          && (!query||(p.first_name+' '+p.username+' '+p.id+' '+p.internal_id).toLowerCase().includes(query)));
+      data={users:body.page>1?[]:filtered,total:filtered.length,page:body.page||1,has_next:false};
+    }
+    if(path==='/admin/mvp/bulk-assignment'){
+      const body=JSON.parse(opts?.body||'{}');
+      window.__assignmentCalls.push(body);
+      const pairs=body.mode==='offer_to_leads'
+        ? [...new Set(body.user_ids)].map(id=>id+':'+body.offer_id)
+        : [...new Set(body.offer_ids)].map(id=>body.user_id+':'+id);
+      const already=pairs.filter(pair=>savedAssignments.has(pair)).length;
+      if(!body.preview)for(const pair of pairs)savedAssignments.add(pair);
+      data={preview:!!body.preview,requested:pairs.length,
+        to_create:body.preview?pairs.length-already:0,
+        already_assigned:already,created:body.preview?0:pairs.length-already};
+    }
     if(path==='/admin/mvp/offer') {
       window.__lastOfferPayload=JSON.parse(opts.body);
       data={offer_id:'manual_12345678901234567890'};
@@ -64,10 +98,10 @@ class AdminRedesignBrowserTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-    def open_admin(self,browser,width,role='owner'):
+    def open_admin(self,browser,width,role='owner',stage4=False):
         page=browser.new_page(viewport={'width':width,'height':844})
         page.add_init_script(BOOTSTRAP)
-        page.goto(self.base+f'/partners/admin/#tgWebAppData=visual-fixture&role={role}')
+        page.goto(self.base+f'/partners/admin/#tgWebAppData=visual-fixture&role={role}&stage4={int(stage4)}')
         page.locator('#admin-app').wait_for(state='visible')
         return page
 
@@ -234,5 +268,53 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                 self.assertNotIn('age_min',payload)
                 self.assertNotIn('auto_assign',payload)
                 page.close()
+            finally:
+                browser.close()
+
+    def test_stage4_two_bulk_modes_preview_commit_and_mobile_geometry(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                for width in (320,390):
+                    with self.subTest(width=width):
+                        page=self.open_admin(browser,width,stage4=True)
+                        errors=[]
+                        page.on("pageerror",lambda e:errors.append(str(e)))
+                        page.locator('[data-section="assignments"]').click()
+                        page.locator('#admin-assignment-users input[type="checkbox"]').first.wait_for()
+                        self.assertEqual(page.locator('#admin-assignment-users input[type="checkbox"]').count(),2)
+                        self.assertEqual(page.locator('#admin-assignment-offer option').count(),3)
+                        self.assertFalse(page.locator('#admin-assignment-review').is_enabled())
+                        page.locator('#admin-assignment-offer').select_option('manual_a')
+                        page.locator('#admin-assignment-select-all').click()
+                        self.assertIn('Выбрано: 2',page.locator('#admin-assignment-selected-count').inner_text())
+                        page.locator('#admin-assignment-review').click()
+                        dialog=page.locator('#admin-bulk-confirm')
+                        dialog.wait_for(state='visible')
+                        self.assertEqual(dialog.locator('.admin-bulk-stat strong').all_inner_texts(),['2','2','0'])
+                        dialog.locator('#admin-bulk-commit').click()
+                        page.locator('#admin-assignment-result').get_by_text('Добавлено: 2',exact=False).wait_for()
+                        page.locator('[data-assign-mode="lead_to_offers"]').click()
+                        self.assertTrue(page.locator('#admin-assignment-offers-panel').is_visible())
+                        page.locator('#admin-assignment-users input[type="radio"]').first.check()
+                        self.assertEqual(page.locator('#admin-assignment-offers input[type="checkbox"]').count(),2)
+                        self.assertFalse(page.locator('#admin-assignment-offers input[value="manual_c"]').count())
+                        page.locator('#admin-assignment-category-filter').select_option('МФО')
+                        self.assertEqual(page.locator('#admin-assignment-offers input[type="checkbox"]').count(),1)
+                        page.locator('#admin-assignment-select-all').click()
+                        page.locator('#admin-assignment-category-filter').select_option('')
+                        self.assertTrue(page.locator('#admin-assignment-offers input[value="manual_b"]').is_checked())
+                        page.locator('#admin-assignment-select-all').click()
+                        page.locator('#admin-assignment-review').click()
+                        dialog.wait_for(state='visible')
+                        self.assertEqual(dialog.locator('.admin-bulk-stat strong').all_inner_texts(),['2','1','1'])
+                        dialog.locator('#admin-bulk-commit').click()
+                        page.locator('#admin-assignment-result').get_by_text('Добавлено: 1',exact=False).wait_for()
+                        self.assertEqual(page.evaluate('document.documentElement.scrollWidth'),width)
+                        self.assertFalse(errors,errors)
+                        calls=page.evaluate('window.__assignmentCalls')
+                        self.assertEqual([call['mode'] for call in calls],
+                                         ['offer_to_leads','offer_to_leads','lead_to_offers','lead_to_offers'])
+                        page.close()
             finally:
                 browser.close()
