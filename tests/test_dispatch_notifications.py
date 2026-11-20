@@ -59,6 +59,37 @@ class DispatchTests(unittest.TestCase):
             self.assertEqual(dispatcher.dispatch(), 0)
         self.assertEqual(self.row(), (1, None, 20060, "RuntimeError"))
 
+    def test_nested_dispatch_does_not_claim_an_inflight_message(self):
+        delivered = []
+
+        def send(chat_id, text, token):
+            delivered.append((chat_id, text))
+            # Simulates another dispatcher while the first network call is in flight.
+            self.assertEqual(dispatcher.dispatch(), 0)
+            return True
+
+        with patch.object(dispatcher, "bot_token", return_value="synthetic"), \
+             patch.object(dispatcher, "deliver", side_effect=send), \
+             patch.object(dispatcher.time, "time", return_value=30000):
+            self.assertEqual(dispatcher.dispatch(), 0)
+        self.assertEqual(delivered, [(42, "Message")])
+        self.assertEqual(self.row(), (1, 30000, 30120, ""))
+
+    def test_one_failure_does_not_block_next_notification(self):
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.execute("INSERT INTO notifications_outbox(event_key,chat_id,text,created_at) "
+                         "VALUES('test:2',43,'Second',1001)")
+            conn.commit()
+        with patch.object(dispatcher, "bot_token", return_value="synthetic"), \
+             patch.object(dispatcher, "deliver", side_effect=[False, True]) as send, \
+             patch.object(dispatcher.time, "time", return_value=10000):
+            self.assertEqual(dispatcher.dispatch(), 0)
+        self.assertEqual(send.call_count, 2)
+        with closing(sqlite3.connect(self.path)) as conn:
+            first, second = conn.execute("SELECT sent_at FROM notifications_outbox ORDER BY id").fetchall()
+        self.assertIsNone(first[0])
+        self.assertEqual(second[0], 10000)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -606,8 +606,15 @@ def capture_pending_source(conn, sender_id, code):
             return
         conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (sender_id,))
     if valid_invitation_source(conn, sender_id, code):
-        conn.execute("INSERT OR IGNORE INTO pending_starts(telegram_id,code,updated_at) VALUES(?,?,?)",
-                     (sender_id, code, int(time.time())))
+        inserted = conn.execute("INSERT OR IGNORE INTO pending_starts(telegram_id,code,updated_at) VALUES(?,?,?)",
+                                (sender_id, code, int(time.time())))
+        if inserted.rowcount and code.startswith("ref_"):
+            invitation = conn.execute("SELECT i.issuer_id,u.role FROM invitations i "
+                                      "JOIN users u ON u.id=i.issuer_id WHERE i.code=?", (code,)).fetchone()
+            if invitation and invitation["role"] in ("lead", "referrer"):
+                enqueue(conn, "referral:visit:" + str(sender_id), invitation["issuer_id"],
+                        "The Affiliates Partners\nПо вашей ссылке перешёл новый пользователь. "
+                        "Регистрация ещё не завершена.")
 
 
 def valid_invitation_source(conn, sender_id, code):
