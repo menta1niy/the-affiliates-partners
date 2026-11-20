@@ -38,7 +38,8 @@ class ReleaseLifecycle(unittest.TestCase):
         self.assertEqual(self.as_user('/api/admin/decision', h.OWNER, user_id=h.ALICE,
                                       decision='approve')[0], 200)
         before = self.outbox()
-        self.assertEqual(len(before), 5)  # registration and four distinct status changes
+        # Role change also creates a notification in the stage 10 outbox.
+        self.assertEqual(len(before), 6)
         messages = [item[2] for item in before]
         self.assertTrue(any('ожидает рассмотрения' in message for message in messages))
         self.assertTrue(any('Заявка одобрена' in message for message in messages))

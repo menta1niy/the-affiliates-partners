@@ -116,7 +116,11 @@ class ProfileStage6Tests(unittest.TestCase):
         self.assertEqual(status,200,result)
         self.assertEqual(result["registration"]["credit_products_total"],3)
         self.assertEqual(result["registration"]["credit_segment"],"medium_count")
-        self.assertTrue(all(offer["can_apply"] for offer in self.as_user("/api/mvp/overview",ALICE)[1]["offers"]))
+        # A fresh survey removes the credit-review hold; stage 7 still requires
+        # manager approval before disclosing an MFO link.
+        refreshed={item["category"]:item for item in self.as_user("/api/mvp/overview",ALICE)[1]["offers"]}
+        self.assertTrue(refreshed["Дебетовые карты"]["can_apply"])
+        self.assertNotEqual(refreshed["МФО"]["unavailable_reason"],"credit_review")
         self.assertEqual(self.as_user("/api/profile/credit-survey",BOB,
             credit_cards=0,installments=0,loans=0,mortgages=0)[0],403)
 

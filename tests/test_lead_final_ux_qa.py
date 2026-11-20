@@ -33,7 +33,9 @@ class LeadFinalUXQA(unittest.TestCase):
             page.add_init_script(TELEGRAM_MOCK)
         page.add_init_script(FIXTURE)
         page.goto(self.base + f"/partners/#tgWebAppData=ui-fixture&state={state}")
-        page.locator("#account").wait_for(state="visible")
+        # Pending and unregistered users deliberately do not see #account.
+        target = "#pending-panel" if state == "pending" else ("#register-form" if state == "unregistered" else "#account")
+        page.locator(target).wait_for(state="visible")
         return page
 
     def test_lead_modal_safe_area_keyboard_and_navigation(self):

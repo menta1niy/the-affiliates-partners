@@ -32,7 +32,8 @@ class LifecycleEdges(unittest.TestCase):
         self.assertEqual(self.as_user('/api/invitations/referral', h.BOB)[0], 403)
         self.assertEqual(self.as_user('/api/admin/invitations', h.BOB)[0], 403)
         self.assertEqual(self.as_user('/api/admin/decision', h.OWNER, user_id=h.BOB, decision='approve')[0], 200)
-        self.assertEqual(self.as_user('/api/invitations/referral', h.BOB)[0], 403)
+        # Stage 9 allows an ordinary approved lead to invite friends.
+        self.assertEqual(self.as_user('/api/invitations/referral', h.BOB)[0], 200)
         self.assertEqual(self.as_user('/api/admin/assign', h.OWNER, user_id=h.BOB, role='referrer')[0], 200)
         self.assertEqual(self.as_user('/api/invitations/referral', h.BOB)[0], 200)
         self.assertEqual(self.as_user('/api/admin/invitations', h.BOB)[0], 403)

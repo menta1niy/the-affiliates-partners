@@ -377,7 +377,9 @@ class ResponsiveInteractionQA(unittest.TestCase):
                         self.assertIsNotNone(box)
                         self.assertGreaterEqual(box['y'],112,box)
                         if admin:
-                            page.get_by_role('button',name='Каталог офферов').click()
+                            # Stage 2 moved catalog editing behind the Offers workspace.
+                            page.locator('.admin-tabs [data-section="offers"]').click()
+                            page.locator('#mvp-catalog-open').click()
                             dialog=page.locator('#mvp-catalog-dialog')
                             dialog.wait_for(state='visible')
                             rect=dialog.bounding_box()

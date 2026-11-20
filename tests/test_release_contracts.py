@@ -117,19 +117,22 @@ class ReleaseContracts(unittest.TestCase):
 
     def test_notification_telegram_http_mock_and_dedup(self):
         self.assertEqual(self.register(ALICE, self.owner_invite())[0], 200)
+        with sqlite3.connect(self.db_path) as conn:
+            pending = conn.execute('SELECT chat_id FROM notifications_outbox WHERE sent_at IS NULL').fetchall()
+        self.assertGreaterEqual(len(pending), 1)
 
         def respond(request, timeout):
             self.assertEqual(timeout, 8)
             self.assertIn('/sendMessage', request.full_url)
-            self.assertEqual(json.loads(request.data)['chat_id'], OWNER)
+            self.assertIn(json.loads(request.data)['chat_id'], [row[0] for row in pending])
             return BytesIO(b'{"ok":true}')
 
         with patch.object(dispatch_notifications, 'bot_token', return_value='fake-token'), patch.object(dispatch_notifications.urllib.request, 'urlopen', side_effect=respond) as sender:
             self.assertEqual(dispatch_notifications.dispatch(), 0)
             self.assertEqual(dispatch_notifications.dispatch(), 0)
-        sender.assert_called_once()
+        self.assertEqual(sender.call_count, len(pending))
         with sqlite3.connect(self.db_path) as conn:
-            self.assertEqual(conn.execute('SELECT count(*) FROM notifications_outbox WHERE sent_at IS NOT NULL').fetchone()[0], 1)
+            self.assertEqual(conn.execute('SELECT count(*) FROM notifications_outbox WHERE sent_at IS NOT NULL').fetchone()[0], len(pending))
 
     def test_owner_audited_source_correction_preserves_manager(self):
         """Owner can correct attribution to an eligible active referrer without reassigning staff."""
