@@ -114,6 +114,8 @@ def schema(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS offer_logos (
         logo_hash TEXT PRIMARY KEY, image_data BLOB NOT NULL,
         created_at INTEGER NOT NULL)""")
+    from server import offer_workflow
+    offer_workflow.schema(conn)
 
 
 def _admin(conn, actor, owner_id):
@@ -390,6 +392,7 @@ def overview(user_id, owner_id, *, for_admin=None):
                             "JOIN manual_offers o ON o.id=a.offer_id WHERE a.telegram_id=? "
                             "ORDER BY a.updated_at DESC,o.id", (user_id,)).fetchall()
         from server.profile import access_reason
+        from server import offer_workflow
         registration = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (user_id,)).fetchone()
         identity_present = conn.execute(
             "SELECT 1 FROM participant_identities WHERE telegram_id=?", (user_id,)).fetchone() is not None
@@ -403,7 +406,18 @@ def overview(user_id, owner_id, *, for_admin=None):
                 reason = access_reason(registration, identity_present, row["category"])
                 offer["can_apply"] = not bool(reason)
                 offer["unavailable_reason"] = reason
-                if reason:
+                is_mfo = offer_workflow.is_mfo(row["category"])
+                offer["requires_request"] = is_mfo
+                approved = offer_workflow.mfo_approved(conn, user_id, row["id"]) if is_mfo else False
+                offer["mfo_approved"] = approved
+                latest = conn.execute("SELECT id,kind,lead_stage,review_status,review_note,created_at FROM manual_offer_events "
+                                      "WHERE telegram_id=? AND offer_id=? ORDER BY created_at DESC,id DESC LIMIT 1",
+                                      (user_id, row["id"])).fetchone()
+                offer["latest_event"] = dict(latest) if latest else None
+                if not reason and is_mfo and not approved:
+                    offer["unavailable_reason"] = "mfo_request"
+                    offer["can_apply"] = False
+                if not offer["can_apply"]:
                     # Hiding a link in HTML alone is not a permission boundary.
                     offer["referral_url"] = ""
             offers.append(offer)

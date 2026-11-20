@@ -9,7 +9,8 @@
     underage:"Оформление недоступно до 18 лет. Реферальные приглашения остаются доступны.",
     identity:"Сначала заполните ФИО и ИНН в профиле.",
     credit_review:"Перед оформлением обновите кредитную анкету в профиле.",
-    registration:"Завершите регистрацию и дождитесь одобрения."
+    registration:"Завершите регистрацию и дождитесь одобрения.",
+    mfo_request:"Для оформления МФО сначала запросите оффер и дождитесь решения менеджера."
   };
   function unavailableReason(offer){
     return offer?.can_apply===false ? gateReasons[offer.unavailable_reason]||"Оформление сейчас недоступно." : "";
@@ -382,6 +383,90 @@
       hint.textContent="Это возможные этапы. Отметки о выполнении будут доступны после подключения подтверждений.";
       section.append(hint);offerDialogContent.append(section);
     }
+    if(offer.latest_event){
+      const event=offer.latest_event;
+      const section=document.createElement("section");section.className="participant-offer-activity";
+      const title=document.createElement("strong");title.textContent="Последнее действие";
+      const description=document.createElement("p");
+      const names={pending:"Ожидает рассмотрения",approved:"Подтверждено менеджером",
+                   rejected:"Отклонено менеджером"};
+      description.textContent=(event.kind==="mfo_request"?"Запрос МФО":
+        leadStageLabels[event.lead_stage]||"Отчёт")+" · "+(names[event.review_status]||event.review_status);
+      section.append(title,description);
+      if(event.review_note)section.append(document.createTextNode("Комментарий: "+event.review_note));
+      offerDialogContent.append(section);
+    }
+    const eligible=offer.can_apply===true||
+      (offer.unavailable_reason==="mfo_request" && offer.requires_request===true);
+    if(eligible&&offer.requires_request&&!offer.mfo_approved&&
+       !["completed","rejected"].includes(offer.stage)){
+      const request=document.createElement("button");request.type="button";
+      request.className="btn primary participant-offer-request";
+      request.textContent="Запросить оффер";
+      request.disabled=offer.latest_event?.review_status==="pending"&&offer.latest_event?.kind==="mfo_request";
+      if(request.disabled)request.textContent="Запрос на рассмотрении";
+      request.addEventListener("click",async()=>{
+        request.disabled=true;
+        try{
+          await api("/mvp/submit",{kind:"mfo_request",offer_id:offer.id});
+          closeOfferDialog();await loadManualOverview();
+        }catch(e){request.disabled=false;error(e.message);}
+      });
+      offerDialogContent.append(request);
+    }
+    if(offer.can_apply===true && (!offer.requires_request||offer.mfo_approved) &&
+       !["completed","rejected"].includes(offer.stage)){
+      const section=document.createElement("section");section.className="participant-offer-report";
+      section.append(document.createElement("hr"));
+      const title=document.createElement("h3");title.textContent="Отметить этап";
+      const hint=document.createElement("p");hint.textContent="Выберите действие и добавьте ссылку, скриншот или оба подтверждения. Отчёт проверит менеджер.";
+      section.append(title,hint);
+      const form=document.createElement("form");form.className="participant-offer-report-form";
+      const stageLabel=document.createElement("label");stageLabel.textContent="Этап выполнения";
+      const stages=document.createElement("select");stages.required=true;
+      for(const code of offer.lead_stages||[]){
+        if(!Object.hasOwn(leadStageLabels,code))continue;
+        const option=document.createElement("option");option.value=code;option.textContent=leadStageLabels[code];stages.append(option);
+      }
+      stageLabel.append(stages);
+      const urlLabel=document.createElement("label");urlLabel.textContent="Ссылка на подтверждение (HTTPS)";
+      const url=document.createElement("input");url.type="url";url.maxLength=2048;
+      url.placeholder="https://";url.inputMode="url";urlLabel.append(url);
+      const fileLabel=document.createElement("label");fileLabel.textContent="Скриншот (PNG, JPG, WebP)";
+      const file=document.createElement("input");file.type="file";file.accept="image/png,image/jpeg,image/webp";
+      fileLabel.append(file);
+      const note=document.createElement("p");note.className="participant-offer-report-hint";
+      note.textContent="Фото будет уменьшено. Без банковского подтверждения выплаты не начисляются.";
+      const submit=document.createElement("button");submit.type="submit";submit.className="btn primary";
+      submit.textContent="Отправить этап на проверку";
+      const message=document.createElement("p");message.className="participant-form-feedback";message.setAttribute("role","status");
+      form.append(stageLabel,urlLabel,fileLabel,note,submit,message);
+      form.addEventListener("submit",async event=>{
+        event.preventDefault();submit.disabled=true;message.textContent="Отправляем…";
+        try{
+          const values={kind:"stage",offer_id:offer.id,lead_stage:stages.value,proof_url:url.value.trim()};
+          if(file.files?.[0]){
+            const uploaded=file.files[0];
+            if(!["image/png","image/jpeg","image/webp"].includes(uploaded.type)||uploaded.size>5_000_000)
+              throw new Error("Выберите PNG, JPG или WebP размером до 5 МБ.");
+            const bitmap=await createImageBitmap(uploaded);
+            try{
+              const scale=Math.min(1,1280/Math.max(bitmap.width,bitmap.height));
+              const canvas=document.createElement("canvas");
+              canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+              canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+              canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);
+              values.screenshot=canvas.toDataURL("image/webp",.70);
+              if(values.screenshot.length>735000)throw new Error("Слишком большой скриншот, выберите другой.");
+            }finally{bitmap.close();}
+          }
+          if(!values.screenshot&&!values.proof_url)throw new Error("Добавьте ссылку или скриншот.");
+          await api("/mvp/submit",values);
+          closeOfferDialog();await loadManualOverview();
+        }catch(e){message.textContent=e.message;submit.disabled=false;}
+      });
+      section.append(form);offerDialogContent.append(section);
+    }
     const denied=unavailableReason(offer);
     if(denied){
       const hint=document.createElement("p");hint.className="participant-offer-blocked-hint";hint.textContent=denied;
@@ -438,6 +523,13 @@
       button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
       item.append(top,summary,nextOfferAction(offer.stage));
+      if(offer.latest_event){
+        const feedback=document.createElement("p");feedback.className="participant-offer-event-feedback";
+        const labels={pending:"Отправлено на проверку",approved:"Отметка подтверждена менеджером",
+                      rejected:"Отметка отклонена менеджером"};
+        feedback.textContent=labels[offer.latest_event.review_status]||"Получено решение менеджера";
+        item.append(feedback);
+      }
       if(unavailableReason(offer)){
         const restriction=document.createElement("div");restriction.className="participant-offer-access-status";
         const pill=document.createElement("span");pill.className="participant-offer-access-pill";pill.textContent="Недоступно";

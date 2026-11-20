@@ -14,6 +14,7 @@ from server import integration
 from server import tasks
 from server import mvp
 from server import profile as participant_profile
+from server import offer_workflow
 
 
 def storage_error(exc):
@@ -72,7 +73,9 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
                   "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment",
                   "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
-                  "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding"}
+                  "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding",
+                  "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
+                  "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -82,7 +85,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {"error": "Недостаточно прав"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            size_limit = 1_500_000 if route == "/api/admin/mvp/offer" else 24000
+            size_limit = 1_500_000 if route == "/api/admin/mvp/offer" else 800_000 if route == "/api/mvp/submit" else 24000
             if not 1 <= size <= size_limit:
                 return self.send_json(400, {"error": "Неверный размер запроса"})
             body = json.loads(self.rfile.read(size))
@@ -203,6 +206,16 @@ class Handler(BaseHTTPRequestHandler):
                 result = mvp.bulk_assignment(user["id"], owner, body)
             elif route == "/api/mvp/overview":
                 result = mvp.overview(user["id"], owner)
+            elif route == "/api/mvp/submit":
+                result = offer_workflow.send(user["id"], owner, body)
+            elif route == "/api/mvp/my-events":
+                result = offer_workflow.my_events(user["id"], owner, body)
+            elif route == "/api/admin/mvp/events":
+                result = offer_workflow.admin_queue(user["id"], owner, body)
+            elif route == "/api/admin/mvp/review-event":
+                result = offer_workflow.review(user["id"], owner, body)
+            elif route == "/api/admin/mvp/evidence":
+                result = offer_workflow.evidence(user["id"], owner, body)
             elif route == "/api/profile/identity":
                 result = participant_profile.save_identity(user["id"], body)
             elif route == "/api/profile/credit-survey":

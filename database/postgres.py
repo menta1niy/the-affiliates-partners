@@ -120,6 +120,22 @@ CREATE TABLE IF NOT EXISTS manual_assignments (
   updated_at BIGINT NOT NULL, PRIMARY KEY(telegram_id,offer_id)
 );
 CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id);
+CREATE TABLE IF NOT EXISTS manual_offer_events (
+  id TEXT PRIMARY KEY,
+  telegram_id BIGINT NOT NULL REFERENCES users(id),
+  offer_id TEXT NOT NULL REFERENCES manual_offers(id),
+  kind TEXT NOT NULL, lead_stage TEXT NOT NULL DEFAULT '',
+  proof_url TEXT NOT NULL DEFAULT '',
+  evidence_data BYTEA, evidence_type TEXT NOT NULL DEFAULT '',
+  review_status TEXT NOT NULL DEFAULT 'pending',
+  review_note TEXT NOT NULL DEFAULT '',
+  reviewed_by BIGINT REFERENCES users(id),
+  created_at BIGINT NOT NULL, reviewed_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS ix_manual_offer_events_user
+  ON manual_offer_events(telegram_id,created_at);
+CREATE INDEX IF NOT EXISTS ix_manual_offer_events_review
+  ON manual_offer_events(review_status,created_at);
 CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
@@ -232,9 +248,13 @@ def validate_ready(url):
         "manual_offers": {"id", "name", "category", "target_action", "payout_rub", "hold_days", "active", "logo_hash", "lead_stages"},
         "offer_logos": {"logo_hash", "image_data", "created_at"},
         "manual_assignments": {"telegram_id", "offer_id", "stage", "note", "updated_at"},
+        "manual_offer_events": {"id", "telegram_id", "offer_id", "kind", "lead_stage", "proof_url",
+                                "evidence_data", "evidence_type", "review_status", "review_note",
+                                "reviewed_by", "created_at", "reviewed_at"},
     }
     tables = ("pending_starts", "telegram_updates", "audit", "notifications_outbox", "internal_id_sequence", "crm_events")
-    indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user", "ix_manual_assignments_user"}
+    indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user", "ix_manual_assignments_user",
+               "ix_manual_offer_events_user", "ix_manual_offer_events_review"}
     with connect(url).raw as conn:
         rows = conn.execute("SELECT table_name,column_name FROM information_schema.columns "
                             "WHERE table_schema='partners'").fetchall()

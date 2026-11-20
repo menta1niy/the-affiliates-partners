@@ -511,7 +511,7 @@
     people:{name:"Пользователи",description:"Регистрации, профили и права участников.",number:"04"},
     more:{name:"Ещё",description:"Приглашения, история действий и другие инструменты.",number:"05"}
   };
-  const subtabSection={pending:"people",users:"people",invitations:"more",audit:"more"};
+  const subtabSection={pending:"people",users:"people",offer_reviews:"people",invitations:"more",audit:"more"};
   const defaultSubtab={people:"pending",more:"invitations"};
   function canManageOffers(){return state.role==="owner" || state.role==="admin";}
   async function renderOffersView(){
@@ -760,7 +760,68 @@
       panel.hidden=panel.dataset.panel!==tab;
     });
     if(tab==="audit")loadAudit();
+    if(tab==="offer_reviews")loadOfferReviewQueue();
   }
+  async function loadOfferReviewQueue(){
+    const root=$("admin-offer-event-list");
+    root.replaceChildren(make("p","Загружаем заявки…","muted"));
+    try{
+      const response=await api("/admin/mvp/events",{status:$("admin-offer-event-filter").value});
+      if(state.tab!=="offer_reviews")return;
+      root.replaceChildren();
+      if(!response.events?.length){
+        root.append(make("p","Заявок по офферам с этим статусом нет.","muted"));return;
+      }
+      const statuses={pending:"На рассмотрении",approved:"Подтверждено",rejected:"Отклонено"};
+      for(const event of response.events){
+        const card=make("article",undefined,"admin-offer-event-card");
+        card.append(make("span",event.display_id+" · "+(event.kind==="mfo_request"?"Запрос МФО":"Отчёт по этапу"),"section-kicker"));
+        card.append(make("h3",event.offer_name||"Оффер"));
+        const summary=make("p",(event.kind==="mfo_request"?"Запросить оффер":
+          leadStageOptions[event.lead_stage]||event.lead_stage)+" · "+
+          (statuses[event.review_status]||event.review_status));
+        card.append(summary);
+        if(event.proof_url){
+          const link=make("a","Открыть ссылку подтверждения ↗","btn ghost");
+          link.href=event.proof_url;link.target="_blank";link.rel="noopener noreferrer";
+          link.referrerPolicy="no-referrer";card.append(link);
+        }
+        if(event.has_screenshot)card.append(action("Посмотреть скриншот",async()=>{
+          const result=await api("/admin/mvp/evidence",{event_id:event.id});
+          if(result.mime!=="image/webp"||typeof result.data!=="string")throw new Error("Неверный формат файла");
+          const bytes=Uint8Array.from(atob(result.data),character=>character.charCodeAt(0));
+          const blob=new Blob([bytes],{type:"image/webp"});
+          const objectUrl=URL.createObjectURL(blob);
+          const preview=make("dialog");preview.className="admin-offer-evidence-dialog";
+          const image=make("img");image.alt="Скриншот, присланный участником";image.src=objectUrl;
+          const close=make("button","Закрыть","btn ghost");close.type="button";
+          close.addEventListener("click",()=>preview.close());
+          preview.append(close,image);document.body.append(preview);
+          preview.addEventListener("close",()=>{URL.revokeObjectURL(objectUrl);preview.remove();},{once:true});
+          preview.showModal();
+        }));
+        if(event.review_status==="pending"){
+          const note=make("textarea");note.rows=2;note.maxLength=300;
+          note.placeholder="Комментарий (обязателен при отказе)";
+          note.setAttribute("aria-label","Комментарий решения для "+event.display_id);
+          const actions=make("div",undefined,"admin-offer-event-actions");
+          actions.append(action("Подтвердить",async()=>{
+            if(!window.confirm("Подтвердить результат? Это не подтверждение банковского начисления."))return;
+            await api("/admin/mvp/review-event",{event_id:event.id,decision:"approve",note:note.value});
+            notice("Отчёт подтверждён менеджером");await loadOfferReviewQueue();
+          },"primary"),action("Отклонить",async()=>{
+            if(!note.value.trim()){error("Укажите причину отклонения.");return;}
+            await api("/admin/mvp/review-event",{event_id:event.id,decision:"reject",note:note.value});
+            notice("Заявка отклонена");await loadOfferReviewQueue();
+          }));
+          card.append(note,actions);
+        }else if(event.review_note)card.append(make("p","Комментарий: "+event.review_note,"muted"));
+        root.append(card);
+      }
+    }catch(err){root.replaceChildren(make("p",err.message,"message error"));error(err.message);}
+  }
+  $("admin-offer-event-filter").addEventListener("change",loadOfferReviewQueue);
+  $("admin-offer-event-reload").addEventListener("click",loadOfferReviewQueue);
   function navigateSection(section,{subtab,addHistory=false}={}){
     if(!Object.hasOwn(sections,section))return;
     if(!canManageOffers() && ["offers","assignments"].includes(section))return;

@@ -42,7 +42,22 @@ CREATE TABLE IF NOT EXISTS manual_assignments (
   updated_at BIGINT NOT NULL, PRIMARY KEY(telegram_id,offer_id)
 );
 CREATE INDEX IF NOT EXISTS ix_manual_assignments_user ON manual_assignments(telegram_id);
+CREATE TABLE IF NOT EXISTS manual_offer_events (
+  id TEXT PRIMARY KEY,
+  telegram_id BIGINT NOT NULL REFERENCES users(id),
+  offer_id TEXT NOT NULL REFERENCES manual_offers(id),
+  kind TEXT NOT NULL, lead_stage TEXT NOT NULL DEFAULT '',
+  proof_url TEXT NOT NULL DEFAULT '',
+  evidence_data BYTEA, evidence_type TEXT NOT NULL DEFAULT '',
+  review_status TEXT NOT NULL DEFAULT 'pending',
+  review_note TEXT NOT NULL DEFAULT '',
+  reviewed_by BIGINT REFERENCES users(id),
+  created_at BIGINT NOT NULL, reviewed_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS ix_manual_offer_events_user ON manual_offer_events(telegram_id,created_at);
+CREATE INDEX IF NOT EXISTS ix_manual_offer_events_review ON manual_offer_events(review_status,created_at);
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.registration_profiles TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.participant_identities TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offer_events TO "ta-partners";
 COMMIT;

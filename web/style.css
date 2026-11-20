@@ -3308,3 +3308,91 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-profile-fields,
   .participant-app .participant-profile-credit-fields {grid-template-columns:minmax(0,1fr);}
 }
+
+/* Stage 7: evidence submission and review, without financial auto-confirmation. */
+.participant-app .participant-offer-report,
+.participant-app .participant-offer-activity {
+  display:grid;gap:11px;
+  margin-top:16px;padding:14px;
+  min-width:0;border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+  background:rgba(255,255,255,.025);
+}
+.participant-app .participant-offer-report h3 {margin:0;font-family:var(--font-display);font-size:15px;}
+.participant-app .participant-offer-report > p,
+.participant-app .participant-offer-report-hint,
+.participant-app .participant-offer-activity p {
+  margin:0;color:var(--color-secondary);font-size:12px;line-height:1.6;
+}
+.participant-app .participant-offer-activity strong {font-size:13px;color:var(--accent-amber);}
+.participant-app .participant-offer-event-feedback {
+  margin:9px 0 0;padding:8px 10px;
+  border-radius:10px;
+  border:1px solid var(--float-border);
+  color:var(--color-secondary);
+  background:rgba(255,255,255,.025);
+  font-size:11px;line-height:1.55;
+}
+.participant-app .participant-offer-report-form {display:grid;gap:12px;min-width:0;}
+.participant-app .participant-offer-report-form label {
+  display:grid;gap:7px;min-width:0;
+  color:var(--color-text);font-size:12px;font-weight:650;
+}
+.participant-app .participant-offer-report-form :is(select,input) {
+  box-sizing:border-box;
+  width:100%;min-width:0;min-height:46px;
+  padding:10px 11px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;background:#1B1D20;color:var(--color-text);
+  font-size:13px;
+}
+.participant-app .participant-offer-report-form input[type=file] {
+  font-size:11px;overflow:hidden;
+}
+.participant-app .participant-offer-report-form .btn,
+.participant-app .participant-offer-request {min-height:46px;width:100%;font-size:12px;}
+.admin-control .admin-offer-event-list {
+  display:grid;gap:12px;min-width:0;
+}
+.admin-control .admin-offer-event-card {
+  display:grid;gap:11px;
+  min-width:0;padding:16px;
+  border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+  background:rgba(255,255,255,.035);
+}
+.admin-control .admin-offer-event-card h3 {
+  margin:0;font-family:var(--font-display);
+  font-size:clamp(13px,2.5vw,16px);
+  line-height:1.5;overflow-wrap:anywhere;
+}
+.admin-control .admin-offer-event-card p {margin:0;font-size:12px;line-height:1.6;color:var(--color-secondary);}
+.admin-control .admin-offer-event-card textarea {
+  box-sizing:border-box;width:100%;min-height:65px;
+  padding:10px 12px;border-radius:12px;
+  background:#1B1D20;color:var(--color-text);
+  border:1px solid rgba(255,255,255,.16);
+  font-size:13px;
+}
+.admin-control .admin-offer-event-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+.admin-control .admin-offer-event-actions .btn,
+.admin-control .admin-offer-event-card > .btn {min-height:44px;padding:9px 12px;font-size:12px;}
+.admin-offer-evidence-dialog {
+  box-sizing:border-box;
+  margin:auto;padding:15px;
+  max-width:min(94vw,900px);
+  max-height:94dvh;
+  border:1px solid var(--float-border);
+  border-radius:20px;
+  background:#151719;color:var(--color-text);
+}
+.admin-offer-evidence-dialog::backdrop {background:rgba(0,0,0,.82);}
+.admin-offer-evidence-dialog img {
+  display:block;
+  max-width:100%;max-height:calc(94dvh - 95px);
+  margin-top:14px;object-fit:contain;
+}
+@media(max-width:540px){
+  .admin-control .admin-offer-event-card {padding:12px;border-radius:17px;}
+  .participant-app .participant-offer-report {padding:12px;border-radius:15px;}
+}

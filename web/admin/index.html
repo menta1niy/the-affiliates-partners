@@ -166,6 +166,7 @@
           <div class="admin-subtabs" role="group" aria-label="Разделы пользователей">
             <button type="button" class="btn ghost" data-subtab="pending" aria-pressed="true">Заявки</button>
             <button type="button" class="btn ghost" data-subtab="users" aria-pressed="false">Лиды и команда</button>
+            <button type="button" class="btn ghost" data-subtab="offer_reviews" aria-pressed="false">Проверка офферов</button>
           </div>
         <section data-panel="pending" class="panel admin-work-panel">
           <div class="admin-section-title"><div><div class="section-kicker">МОДЕРАЦИЯ</div><h2>Ожидают решения<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">01</span></div>
@@ -184,6 +185,17 @@
             </select>
           </div>
           <div id="users-list" class="table-wrap admin-records" aria-live="polite"></div>
+        </section>
+        <section data-panel="offer_reviews" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">ОТЧЁТЫ И МФО</div><h2>На проверке<span>.</span></h2></div></div>
+          <p class="admin-workspace-description">Заявки от участников и запросы МФО. Подтверждение здесь не означает получение банковского вознаграждения.</p>
+          <div class="admin-assignment-filter-row">
+            <label for="admin-offer-event-filter">Состояние
+              <select id="admin-offer-event-filter"><option value="pending">Ожидают</option><option value="approved">Подтверждены</option><option value="rejected">Отклонены</option><option value="all">Все</option></select>
+            </label>
+            <button type="button" class="btn ghost" id="admin-offer-event-reload">Обновить очередь ↻</button>
+          </div>
+          <div id="admin-offer-event-list" class="admin-offer-event-list" aria-live="polite"></div>
         </section>
         </section>
         <section data-workspace="more" class="admin-workspace" aria-label="Дополнительные инструменты" hidden>
