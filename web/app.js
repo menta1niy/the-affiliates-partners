@@ -2,9 +2,49 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const tg = window.Telegram?.WebApp;
-  const roleLabels = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник"};
+  const roleLabels = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер"};
   const statusLabels = {pending:"На рассмотрении",approved:"Подтверждён",active:"Активен",rejected:"Отклонён",blocked:"Заблокирован",invited:"Не зарегистрирован",unregistered:"Не зарегистрирован",new:"Не зарегистрирован"};
   let current = null;
+  let bloggerRequestId=0;
+  const kopeksMoney = value=>{
+    const amount=Number(value);
+    if(!Number.isSafeInteger(amount)||amount<0)return "—";
+    return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/100)+" ₽";
+  };
+  async function loadBlogger(){
+    const request=++bloggerRequestId;
+    try{
+      const data=await api("/blogger/overview");
+      if(request!==bloggerRequestId)return;
+      text("blogger-id",data.display_id);
+      text("blogger-channel",data.channel);
+      text("blogger-invited",data.invited_count);
+      text("blogger-earned",kopeksMoney(data.earned_kopeks));
+      text("blogger-paid",kopeksMoney(data.paid_kopeks));
+      text("blogger-available",kopeksMoney(data.available_kopeks));
+      text("blogger-terms","Фиксированное размещение: "+money(data.fixed_rub)+
+        " · процент от фактических выплат приглашённым: "+
+        new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(data.percent_bps/100)+"%.");
+      $("blogger-link").value=data.active && /^blog_[A-Za-z0-9_-]{8,48}$/.test(data.invite_code)
+        ?"https://t.me/affialite_partners_bot?start="+encodeURIComponent(data.invite_code):"";
+      const history=$("blogger-history");history.replaceChildren();
+      const labels={fixed:"Фиксированное размещение",percent:"Процентное начисление"};
+      if(!data.rewards?.length){
+        const info=document.createElement("p");info.className="muted";
+        info.textContent="Подтверждённых начислений пока нет.";history.append(info);
+      }
+      for(const reward of data.rewards||[]){
+        const item=document.createElement("div");item.className="participant-finance-history-item";
+        const name=document.createElement("strong");
+        name.textContent=kopeksMoney(reward.amount_kopeks)+" · "+(labels[reward.kind]||"Рекламное начисление");
+        const status=document.createElement("small");
+        status.textContent=reward.status==="paid"?"Выплачено":"Ожидает фактической выплаты";
+        item.append(name,status);history.append(item);
+      }
+    }catch(e){
+      if(request===bloggerRequestId)text("blogger-copy-feedback","Ошибка загрузки: "+e.message);
+    }
+  }
   let financeRequestId=0;
   const money = value => Number.isSafeInteger(Number(value))
     ? new Intl.NumberFormat("ru-RU").format(Number(value))+" ₽" : "—";
@@ -40,6 +80,21 @@
       $("finance-request-submit").disabled=data.balances.available_rub<1;
       renderRows("finance-withdrawals",data.withdrawals,"withdrawals");
       renderRows("finance-accruals",data.accruals,"accruals");
+      const ref=data.referral;
+      if(ref){
+        show("participant-referral-summary",true);
+        text("referral-invited",ref.invited_count);
+        text("referral-earned",kopeksMoney(ref.earned_kopeks));
+        const root=$("referral-rewards");root.replaceChildren();
+        for(const reward of ref.rewards||[]){
+          const item=document.createElement("div");item.className="participant-finance-history-item";
+          const heading=document.createElement("strong");
+          heading.textContent=kopeksMoney(reward.amount_kopeks)+" · "+reward.referred_display_id;
+          const detail=document.createElement("small");
+          detail.textContent="15% после фактической выплаты приглашённого";
+          item.append(heading,detail);root.append(item);
+        }
+      }
     }catch(err){
       if(id!==financeRequestId)return;
       text("finance-available","—");text("finance-reserved","—");text("finance-paid","—");text("finance-accrued","—");
@@ -689,6 +744,17 @@
     const rawStatus = session.status || user.status || (session.registered === false ? "unregistered" : "unregistered");
     const state = statusInfo(rawStatus);
     const active=["approved","active"].includes(state.key);
+    if(role==="blogger"){
+      ++offersRequest;++crmStatusRequest;++referralRequest;++financeRequestId;
+      setParticipantTabsEnabled(false);
+      document.querySelector(".participant-hero").hidden=true;
+      show("connect",false);show("account",false);show("register-panel",false);
+      show("pending-panel",false);show("rejected-panel",false);
+      show("blogger-panel",active);
+      if(active)loadBlogger();
+      return;
+    }
+    show("blogger-panel",false);++bloggerRequestId;
     const standalone = active && session.open_registration===true;
     if(!standalone)participantView="home";
     setParticipantTabsEnabled(standalone);
@@ -795,6 +861,7 @@
         ++offersRequest;++crmStatusRequest;
         ++referralRequest;show("referral-panel",false);
         show("connect",true);show("account",false);show("register-panel",false);show("pending-panel",false);show("rejected-panel",false);
+        show("blogger-panel",false);
         text("hero-status","Нужен вход через Telegram");return;
       }
       text("hero-status","Проверяем доступ…");
@@ -807,6 +874,7 @@
       ++offersRequest;++crmStatusRequest;
       ++referralRequest;
       show("account",false);show("register-panel",false);show("pending-panel",false);show("rejected-panel",false);show("referral-panel",false);
+      show("blogger-panel",false);
       show("connect",true);
       error(e.message);text("hero-status","Не удалось проверить вход");
     } finally {button.disabled=false;pendingButton.disabled=false;$("rejected-refresh").disabled=false;}
@@ -915,6 +983,16 @@
       else throw new Error("Не удалось скопировать ссылку");
       text("referral-message","Ссылка скопирована.");
     } catch(e) {text("referral-message",e.message);}
+  });
+  $("blogger-copy").addEventListener("click",async()=>{
+    const link=$("blogger-link").value;
+    if(!link){text("blogger-copy-feedback","Рекламная ссылка сейчас недоступна.");return;}
+    try{
+      if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(link);
+      else if(tg?.showPopup){tg.showPopup({message:link,buttons:[{type:"ok"}]});return;}
+      else throw new Error("Копирование недоступно");
+      text("blogger-copy-feedback","Ссылка скопирована.");
+    }catch(e){text("blogger-copy-feedback",e.message);}
   });
   $("refresh").addEventListener("click",refresh);
   $("pending-refresh").addEventListener("click",refresh);

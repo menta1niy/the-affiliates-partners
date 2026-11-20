@@ -137,6 +137,28 @@
         <button id="rejected-refresh" class="btn ghost" type="button">Обновить статус</button>
       </section>
 
+      <section id="blogger-panel" class="panel participant-blogger-panel" hidden aria-labelledby="blogger-title">
+        <div class="section-kicker">THE AFFILIATES / РЕКЛАМНЫЙ ПАРТНЁР</div>
+        <h1 id="blogger-title">Кабинет блогера<span class="heading-period">.</span></h1>
+        <p class="participant-profile-explain">Ваш рекламный канал, персональная ссылка и подтверждённые рекламные начисления. Блогерский кабинет не является кабинетом лида.</p>
+        <div class="participant-blogger-identity">
+          <span>ВАШ ВНУТРЕННИЙ ID</span><strong id="blogger-id">—</strong>
+          <small id="blogger-channel">—</small>
+        </div>
+        <div class="participant-blogger-metrics">
+          <div><span>ПРИГЛАШЕНО ЛИДОВ</span><strong id="blogger-invited">—</strong></div>
+          <div><span>НАЧИСЛЕНО</span><strong id="blogger-earned">—</strong></div>
+          <div><span>ВЫПЛАЧЕНО</span><strong id="blogger-paid">—</strong></div>
+          <div><span>К ВЫПЛАТЕ</span><strong id="blogger-available">—</strong></div>
+        </div>
+        <div class="participant-blogger-link">
+          <div class="section-kicker">РЕКЛАМНАЯ ССЫЛКА</div>
+          <div class="copy-row"><input id="blogger-link" readonly aria-label="Ссылка блогера"><button class="btn primary" id="blogger-copy" type="button">Копировать</button></div>
+          <p id="blogger-copy-feedback" role="status" class="muted"></p>
+        </div>
+        <p id="blogger-terms" class="participant-profile-state">Условия рекламной кампании загружаются.</p>
+        <div class="participant-finance-history"><h3>Рекламные начисления</h3><div id="blogger-history" aria-live="polite"></div></div>
+      </section>
       <section id="account" hidden>
         <nav id="participant-nav" class="participant-nav" aria-label="Навигация по кабинету" hidden>
           <a href="#home" data-view="home" aria-current="page" aria-label="Главная" title="Главная"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg><span class="nav-label">Главная</span></a>
@@ -222,7 +244,17 @@
           <h1 id="profile-screen-title">Мой <em>профиль.</em></h1>
           <span class="participant-screen-decoration" aria-hidden="true">◎</span>
         </header>
-        <section id="referral-panel" class="panel" hidden><div class="section-kicker">ПРИГЛАШЕНИЯ</div><h2>Пригласить участника</h2><p>Передайте персональную ссылку. Доступность приглашений определяется вашей ролью и правами на сервере.</p><div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div><p id="referral-message" role="status" class="muted"></p></section>
+        <section id="referral-panel" class="panel" hidden>
+          <div class="section-kicker">ПРИГЛАШЕНИЯ / 15%</div><h2>Пригласить участника</h2>
+          <p>Реферальные 15% начисляются дополнительно к вознаграждению приглашённого после его фактической выплаты. Владелец, администратор и менеджер не получают 15% по своим ссылкам.</p>
+          <div class="copy-row"><input id="referral-link" readonly aria-label="Реферальная ссылка"><button class="btn primary" type="button" id="copy-referral">Копировать</button></div>
+          <p id="referral-message" role="status" class="muted"></p>
+          <div class="participant-referral-summary" id="participant-referral-summary" hidden>
+            <div><span>ПРИГЛАШЕНО</span><strong id="referral-invited">—</strong></div>
+            <div><span>НАЧИСЛЕНО 15%</span><strong id="referral-earned">—</strong></div>
+          </div>
+          <div id="referral-rewards" class="participant-referral-rewards" aria-live="polite"></div>
+        </section>
         <section id="profile-section" class="panel compact participant-profile">
           <div class="participant-section-heading"><div class="section-kicker">ДАННЫЕ УЧАСТНИКА</div><h2>Мой аккаунт<span class="heading-period">.</span></h2></div>
           <div class="participant-profile-top"><div id="profile-avatar" class="participant-avatar" aria-hidden="true">—</div><div><span class="participant-profile-label">АККАУНТ TELEGRAM</span><strong id="profile-name">—</strong><span id="profile-username" class="muted">—</span></div></div>

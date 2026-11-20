@@ -45,6 +45,8 @@ def schema(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref "
                  "ON finance_withdrawals(payment_reference) WHERE payment_reference!=''")
+    from server import referral
+    referral.schema(conn)
 
 
 def _amount(value):
@@ -64,17 +66,22 @@ def _target(conn, staff, target_id):
 
 
 def _balances(conn, target_id):
+    from server import referral
+    referral.schema(conn)
     total = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_accruals WHERE telegram_id=?",
                          (target_id,)).fetchone()[0]
+    referral_kopeks = conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM referral_rewards "
+                                  "WHERE referrer_id=?", (target_id,)).fetchone()[0]
     paid = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
                         "WHERE telegram_id=? AND status='paid'", (target_id,)).fetchone()[0]
     reserved = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
                             "WHERE telegram_id=? AND status IN ('pending','confirmed')",
                             (target_id,)).fetchone()[0]
-    available = total - paid - reserved
-    if min(total, paid, reserved, available) < 0:
+    available_kopeks = total * 100 + referral_kopeks - (paid + reserved) * 100
+    available = available_kopeks // 100
+    if min(total, paid, reserved, available_kopeks) < 0:
         raise db.Problem(503, "Нарушена целостность финансового баланса")
-    return {"accrued_rub": total, "paid_rub": paid,
+    return {"accrued_rub": total + referral_kopeks // 100, "paid_rub": paid,
             "reserved_rub": reserved, "available_rub": available}
 
 
@@ -100,8 +107,10 @@ def overview(actor, owner_id, data):
                                 "ORDER BY created_at DESC,id DESC LIMIT 100",(actor,)).fetchall()
         withdrawals = conn.execute("SELECT * FROM finance_withdrawals WHERE telegram_id=? "
                                    "ORDER BY created_at DESC,id DESC LIMIT 100",(actor,)).fetchall()
+        from server import referral
         return {"balances": balances, "accruals":[_public_accrual(row) for row in accruals],
-                "withdrawals":[_public_withdrawal(row) for row in withdrawals]}
+                "withdrawals":[_public_withdrawal(row) for row in withdrawals],
+                "referral": referral.referral_view(conn, actor)}
 
 
 def accrue(actor, owner_id, data):
@@ -240,6 +249,9 @@ def decide(actor, owner_id, data):
                      "payment_reference=?,reviewed_by=?,updated_at=? WHERE id=?",
                      (next_status,note.strip(),payment_ref if decision=="paid" else "",
                       actor,now,withdrawal_id))
+        if next_status == "paid":
+            from server import referral
+            referral.on_paid(conn, db.get_user(conn,row["telegram_id"]), row)
         _balances(conn,row["telegram_id"])
         db.audit(conn,actor,"finance_withdrawal_"+next_status,row["telegram_id"],
                  "withdrawal="+withdrawal_id)

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from server.settings import ROOT
 
-ROLES = {"owner", "admin", "staff", "referrer", "lead"}
+ROLES = {"owner", "admin", "staff", "referrer", "lead", "blogger"}
 STATUSES = {"invited", "pending", "active", "rejected", "blocked"}
 STATUS_NOTIFICATIONS = {
     "active": "Заявка одобрена. Ваш аккаунт активен.",
@@ -117,7 +117,7 @@ def initialize():
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT NOT NULL DEFAULT '',
           username TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'lead'
-          CHECK(role IN ('owner','admin','staff','referrer','lead')),
+          CHECK(role IN ('owner','admin','staff','referrer','lead','blogger')),
           status TEXT NOT NULL DEFAULT 'pending'
           CHECK(status IN ('invited','pending','active','rejected','blocked')),
           agency_id INTEGER REFERENCES users(id), referrer_id INTEGER REFERENCES users(id),
@@ -233,6 +233,8 @@ def initialize():
         for table, old_check, new_check in (
             ("users", "('agency','referral')", "('agency','referral','blogger')"),
             ("invitations", "('agency','referral')", "('agency','referral','blogger')"),
+            ("users", "('owner','admin','staff','referrer','lead')",
+             "('owner','admin','staff','referrer','lead','blogger')"),
         ):
             definition = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]
             if old_check in definition:
@@ -255,7 +257,8 @@ def public_user(row):
     if row is None:
         return None
     result = {key: row[key] for key in ("id", "internal_id", "first_name", "last_name", "username", "role", "status", "agency_id", "referrer_id", "manager_id", "source", "introduced_by_id")}
-    result["display_id"] = ("L-" + str(row["internal_id"]).zfill(6)) if row["internal_id"] is not None and row["role"] in ("lead", "referrer") else None
+    result["display_id"] = (("B-" if row["role"] == "blogger" else "L-") +
+                            str(row["internal_id"]).zfill(6)) if row["internal_id"] is not None and row["role"] in ("lead", "referrer", "blogger") else None
     return result
 
 
@@ -418,8 +421,17 @@ def register(identity, owner_id, invitation_code, registration_data=None, *, sta
             conn.execute("UPDATE invitations SET active=0 WHERE code=?", (code,))
         conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (identity["id"],))
         save_registration_profile(conn, identity["id"], details, now)
+        if invite["kind"] == "blogger":
+            from server import referral
+            referral.schema(conn)
+            conn.execute("INSERT INTO blogger_attributions(telegram_id,blogger_uuid,created_at) "
+                         "VALUES(?,?,?)", (identity["id"], invite["blogger_uuid"], now))
         audit(conn, identity["id"], "register", identity["id"], "source=" + invite["kind"])
         notify_registration_submitted(conn, identity, owner_id, internal_id, agency_id=agency, manager_id=manager)
+        if invite["kind"] == "referral" and issuer["role"] in ("lead", "referrer"):
+            enqueue(conn, "referral:new:" + str(identity["id"]), issuer["id"],
+                    "The Affiliates Partners\nПо вашей ссылке зарегистрирован новый участник. "
+                    "Его ID: L-" + str(internal_id).zfill(6) + ". Заявка ожидает рассмотрения.")
         if standalone:
             return public_user(get_user(conn, identity["id"]))
         source_type = {"referral": "referrer", "agency": "agency", "blogger": "blogger"}[invite["kind"]]

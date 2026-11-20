@@ -16,6 +16,7 @@ from server import mvp
 from server import profile as participant_profile
 from server import offer_workflow
 from server import finance
+from server import referral
 
 
 def storage_error(exc):
@@ -80,6 +81,9 @@ class Handler(BaseHTTPRequestHandler):
         routes.update({"/api/finance/overview","/api/finance/withdraw",
                        "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
                        "/api/admin/finance/decision"})
+        routes.update({"/api/blogger/overview","/api/admin/bloggers/create",
+                       "/api/admin/bloggers/list","/api/admin/bloggers/fixed",
+                       "/api/admin/bloggers/paid","/api/admin/bloggers/update"})
         if route not in routes:
             return self.send_json(404, {"error": "Маршрут не найден"})
         if route == "/api/telegram/webhook":
@@ -230,6 +234,18 @@ class Handler(BaseHTTPRequestHandler):
                 result = finance.queue(user["id"], owner, body)
             elif route == "/api/admin/finance/decision":
                 result = finance.decide(user["id"], owner, body)
+            elif route == "/api/blogger/overview":
+                result = referral.blogger_view(user["id"], owner, body)
+            elif route == "/api/admin/bloggers/create":
+                result = referral.blogger_create(user["id"], owner, body)
+            elif route == "/api/admin/bloggers/list":
+                result = referral.blogger_list(user["id"], owner, body)
+            elif route == "/api/admin/bloggers/fixed":
+                result = referral.fixed_earned(user["id"], owner, body)
+            elif route == "/api/admin/bloggers/paid":
+                result = referral.reward_paid(user["id"], owner, body)
+            elif route == "/api/admin/bloggers/update":
+                result = referral.blogger_update(user["id"], owner, body)
             elif route == "/api/profile/identity":
                 result = participant_profile.save_identity(user["id"], body)
             elif route == "/api/profile/credit-survey":

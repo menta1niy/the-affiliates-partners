@@ -219,6 +219,7 @@
         <section data-workspace="more" class="admin-workspace" aria-label="Дополнительные инструменты" hidden>
           <div class="admin-subtabs" role="group" aria-label="Дополнительные разделы">
             <button type="button" class="btn ghost" data-subtab="invitations" aria-pressed="true">Приглашения</button>
+            <button type="button" class="btn ghost" data-subtab="bloggers" aria-pressed="false">Блогеры</button>
             <button type="button" class="btn ghost" data-subtab="audit" aria-pressed="false">Журнал</button>
           </div>
         <section data-panel="invitations" class="panel admin-work-panel" hidden>
@@ -238,6 +239,20 @@
         <section data-panel="audit" class="panel admin-work-panel" hidden>
           <div class="admin-section-title"><div><div class="section-kicker">КОНТРОЛЬ ДЕЙСТВИЙ</div><h2>Журнал изменений<span>.</span></h2></div><span class="admin-section-symbol" aria-hidden="true">04</span></div>
           <div id="audit-list" aria-live="polite">Загружаем…</div>
+        </section>
+        <section data-panel="bloggers" class="panel admin-work-panel" hidden>
+          <div class="admin-section-title"><div><div class="section-kicker">РЕКЛАМА / ПАРТНЁРЫ</div><h2>Блогеры<span>.</span></h2></div></div>
+          <p class="admin-workspace-description">Отдельные B-ID, персональные ссылки и фиксированная/процентная оплата. Начисления возникают только после подтверждения размещения или фактической выплаты привлечённому лиду.</p>
+          <form id="admin-blogger-form" class="admin-blogger-form" hidden>
+            <label>Telegram ID блогера<input id="admin-blogger-telegram" type="number" inputmode="numeric" min="1" step="1" required></label>
+            <label>Название или @канал<input id="admin-blogger-channel" type="text" maxlength="120" required></label>
+            <label>Фиксированная оплата, ₽<input id="admin-blogger-fixed" type="number" min="0" max="10000000" step="1" value="0" required></label>
+            <label>Процент от фактических выплат, %<input id="admin-blogger-percent" type="number" min="0" max="100" step="0.01" value="0" required></label>
+            <button class="btn primary" type="submit">Создать блогера и ссылку</button>
+          </form>
+          <p id="admin-blogger-feedback" role="status" class="muted"></p>
+          <div class="admin-assignment-filter-row"><button id="admin-blogger-reload" type="button" class="btn ghost">Обновить блогеров ↻</button></div>
+          <div id="admin-blogger-list" class="admin-offer-event-list" aria-live="polite"></div>
         </section>
         </section>
       </div>

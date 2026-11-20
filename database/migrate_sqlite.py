@@ -15,7 +15,8 @@ TABLES = ("users", "invitations", "pending_starts", "telegram_updates",
           "crm_registration_outbox", "crm_lead_bindings", "crm_assigned_offers", "crm_offer_snapshot_versions",
           "crm_participant_states", "crm_bloggers", "participant_task_reports", "participant_task_report_outbox",
           "manual_offers", "manual_assignments", "offer_logos", "registration_profiles", "participant_identities",
-          "manual_offer_events", "finance_accruals", "finance_withdrawals")
+          "manual_offer_events", "finance_accruals", "finance_withdrawals",
+          "referral_rewards", "blogger_campaigns", "blogger_attributions", "blogger_rewards")
 USER_REFS = ("agency_id", "referrer_id", "manager_id", "introduced_by_id")
 
 

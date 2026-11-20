@@ -5,7 +5,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT PRIMARY KEY, first_name TEXT NOT NULL, last_name TEXT NOT NULL DEFAULT '',
   username TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'lead'
-    CHECK(role IN ('owner','admin','staff','referrer','lead')),
+    CHECK(role IN ('owner','admin','staff','referrer','lead','blogger')),
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('invited','pending','active','rejected','blocked')),
   agency_id BIGINT REFERENCES users(id), referrer_id BIGINT REFERENCES users(id),
@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
   source TEXT CHECK(source IN ('agency','referral','blogger')), consent_at BIGINT,
   introduced_by_id BIGINT REFERENCES users(id), internal_id BIGINT UNIQUE
 );
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK(role IN ('owner','admin','staff','referrer','lead','blogger'));
 CREATE TABLE IF NOT EXISTS invitations (
   code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('agency','referral','blogger')),
   issuer_id BIGINT NOT NULL REFERENCES users(id),
@@ -155,6 +158,36 @@ CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(te
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
   ON finance_withdrawals(payment_reference) WHERE payment_reference!='';
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  withdrawal_id TEXT PRIMARY KEY REFERENCES finance_withdrawals(id),
+  referrer_id BIGINT NOT NULL REFERENCES users(id),
+  referred_id BIGINT NOT NULL REFERENCES users(id),
+  amount_kopeks BIGINT NOT NULL CHECK(amount_kopeks>0), created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_referral_rewards_referrer ON referral_rewards(referrer_id,created_at);
+CREATE TABLE IF NOT EXISTS blogger_campaigns (
+  blogger_uuid TEXT PRIMARY KEY REFERENCES crm_bloggers(blogger_uuid),
+  telegram_id BIGINT NOT NULL UNIQUE REFERENCES users(id),
+  fixed_rub BIGINT NOT NULL DEFAULT 0 CHECK(fixed_rub>=0),
+  percent_bps INTEGER NOT NULL DEFAULT 0 CHECK(percent_bps BETWEEN 0 AND 10000),
+  active INTEGER NOT NULL DEFAULT 1,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS blogger_attributions (
+  telegram_id BIGINT PRIMARY KEY REFERENCES users(id),
+  blogger_uuid TEXT NOT NULL REFERENCES crm_bloggers(blogger_uuid),created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_blogger_attributions_uuid ON blogger_attributions(blogger_uuid,created_at);
+CREATE TABLE IF NOT EXISTS blogger_rewards (
+  id TEXT PRIMARY KEY,blogger_uuid TEXT NOT NULL REFERENCES blogger_campaigns(blogger_uuid),
+  kind TEXT NOT NULL CHECK(kind IN ('fixed','percent')),
+  source_reference TEXT NOT NULL UNIQUE,
+  amount_kopeks BIGINT NOT NULL CHECK(amount_kopeks>0),
+  status TEXT NOT NULL DEFAULT 'earned' CHECK(status IN ('earned','paid')),
+  payment_reference TEXT NOT NULL DEFAULT '',created_at BIGINT NOT NULL,paid_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS ix_blogger_rewards_uuid ON blogger_rewards(blogger_uuid,created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_blogger_rewards_payment_ref
+  ON blogger_rewards(payment_reference) WHERE payment_reference!='';
 CREATE INDEX IF NOT EXISTS ix_task_reports_user ON participant_task_reports(telegram_id,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_crm_bloggers_channel ON crm_bloggers(LOWER(channel));
 CREATE INDEX IF NOT EXISTS ix_users_manager ON users(manager_id);
@@ -274,12 +307,18 @@ def validate_ready(url):
                              "confirmed_by","created_at"},
         "finance_withdrawals": {"id","telegram_id","amount_rub","status","review_note",
                                 "payment_reference","reviewed_by","created_at","updated_at"},
+        "referral_rewards": {"withdrawal_id","referrer_id","referred_id","amount_kopeks","created_at"},
+        "blogger_campaigns": {"blogger_uuid","telegram_id","fixed_rub","percent_bps","active","created_at","updated_at"},
+        "blogger_attributions": {"telegram_id","blogger_uuid","created_at"},
+        "blogger_rewards": {"id","blogger_uuid","kind","source_reference","amount_kopeks",
+                           "status","payment_reference","created_at","paid_at"},
     }
     tables = ("pending_starts", "telegram_updates", "audit", "notifications_outbox", "internal_id_sequence", "crm_events")
     indexes = {"ix_crm_bloggers_channel", "ix_users_internal_id", "ix_users_manager", "ix_users_status", "ix_task_reports_user", "ix_manual_assignments_user",
                "ix_manual_offer_events_user", "ix_manual_offer_events_review",
                "ix_finance_accruals_user", "ix_finance_withdrawals_user", "ix_finance_withdrawals_status",
-               "ix_finance_withdrawals_payment_ref"}
+               "ix_finance_withdrawals_payment_ref","ix_referral_rewards_referrer",
+               "ix_blogger_attributions_uuid","ix_blogger_rewards_uuid","ix_blogger_rewards_payment_ref"}
     with connect(url).raw as conn:
         rows = conn.execute("SELECT table_name,column_name FROM information_schema.columns "
                             "WHERE table_schema='partners'").fetchall()

@@ -3,6 +3,9 @@
 -- This creates only partners.* tables, never modifies CRM public data.
 BEGIN;
 SET LOCAL search_path TO partners, public;
+ALTER TABLE partners.users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE partners.users ADD CONSTRAINT users_role_check
+  CHECK(role IN ('owner','admin','staff','referrer','lead','blogger'));
 CREATE TABLE IF NOT EXISTS manual_offers (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL,
   target_action TEXT NOT NULL, payout_rub INTEGER NOT NULL,
@@ -75,9 +78,41 @@ CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(te
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
   ON finance_withdrawals(payment_reference) WHERE payment_reference!='';
+CREATE TABLE IF NOT EXISTS referral_rewards (
+  withdrawal_id TEXT PRIMARY KEY REFERENCES finance_withdrawals(id),
+  referrer_id BIGINT NOT NULL REFERENCES users(id),
+  referred_id BIGINT NOT NULL REFERENCES users(id),
+  amount_kopeks BIGINT NOT NULL CHECK(amount_kopeks>0), created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_referral_rewards_referrer ON referral_rewards(referrer_id,created_at);
+CREATE TABLE IF NOT EXISTS blogger_campaigns (
+  blogger_uuid TEXT PRIMARY KEY REFERENCES crm_bloggers(blogger_uuid),
+  telegram_id BIGINT NOT NULL UNIQUE REFERENCES users(id),
+  fixed_rub BIGINT NOT NULL DEFAULT 0 CHECK(fixed_rub>=0),
+  percent_bps INTEGER NOT NULL DEFAULT 0 CHECK(percent_bps BETWEEN 0 AND 10000),
+  active INTEGER NOT NULL DEFAULT 1,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS blogger_attributions (
+  telegram_id BIGINT PRIMARY KEY REFERENCES users(id),
+  blogger_uuid TEXT NOT NULL REFERENCES crm_bloggers(blogger_uuid),created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_blogger_attributions_uuid ON blogger_attributions(blogger_uuid,created_at);
+CREATE TABLE IF NOT EXISTS blogger_rewards (
+  id TEXT PRIMARY KEY,blogger_uuid TEXT NOT NULL REFERENCES blogger_campaigns(blogger_uuid),
+  kind TEXT NOT NULL CHECK(kind IN ('fixed','percent')),
+  source_reference TEXT NOT NULL UNIQUE,
+  amount_kopeks BIGINT NOT NULL CHECK(amount_kopeks>0),
+  status TEXT NOT NULL DEFAULT 'earned' CHECK(status IN ('earned','paid')),
+  payment_reference TEXT NOT NULL DEFAULT '',created_at BIGINT NOT NULL,paid_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS ix_blogger_rewards_uuid ON blogger_rewards(blogger_uuid,created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_blogger_rewards_payment_ref
+  ON blogger_rewards(payment_reference) WHERE payment_reference!='';
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.registration_profiles TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.participant_identities TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offer_events TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.finance_accruals, partners.finance_withdrawals TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.referral_rewards, partners.blogger_campaigns,
+  partners.blogger_attributions, partners.blogger_rewards TO "ta-partners";
 COMMIT;

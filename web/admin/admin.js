@@ -5,7 +5,7 @@
   const state = {users:[],pending:[],invites:[],tab:"pending",section:"overview",role:"",actorId:null,
     pages:{users:1,pending:1},requests:{users:0,pending:0,assignments:0}};
   let participantRequestId = 0;
-  const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",manager:"Менеджер"};
+  const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"На проверке",completed:"Завершено",rejected:"Отклонено"};
   const leadStageOptions={
@@ -536,7 +536,7 @@
     people:{name:"Пользователи",description:"Регистрации, профили и права участников.",number:"04"},
     more:{name:"Ещё",description:"Приглашения, история действий и другие инструменты.",number:"05"}
   };
-  const subtabSection={pending:"people",users:"people",offer_reviews:"people",finance:"people",invitations:"more",audit:"more"};
+  const subtabSection={pending:"people",users:"people",offer_reviews:"people",finance:"people",invitations:"more",bloggers:"more",audit:"more"};
   const defaultSubtab={people:"pending",more:"invitations"};
   function canManageOffers(){return state.role==="owner" || state.role==="admin";}
   async function renderOffersView(){
@@ -787,7 +787,117 @@
     if(tab==="audit")loadAudit();
     if(tab==="offer_reviews")loadOfferReviewQueue();
     if(tab==="finance")loadFinanceQueue();
+    if(tab==="bloggers")loadBloggers();
   }
+  const formatKopeks=kopeks=>{
+    const amount=Number(kopeks);
+    if(!Number.isSafeInteger(amount)||amount<0)return "—";
+    return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount/100)+" ₽";
+  };
+  async function loadBloggers(){
+    const root=$("admin-blogger-list");
+    root.replaceChildren(make("p","Загружаем блогеров…","muted"));
+    try{
+      const result=await api("/admin/bloggers/list");
+      if(state.tab!=="bloggers")return;
+      root.replaceChildren();
+      if(!result.bloggers?.length){root.append(make("p","Блогеры пока не зарегистрированы.","muted"));return;}
+      const owner=state.role==="owner";
+      for(const blogger of result.bloggers){
+        const card=make("article",undefined,"admin-offer-event-card");
+        card.append(make("span",blogger.display_id+" · "+(blogger.active?"Активен":"Отключён"),"section-kicker"));
+        card.append(make("h3",blogger.channel));
+        card.append(make("p","Telegram ID: "+blogger.telegram_id));
+        card.append(make("p","Фикс: "+number(blogger.fixed_rub)+" ₽ · Процент: "+
+          new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2}).format(blogger.percent_bps/100)+"%"));
+        if(blogger.invite_code){
+          const input=make("input");input.readOnly=true;
+          input.value="https://t.me/affialite_partners_bot?start="+encodeURIComponent(blogger.invite_code);
+          input.setAttribute("aria-label","Рекламная ссылка "+blogger.display_id);
+          const row=make("div",undefined,"copy-row");
+          row.append(input,action("Копировать",async()=>{
+            if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(input.value);
+            else throw new Error("Копирование недоступно");
+            notice("Ссылка скопирована");
+          },"primary"));card.append(row);
+        }
+        if(owner){
+          const terms=make("div",undefined,"admin-blogger-editor");
+          const fixed=make("input");fixed.type="number";fixed.min="0";fixed.max="10000000";
+          fixed.step="1";fixed.value=String(blogger.fixed_rub);
+          fixed.setAttribute("aria-label","Фиксированная оплата "+blogger.display_id);
+          const percent=make("input");percent.type="number";percent.min="0";percent.max="100";
+          percent.step="0.01";percent.value=String(blogger.percent_bps/100);
+          percent.setAttribute("aria-label","Процентная ставка "+blogger.display_id);
+          const active=make("input");active.type="checkbox";active.checked=blogger.active;
+          const activeRow=make("label","Кампания активна");activeRow.prepend(active);
+          terms.append(fixed,percent,activeRow,action("Сохранить условия",async()=>{
+            const fixedRub=Number(fixed.value);const percentBps=Math.round(Number(percent.value)*100);
+            if(!fixed.value.trim()||!Number.isSafeInteger(fixedRub)||fixedRub<0||fixedRub>10000000||
+               !percent.value.trim()||!Number.isSafeInteger(percentBps)||percentBps<0||percentBps>10000)
+              throw new Error("Проверьте фиксированную сумму и процент.");
+            await api("/admin/bloggers/update",{blogger_uuid:blogger.blogger_uuid,
+              fixed_rub:fixedRub,percent_bps:percentBps,active:active.checked});
+            notice("Условия обновлены");await loadBloggers();
+          },"primary"));
+          const placement=make("input");placement.type="text";placement.maxLength=120;
+          placement.placeholder="Уникальный ID размещения";
+          placement.setAttribute("aria-label","Основание фиксированной оплаты "+blogger.display_id);
+          terms.append(placement,action("Подтвердить размещение",async()=>{
+            if(!placement.value.trim())throw new Error("Введите ID реально выполненного размещения");
+            if(!window.confirm("Начислить фиксированную оплату только за подтверждённое размещение?"))return;
+            await api("/admin/bloggers/fixed",{blogger_uuid:blogger.blogger_uuid,
+              placement_reference:placement.value.trim()});
+            notice("Фиксированное начисление добавлено");await loadBloggers();
+          }));
+          card.append(terms);
+        }
+        if(blogger.rewards?.length){
+          const history=make("div",undefined,"admin-blogger-rewards");
+          history.append(make("h4","Рекламные начисления"));
+          for(const reward of blogger.rewards){
+            const row=make("div",undefined,"participant-finance-history-item");
+            const title=make("strong",formatKopeks(reward.amount_kopeks)+" · "+
+              (reward.kind==="fixed"?"Фиксированное":"Процентное"));
+            const status=make("small",reward.status==="paid"?"Выплачено":"Ожидает фактической выплаты");
+            row.append(title,status);
+            if(owner&&reward.status==="earned"){
+              row.append(action("Отметить выплаченным",async()=>{
+                const reference=window.prompt("Уникальный идентификатор фактического платежа:");
+                if(reference===null)return;
+                if(!/^[A-Za-z0-9][A-Za-z0-9._:/-]{3,119}$/.test(reference.trim()))
+                  throw new Error("Некорректный идентификатор платежа");
+                if(!window.confirm("Подтверждаете фактическую выплату "+formatKopeks(reward.amount_kopeks)+"?"))return;
+                await api("/admin/bloggers/paid",{reward_id:reward.id,payment_reference:reference.trim()});
+                notice("Платёж учтён");await loadBloggers();
+              },"primary"));
+            }
+            history.append(row);
+          }
+          card.append(history);
+        }
+        root.append(card);
+      }
+    }catch(e){root.replaceChildren(make("p",e.message,"message error"));error(e.message);}
+  }
+  $("admin-blogger-form").addEventListener("submit",async event=>{
+    event.preventDefault();
+    const submit=$("admin-blogger-form").querySelector('button[type="submit"]');submit.disabled=true;
+    try{
+      const telegram=Number($("admin-blogger-telegram").value);
+      const fixed=Number($("admin-blogger-fixed").value);
+      const bps=Math.round(Number($("admin-blogger-percent").value)*100);
+      if(!Number.isSafeInteger(telegram)||telegram<1||!Number.isSafeInteger(fixed)||
+         fixed<0||fixed>10000000||!Number.isSafeInteger(bps)||bps<0||bps>10000)
+        throw new Error("Проверьте ID блогера и ставки.");
+      const result=await api("/admin/bloggers/create",{telegram_id:telegram,
+        channel:$("admin-blogger-channel").value.trim(),fixed_rub:fixed,percent_bps:bps});
+      text("admin-blogger-feedback","Создан "+result.display_id+". Ссылка доступна в карточке.");
+      $("admin-blogger-form").reset();await loadBloggers();
+    }catch(e){text("admin-blogger-feedback",e.message);}
+    finally{submit.disabled=false;}
+  });
+  $("admin-blogger-reload").addEventListener("click",loadBloggers);
   async function loadFinanceQueue(){
     const root=$("admin-finance-list");
     root.replaceChildren(make("p","Загружаем заявки на вывод…","muted"));
@@ -1032,6 +1142,7 @@
       const role=session.role || session.user?.role;
       state.role=role;
       state.actorId=Number(session.user?.id);
+      show("admin-blogger-form",role==="owner");
       const managerAccess=canManageOffers();
       document.querySelectorAll("[data-owner-admin]").forEach(el=>el.hidden=!managerAccess);
       catalogButton.hidden=!managerAccess;
