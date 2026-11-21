@@ -3548,3 +3548,79 @@ dialog select,dialog input { max-width:100%; }
 .participant-app .participant-registration-legal a:focus-visible {
   outline:2px solid var(--accent-amber);outline-offset:3px;
 }
+
+/* iPhone Telegram WebView — stage 1/2: viewport and navigation geometry.
+   Keep all mobile shell, dock and scroll clearances in a single final layer. */
+@media (max-width:740px) {
+  html {
+    --tg-top-protection: max(env(safe-area-inset-top,0px),var(--tg-safe-top),var(--tg-content-top));
+    --tg-side-left: max(env(safe-area-inset-left,0px),var(--tg-content-left));
+    --tg-side-right: max(env(safe-area-inset-right,0px),var(--tg-content-right));
+    --tg-bottom-protection: max(env(safe-area-inset-bottom,0px),var(--tg-safe-bottom),var(--tg-content-bottom));
+    --mobile-dock-height: calc(var(--dock-action-height) + 12px);
+    scroll-padding-top: calc(var(--tg-top-protection) + 24px);
+    scroll-padding-bottom: calc(var(--mobile-dock-height) + 40px + var(--tg-bottom-protection));
+  }
+  .participant-app, .admin-control {
+    --mobile-nav-bottom: max(12px, var(--tg-bottom-protection));
+    overscroll-behavior-y: contain;
+  }
+  .participant-app .shell, .admin-control .admin-layout {
+    min-height: 100dvh;
+    padding-bottom: calc(var(--mobile-dock-height) + var(--mobile-nav-bottom) + 56px);
+  }
+  .participant-app .shell {
+    padding-left: max(17px, var(--tg-side-left));
+    padding-right: max(17px, var(--tg-side-right));
+  }
+  .tg-webapp:not(.tg-fullscreen) .participant-app .shell,
+  .tg-webapp:not(.tg-fullscreen) .admin-control .admin-layout {
+    padding-top: max(18px, var(--tg-content-top));
+  }
+  .participant-app .participant-view [id],
+  .admin-control .admin-work-panel [id] {
+    scroll-margin-top: calc(var(--tg-top-protection) + 24px);
+    scroll-margin-bottom: calc(var(--mobile-dock-height) + var(--mobile-nav-bottom) + 28px);
+  }
+  .participant-app #participant-nav, .admin-control .admin-sidebar {
+    bottom: var(--mobile-nav-bottom);
+    max-width: calc(100vw - 24px - var(--tg-side-left) - var(--tg-side-right));
+  }
+  /* When Telegram is already fullscreen, mask content scrolled behind its
+     fixed iOS status bar and Close/menu controls, without blocking taps. */
+  .tg-webapp.tg-fullscreen {
+    --tg-overlay-clearance: max(116px, calc(var(--tg-top-protection) + 56px));
+  }
+  .tg-webapp.tg-fullscreen body::before {
+    content: "";
+    position: fixed;
+    z-index: 38;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--tg-overlay-clearance);
+    background: #080909;
+  }
+  .tg-webapp.tg-fullscreen .participant-app .shell,
+  .tg-webapp.tg-fullscreen .admin-control .admin-layout {
+    padding-top: var(--tg-overlay-clearance);
+  }
+  .tg-webapp.tg-fullscreen {
+    scroll-padding-top: calc(var(--tg-overlay-clearance) + 16px);
+  }
+  .tg-webapp.tg-fullscreen .participant-app .participant-view [id],
+  .tg-webapp.tg-fullscreen .admin-control .admin-work-panel [id] {
+    scroll-margin-top: calc(var(--tg-overlay-clearance) + 16px);
+  }
+  /* The keyboard must not sit behind the dock or be covered by it. */
+  .tg-webapp.tg-keyboard-open .participant-app #participant-nav,
+  .tg-webapp.tg-keyboard-open .admin-control .admin-sidebar {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .tg-webapp.tg-keyboard-open .participant-app .shell,
+  .tg-webapp.tg-keyboard-open .admin-control .admin-layout {
+    padding-bottom: max(28px, var(--tg-bottom-protection));
+  }
+}
