@@ -3626,7 +3626,13 @@ dialog select,dialog input { max-width:100%; }
 }
 
 /* iPhone visual audit — stage 2/2: readable cards and compact touch-safe forms. */
+.participant-app #participant-offers-view > .participant-screen-offers + #offers-section {
+  margin-top: 24px;
+}
 @media (max-width:740px) {
+  .participant-app #participant-offers-view > .participant-screen-offers + #offers-section {
+    margin-top: 22px;
+  }
   .participant-app :is(.participant-account-heading,.participant-screen-intro,.participant-profile-top,
     .participant-offer-top,.participant-offer-summary,.participant-offer-controls) {min-width:0;}
   .participant-app .participant-account-heading {align-items:flex-start;gap:10px;}

@@ -56,6 +56,13 @@ class MobileVisualStage2Tests(unittest.TestCase):
                         page = self.open(browser, width, legacy=True)
                         page.locator('#participant-nav [data-view="offers"]').click()
                         page.locator("#offer-controls").wait_for(state="visible")
+                        sections = page.evaluate("""() => {
+                          const intro = document.querySelector('#participant-offers-view .participant-screen-offers').getBoundingClientRect();
+                          const offers = document.querySelector('#offers-section').getBoundingClientRect();
+                          return {gap: offers.top - intro.bottom};
+                        }""")
+                        self.assertGreaterEqual(sections["gap"], 20, sections)
+                        self.assertLessEqual(sections["gap"], 26, sections)
                         geometry = page.locator(".participant-offer-filter button").evaluate_all("""buttons =>
                           buttons.map(btn => ({x:btn.getBoundingClientRect().left,
                             right:btn.getBoundingClientRect().right,
