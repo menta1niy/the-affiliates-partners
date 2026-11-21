@@ -124,6 +124,16 @@ class ProfileStage6Tests(unittest.TestCase):
         self.assertEqual(self.as_user("/api/profile/credit-survey",BOB,
             credit_cards=0,installments=0,loans=0,mortgages=0)[0],403)
 
+    def test_credit_band_updates_without_inventing_card_counts(self):
+        self.register_active(ALICE)
+        status,result=self.as_user("/api/profile/credit-survey",ALICE,credit_band="3+")
+        self.assertEqual(status,200,result)
+        self.assertEqual(result["registration"]["credit_band"],"3+")
+        with db.transaction() as conn:
+            row=conn.execute("SELECT credit_band,credit_cards,installments,loans,mortgages FROM registration_profiles WHERE telegram_id=?",(ALICE,)).fetchone()
+        self.assertEqual(row["credit_band"],"3+")
+        self.assertEqual(tuple(row[field] for field in ("credit_cards","installments","loans","mortgages")),(0,0,0,0))
+
     def test_invalid_inn_missing_key_and_input_guard(self):
         self.register_active(ALICE)
         for changes in (

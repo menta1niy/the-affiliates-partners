@@ -66,42 +66,24 @@
           <div class="participant-registration-section">
             <div class="participant-registration-section-head">
               <span class="participant-registration-step">01</span>
-              <div><h3>Дата рождения</h3><p>Возраст определится автоматически. Офферы доступны только с 18 лет, но реферальные приглашения предусмотрены и для младших участников при соблюдении правил программы.</p></div>
+              <div><h3>Кредитные продукты</h3><p>Сколько у вас кредитных продуктов? (Кредитных карт, рассрочек, ипотек и т. д.)</p></div>
             </div>
-            <label for="register-birth-date" class="participant-registration-label">Дата рождения
-              <input type="date" id="register-birth-date" name="birth_date" autocomplete="bday" required>
-            </label>
-            <p class="participant-registration-age" id="register-age-preview" role="status">Возраст будет указан после выбора даты.</p>
-          </div>
-          <div class="participant-registration-section">
-            <div class="participant-registration-section-head">
-              <span class="participant-registration-step">02</span>
-              <div><h3>Кредитные продукты</h3><p>Укажите, сколько действующих продуктов у вас есть сейчас. Если нет — поставьте 0.</p></div>
-            </div>
-            <div class="participant-registration-credit-grid">
-              <label for="register-credit-cards">Кредитные карты
-                <input id="register-credit-cards" name="credit_cards" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
-              </label>
-              <label for="register-installments">Рассрочки
-                <input id="register-installments" name="installments" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
-              </label>
-              <label for="register-loans">Кредиты
-                <input id="register-loans" name="loans" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
-              </label>
-              <label for="register-mortgages">Ипотека
-                <input id="register-mortgages" name="mortgages" type="number" inputmode="numeric" min="0" max="50" step="1" value="0" required>
-              </label>
-            </div>
+            <fieldset class="participant-credit-band" aria-label="Сколько у вас кредитных продуктов?">
+              <legend>Выберите один вариант</legend>
+              <label><input type="radio" name="register-credit-band" value="0" required><span>0</span></label>
+              <label><input type="radio" name="register-credit-band" value="1-3"><span>1–3</span></label>
+              <label><input type="radio" name="register-credit-band" value="3+"><span>&gt;3</span></label>
+            </fieldset>
             <p class="participant-registration-disclaimer">Анкета помогает ориентировочно подобрать предложения. Количество продуктов само по себе не позволяет определить вероятность одобрения кредита или МФО.</p>
           </div>
           <div class="participant-registration-section participant-registration-legal">
             <div class="participant-registration-section-head">
-              <span class="participant-registration-step">03</span>
+              <span class="participant-registration-step">02</span>
               <div><h3>Правила и согласия</h3><p>Ознакомьтесь с информацией перед отправкой.</p></div>
             </div>
             <details class="participant-registration-disclosure">
               <summary>Какие данные используются?</summary>
-              <p>Для заявки мы обрабатываем сведения Telegram, дату рождения, количество действующих кредитных продуктов, внутренний ID и статус рассмотрения. Сведения используются для регистрации, модерации и подбора офферов; они не определяют автоматически банковское одобрение.</p>
+              <p>Для заявки мы обрабатываем сведения Telegram, выбранный диапазон количества кредитных продуктов, подтверждение совершеннолетия, внутренний ID и статус рассмотрения. Сведения используются для регистрации, модерации и подбора офферов; они не определяют автоматически банковское одобрение.</p>
             </details>
             <details class="participant-registration-disclosure">
               <summary>Основные правила участия</summary>
@@ -110,6 +92,7 @@
             <p class="participant-registration-disclaimer">Документы для ознакомления (проекты до утверждения): <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика обработки данных</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие на обработку</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия участия</a>, <a href="/partners/legal/referrals.html" target="_blank" rel="noopener noreferrer">Реферальная программа</a>. Версия: <span id="register-legal-version">—</span>.</p>
             <label class="check participant-registration-check"><input type="checkbox" id="consent" required><span>Даю отдельное согласие на обработку персональных данных для регистрации, модерации и участия в офферах. Ознакомился(-ась) с <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">текстом согласия</a> и <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">политикой обработки данных</a>.</span></label>
             <label class="check participant-registration-check"><input type="checkbox" id="register-terms-consent" required><span>Ознакомился(-ась) с <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условиями участия</a> и принимаю их. Согласие на рекламные рассылки здесь не запрашивается.</span></label>
+            <label class="check participant-registration-check"><input type="checkbox" id="register-adult-confirmed" required><span>Подтверждаю, что мне исполнилось 18 лет.</span></label>
             <p class="participant-registration-disclaimer">Юридические тексты находятся на утверждении. До публичного релиза необходимо определить оператора данных, реквизиты, сроки хранения и новую версию согласий.</p>
           </div>
           <button id="register-submit" class="btn primary participant-registration-submit" type="submit">Отправить заявку на рассмотрение</button>
@@ -364,20 +347,19 @@
           <p id="participant-credit-updated" class="participant-profile-state" role="status">Данные загружаются…</p>
           <form id="participant-credit-form" class="participant-profile-edit-form">
             <div id="participant-legacy-onboarding" class="participant-profile-legacy" hidden>
-              <p class="participant-profile-explain">Этот аккаунт был создан до появления анкеты. Заполните дату рождения и подтвердите согласия. Ваш внутренний ID не изменится.</p>
-              <label for="participant-legacy-birth">Дата рождения
-                <input id="participant-legacy-birth" type="date" autocomplete="bday">
-              </label>
+              <p class="participant-profile-explain">Этот аккаунт был создан до появления анкеты. Выберите диапазон кредитных продуктов и подтвердите согласия. Ваш внутренний ID не изменится.</p>
               <p class="participant-registration-disclaimer">Документы: <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия</a>. Версия: <span id="legacy-legal-version">—</span>.</p>
               <label class="check"><input type="checkbox" id="participant-legacy-privacy"><span>Даю согласие на обработку данных по <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">отдельному документу</a>.</span></label>
               <label class="check"><input type="checkbox" id="participant-legacy-terms"><span>Принимаю <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условия участия</a>.</span></label>
+              <label class="check"><input type="checkbox" id="participant-legacy-adult"><span>Подтверждаю, что мне исполнилось 18 лет.</span></label>
             </div>
-            <div class="participant-profile-credit-fields">
-              <label for="participant-credit-cards">Кредитные карты<input id="participant-credit-cards" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
-              <label for="participant-installments">Рассрочки<input id="participant-installments" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
-              <label for="participant-loans">Кредиты<input id="participant-loans" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
-              <label for="participant-mortgages">Ипотека<input id="participant-mortgages" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>
-            </div>
+            <div class="participant-credit-question">Сколько у вас кредитных продуктов? <small>Кредитных карт, рассрочек, ипотек и т. д.</small></div>
+            <fieldset class="participant-credit-band" aria-label="Сколько у вас кредитных продуктов?">
+              <legend>Выберите один вариант</legend>
+              <label><input type="radio" name="participant-credit-band" value="0" required><span>0</span></label>
+              <label><input type="radio" name="participant-credit-band" value="1-3"><span>1–3</span></label>
+              <label><input type="radio" name="participant-credit-band" value="3+"><span>&gt;3</span></label>
+            </fieldset>
             <button class="btn primary" id="participant-credit-save" type="submit">Обновить анкету</button>
             <p id="participant-credit-message" class="participant-form-feedback" role="status"></p>
           </form>

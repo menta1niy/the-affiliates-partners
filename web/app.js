@@ -246,22 +246,10 @@
       ?"L-"+String(numeric).padStart(6,"0")
       :String(numeric);
   }
-  function ageFromBirthDate(value){
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return null;
-    const [year,month,day]=value.split("-").map(Number);
-    const parsed=new Date(year,month-1,day);
-    if(parsed.getFullYear()!==year || parsed.getMonth()!==month-1 || parsed.getDate()!==day)return null;
-    const today=new Date();
-    if(parsed>today||year<1900)return null;
-    return today.getFullYear()-year -
-      ((today.getMonth()+1<month || (today.getMonth()+1===month && today.getDate()<day))?1:0);
-  }
-  function updateBirthPreview(){
-    const age=ageFromBirthDate($("register-birth-date").value);
-    const node=$("register-age-preview");
-    node.textContent=age===null?"Укажите действительную дату рождения.":"Ваш возраст: "+age+" "+(
-      age%10===1&&age%100!==11?"год":age%10>=2&&age%10<=4&&(age%100<12||age%100>14)?"года":"лет")+
-      ". "+(age<18?"Оформление офферов будет недоступно до 18 лет.":"После одобрения сможете оформлять назначенные офферы.");
+  function selectedCreditBand(formName){
+    const band=document.querySelector(`input[name="${formName}"]:checked`)?.value;
+    if(!["0","1-3","3+"].includes(band))throw new Error("Выберите количество кредитных продуктов.");
+    return band;
   }
   function referralUrl(response) {
     // Invite codes come from the authorized server endpoint. Never copy
@@ -862,9 +850,9 @@
       const identity=session.identity||{complete:false};
       const legacyOnboarding=!session.registration;
       show("participant-legacy-onboarding",legacyOnboarding);
-      $("participant-legacy-birth").required=legacyOnboarding;
       $("participant-legacy-privacy").required=legacyOnboarding;
       $("participant-legacy-terms").required=legacyOnboarding;
+      $("participant-legacy-adult").required=legacyOnboarding;
       $("participant-identity-save").disabled=legacyOnboarding;
       $("participant-credit-save").textContent=legacyOnboarding?"Завершить анкету":"Обновить анкету";
       text("participant-identity-status",identity.complete
@@ -876,15 +864,10 @@
       $("participant-patronymic").value=identity.patronymic||"";
       $("participant-inn").value="";
       const registration=session.registration;
-      if(registration?.credit_products){
-        for(const [name,id] of [["credit_cards","participant-credit-cards"],["installments","participant-installments"],
-                                 ["loans","participant-loans"],["mortgages","participant-mortgages"]]){
-          $(id).value=String(registration.credit_products[name]??0);
-        }
-      }else if(legacyOnboarding){
-        for(const id of ["participant-credit-cards","participant-installments","participant-loans","participant-mortgages"]){
-          $(id).value="0";
-        }
+      const band=registration?.credit_band || (registration?.credit_products_total===0?"0":
+        registration?.credit_products_total<=3?"1-3":"3+");
+      for(const item of document.querySelectorAll('input[name="participant-credit-band"]')){
+        item.checked=Boolean(registration&&item.value===band);
       }
       const updated=Number(registration?.credit_updated_at);
       const currentAge=Number(registration?.age);
@@ -942,32 +925,18 @@
       error(e.message);text("hero-status","Не удалось проверить вход");
     } finally {button.disabled=false;pendingButton.disabled=false;$("rejected-refresh").disabled=false;}
   }
-  {
-    const today=new Date();
-    $("register-birth-date").max=[today.getFullYear(),
-      String(today.getMonth()+1).padStart(2,"0"),
-      String(today.getDate()).padStart(2,"0")].join("-");
-  }
-  $("register-birth-date").addEventListener("change",updateBirthPreview);
-  $("register-birth-date").addEventListener("input",updateBirthPreview);
   $("register-form").addEventListener("submit",async event => {
     event.preventDefault();error("");
     const button=$("register-submit");button.disabled=true;
     text("registration-message","Отправляем заявку…");
     try {
-      if(ageFromBirthDate($("register-birth-date").value)===null)throw new Error("Проверьте дату рождения.");
-      const values={birth_date:$("register-birth-date").value,consent:$("consent").checked,
+      const values={credit_band:selectedCreditBand("register-credit-band"),
+        adult_confirmed:$("register-adult-confirmed").checked,consent:$("consent").checked,
         legal_version:current?.legal_version,
         privacy_accepted:$("consent").checked,
         terms_accepted:$("register-terms-consent").checked};
-      for(const [name,id] of [["credit_cards","register-credit-cards"],["installments","register-installments"],
-                              ["loans","register-loans"],["mortgages","register-mortgages"]]){
-        const input=$(id);const count=Number(input.value);
-        if(!input.value.trim()||!Number.isInteger(count)||count<0||count>50)
-          throw new Error("Укажите количество каждого вида кредитных продуктов от 0 до 50.");
-        values[name]=count;
-      }
-      if(!values.privacy_accepted||!values.terms_accepted)throw new Error("Подтвердите согласие и ознакомление с правилами.");
+      if(!values.privacy_accepted||!values.terms_accepted||!values.adult_confirmed)
+        throw new Error("Подтвердите согласия и совершеннолетие.");
       const result=await api("/register",values);
       text("registration-message","Заявка отправлена. Ваш ID: "+displayRegistrationId(result.user)+".");
       await refresh();
@@ -1015,25 +984,16 @@
     const save=$("participant-credit-save");save.disabled=true;
     text("participant-credit-message","Сохраняем обновления…");
     try{
-      const values={};
-      for(const [name,id] of [["credit_cards","participant-credit-cards"],["installments","participant-installments"],
-                              ["loans","participant-loans"],["mortgages","participant-mortgages"]]){
-        const input=$(id);const count=Number(input.value);
-        if(!input.value.trim()||!Number.isInteger(count)||count<0||count>50)
-          throw new Error("Укажите целое количество каждого вида продуктов от 0 до 50.");
-        values[name]=count;
-      }
+      const values={credit_band:selectedCreditBand("participant-credit-band")};
       const legacy=!current?.registration;
       if(legacy){
-        if(ageFromBirthDate($("participant-legacy-birth").value)===null)
-          throw new Error("Укажите действительную дату рождения.");
-        values.birth_date=$("participant-legacy-birth").value;
+        values.adult_confirmed=$("participant-legacy-adult").checked;
         values.consent=true;
         values.legal_version=current?.legal_version;
         values.privacy_accepted=$("participant-legacy-privacy").checked;
         values.terms_accepted=$("participant-legacy-terms").checked;
-        if(!values.privacy_accepted||!values.terms_accepted)
-          throw new Error("Подтвердите согласие и ознакомление с правилами.");
+        if(!values.privacy_accepted||!values.terms_accepted||!values.adult_confirmed)
+          throw new Error("Подтвердите согласия и совершеннолетие.");
       }
       await api(legacy?"/profile/onboarding":"/profile/credit-survey",values);
       text("participant-credit-message","Анкета актуализирована.");

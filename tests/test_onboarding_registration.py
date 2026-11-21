@@ -59,6 +59,33 @@ class OnboardingRegistrationTests(unittest.TestCase):
         self.assertEqual(rejected["user"]["display_id"],user["display_id"])
         self.assertEqual(rejected["user"]["decision_reason"],"Решение модерации")
 
+    def test_simple_credit_band_never_requires_or_invents_birth_date_or_exact_counts(self):
+        base={"consent":True,"privacy_accepted":True,"terms_accepted":True,
+              "adult_confirmed":True,"credit_band":"3+"}
+        status,created=self.as_user("/api/register",ALICE,**base)
+        self.assertEqual(status,200,created)
+        registration=self.as_user("/api/session",ALICE)[1]["registration"]
+        self.assertEqual(registration["credit_band"],"3+")
+        self.assertIsNone(registration["birth_date"])
+        self.assertIsNone(registration["age"])
+        self.assertIsNone(registration["credit_products_total"])
+        self.assertTrue(registration["adult_confirmed"])
+        with db.transaction() as conn:
+            saved=conn.execute("SELECT birth_date,credit_band,adult_confirmed,credit_cards FROM registration_profiles WHERE telegram_id=?",(ALICE,)).fetchone()
+        self.assertEqual(saved["birth_date"],"")
+        self.assertEqual(saved["credit_band"],"3+")
+        self.assertEqual(saved["adult_confirmed"],1)
+        self.assertEqual(saved["credit_cards"],0)
+
+    def test_simple_credit_band_rejects_unknown_choices_and_unconfirmed_age(self):
+        base={"consent":True,"privacy_accepted":True,"terms_accepted":True,
+              "adult_confirmed":True,"credit_band":"1-3"}
+        for invalid in ({"credit_band":"1"},{"credit_band":">3"},
+                        {"credit_band":""},{"adult_confirmed":False}):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(self.as_user("/api/register",ALICE,**{**base,**invalid})[0],400)
+        self.assertEqual(self.as_user("/api/register",ALICE,**base)[0],200)
+
     def test_invalid_survey_does_not_allocate_id_or_capture_consent(self):
         baseline={**TEST_ONBOARDING,"consent":True}
         bad=(

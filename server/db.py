@@ -164,6 +164,8 @@ def initialize():
         CREATE TABLE IF NOT EXISTS registration_profiles (
           telegram_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
           birth_date TEXT NOT NULL,
+          credit_band TEXT NOT NULL DEFAULT '',
+          adult_confirmed INTEGER NOT NULL DEFAULT 0,
           credit_cards INTEGER NOT NULL DEFAULT 0,
           installments INTEGER NOT NULL DEFAULT 0,
           loans INTEGER NOT NULL DEFAULT 0,
@@ -214,6 +216,11 @@ def initialize():
         if "internal_id" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN internal_id INTEGER")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_internal_id ON users(internal_id)")
+        survey_columns = {item[1] for item in conn.execute("PRAGMA table_info(registration_profiles)")}
+        if "credit_band" not in survey_columns:
+            conn.execute("ALTER TABLE registration_profiles ADD COLUMN credit_band TEXT NOT NULL DEFAULT ''")
+        if "adult_confirmed" not in survey_columns:
+            conn.execute("ALTER TABLE registration_profiles ADD COLUMN adult_confirmed INTEGER NOT NULL DEFAULT 0")
         # Migrate existing users deterministically: owner #100, then earlier
         # registrations first. Never renumber existing internal IDs.
         conn.execute("INSERT OR IGNORE INTO internal_id_sequence(singleton,next_id) VALUES(1,100)")
@@ -281,9 +288,10 @@ def enqueue(conn, event_key, recipient, message):
 def save_registration_profile(conn, telegram_id, details, now):
     conn.execute(
         "INSERT INTO registration_profiles(telegram_id,birth_date,credit_cards,installments,loans,mortgages,"
-        "consent_version,submitted_at,credit_updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        "credit_band,adult_confirmed,consent_version,submitted_at,credit_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (telegram_id, details["birth_date"], details["credit_cards"], details["installments"],
-         details["loans"], details["mortgages"], details["consent_version"], now, now),
+         details["loans"], details["mortgages"], details["credit_band"], int(details["adult_confirmed"]),
+         details["consent_version"], now, now),
     )
 
 

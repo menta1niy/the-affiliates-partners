@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS offer_logos (
 CREATE TABLE IF NOT EXISTS registration_profiles (
   telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   birth_date TEXT NOT NULL,
+  credit_band TEXT NOT NULL DEFAULT '',
+  adult_confirmed INTEGER NOT NULL DEFAULT 0,
   credit_cards INTEGER NOT NULL DEFAULT 0,
   installments INTEGER NOT NULL DEFAULT 0,
   loans INTEGER NOT NULL DEFAULT 0,
@@ -32,6 +34,8 @@ CREATE TABLE IF NOT EXISTS registration_profiles (
   submitted_at BIGINT NOT NULL,
   credit_updated_at BIGINT NOT NULL
 );
+ALTER TABLE partners.registration_profiles ADD COLUMN IF NOT EXISTS credit_band TEXT NOT NULL DEFAULT '';
+ALTER TABLE partners.registration_profiles ADD COLUMN IF NOT EXISTS adult_confirmed INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS participant_identities (
   telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   full_name_encrypted TEXT NOT NULL,

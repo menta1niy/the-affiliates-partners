@@ -11,6 +11,7 @@ from datetime import date
 CONSENT_VERSION = "partners-registration-v1-2026-11-draft"
 MAX_CREDIT_PRODUCTS_PER_TYPE = 50
 COUNTS = ("credit_cards", "installments", "loans", "mortgages")
+SIMPLE_BANDS = ("0", "1-3", "3+")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -30,6 +31,16 @@ def normalize(payload):
             raise Problem(503, "Не настроена утверждённая версия юридических документов")
         if payload.get("legal_version") != approved_version:
             raise Problem(409, "Условия обновились. Ознакомьтесь с документами и подтвердите согласия заново")
+    band = payload.get("credit_band")
+    if band in SIMPLE_BANDS:
+        if payload.get("adult_confirmed") is not True:
+            raise Problem(400, "Подтвердите, что вам исполнилось 18 лет")
+        return {"birth_date": "", **{field: 0 for field in COUNTS},
+                "credit_band": band, "adult_confirmed": True,
+                "consent_version": approved_version or CONSENT_VERSION}
+    # Backward-compatible legacy clients and previously collected birth dates.
+    if band is not None:
+        raise Problem(400, "Выберите количество кредитных продуктов: 0, 1–3 или >3")
     birth_date = payload.get("birth_date")
     if not isinstance(birth_date, str) or not DATE_PATTERN.fullmatch(birth_date):
         raise Problem(400, "Введите дату рождения в формате ГГГГ-ММ-ДД")
@@ -45,6 +56,9 @@ def normalize(payload):
         if type(count) is not int or not 0 <= count <= MAX_CREDIT_PRODUCTS_PER_TYPE:
             raise Problem(400, "Укажите количество действующих кредитных продуктов (0–50)")
         normalized[field] = count
+    total = sum(normalized[field] for field in COUNTS)
+    normalized["credit_band"] = "0" if total == 0 else "1-3" if total <= 3 else "3+"
+    normalized["adult_confirmed"] = age(parsed.isoformat()) >= 18
     normalized["consent_version"] = approved_version or CONSENT_VERSION
     return normalized
 
@@ -65,12 +79,17 @@ def public_view(row):
     if row is None:
         return None
     values = {field: row[field] for field in COUNTS}
+    birth = row["birth_date"] or None
+    total = sum(values.values())
+    band = row["credit_band"] or ("0" if total == 0 else "1-3" if total <= 3 else "3+")
     return {
-        "birth_date": row["birth_date"],
-        "age": age(row["birth_date"]),
+        "birth_date": birth,
+        "age": age(birth) if birth else None,
+        "adult_confirmed": bool(row["adult_confirmed"] or (birth and age(birth)>=18)),
         "credit_products": values,
-        "credit_products_total": sum(values.values()),
-        "credit_segment": credit_segment(values),
+        "credit_products_total": total if birth else None,
+        "credit_band": band,
+        "credit_segment": {"0":"low_count", "1-3":"medium_count", "3+":"high_count"}[band],
         "consent_version": row["consent_version"],
         "submitted_at": row["submitted_at"],
         "credit_updated_at": row["credit_updated_at"],

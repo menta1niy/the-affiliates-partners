@@ -3625,6 +3625,47 @@ dialog select,dialog input { max-width:100%; }
   }
 }
 
+.tg-keyboard-done[hidden] {display:none!important;}
+.tg-keyboard-done {
+  position:fixed;top:var(--tg-keyboard-done-top,65vh);right:16px;z-index:100;
+  box-sizing:border-box;min-height:42px;min-width:90px;padding:9px 16px;
+  border:1px solid rgba(228,163,74,.6);border-radius:13px;
+  color:#080909;background:#e4a34a;font:700 15px/1.3 system-ui,-apple-system,sans-serif;
+  box-shadow:0 4px 25px rgba(0,0,0,.48);touch-action:manipulation;
+}
+.participant-app .participant-credit-question {font-size:14px;font-weight:700;line-height:1.5;}
+.participant-app .participant-credit-question small {display:block;font-size:12px;font-weight:400;color:var(--color-secondary);margin-top:5px;}
+.participant-app .participant-credit-band {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+  margin:0;padding:0;border:0;min-width:0;max-width:100%;box-sizing:border-box;
+}
+.participant-app .participant-credit-band legend {
+  padding:0 0 10px;font-size:11px;color:var(--color-secondary);
+}
+.participant-app .participant-credit-band label {position:relative;min-width:0;display:block;cursor:pointer;}
+.participant-app .participant-credit-band input {
+  position:absolute;opacity:0;width:1px;height:1px;pointer-events:none;
+}
+.participant-app .participant-credit-band span {
+  display:flex;align-items:center;justify-content:center;min-height:48px;
+  border:1px solid rgba(255,255,255,.18);border-radius:13px;
+  background:#1b1d20;color:#eee;font-size:16px;font-weight:750;
+}
+.participant-app .participant-credit-band input:checked + span {
+  border-color:#e4a34a;background:rgba(228,163,74,.2);color:#e4a34a;
+}
+.participant-app .participant-credit-band input:focus-visible + span {outline:2px solid #e4a34a;outline-offset:3px;}
+@media(max-width:740px) {
+  .tg-webapp.tg-keyboard-open .participant-app #participant-nav {
+    display:none!important;
+  }
+  .participant-app .participant-profile-legacy,
+  .participant-app .participant-profile-legacy > *,
+  .participant-app .participant-registration-section,
+  .participant-app .participant-profile-edit-form {max-width:100%;min-width:0;box-sizing:border-box;}
+  .participant-app input[type="date"] {display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;}
+}
+
 /* iPhone visual audit — stage 2/2: readable cards and compact touch-safe forms. */
 .participant-app #participant-offers-view > .participant-screen-offers + #offers-section {
   margin-top: 24px;

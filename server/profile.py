@@ -8,7 +8,7 @@ import re
 from datetime import date
 
 from server import db
-from server.registration import COUNTS, MAX_CREDIT_PRODUCTS_PER_TYPE, age, normalize
+from server.registration import COUNTS, MAX_CREDIT_PRODUCTS_PER_TYPE, SIMPLE_BANDS, age, normalize
 
 NAME = re.compile(r"^[A-Za-zА-Яа-яЁё]+(?:[ '-][A-Za-zА-Яа-яЁё]+)*$")
 INN = re.compile(r"^\d{12}$")
@@ -107,11 +107,19 @@ def profile_view(actor):
 
 def update_credit(actor, data):
     values = {}
-    for name in COUNTS:
-        value = data.get(name)
-        if type(value) is not int or not 0 <= value <= MAX_CREDIT_PRODUCTS_PER_TYPE:
-            raise db.Problem(400, "Укажите количество кредитных продуктов от 0 до 50")
-        values[name] = value
+    band = data.get("credit_band")
+    if band in SIMPLE_BANDS:
+        values = {name: 0 for name in COUNTS}
+    elif band is None:
+        for name in COUNTS:
+            value = data.get(name)
+            if type(value) is not int or not 0 <= value <= MAX_CREDIT_PRODUCTS_PER_TYPE:
+                raise db.Problem(400, "Укажите количество кредитных продуктов от 0 до 50")
+            values[name] = value
+        total = sum(values.values())
+        band = "0" if total == 0 else "1-3" if total <= 3 else "3+"
+    else:
+        raise db.Problem(400, "Выберите количество кредитных продуктов: 0, 1–3 или >3")
     db.initialize()
     with db.transaction() as conn:
         user = db.get_user(conn, actor)
@@ -122,8 +130,8 @@ def update_credit(actor, data):
         import time
         now = int(time.time())
         conn.execute("UPDATE registration_profiles SET credit_cards=?,installments=?,loans=?,mortgages=?,"
-                     "credit_updated_at=? WHERE telegram_id=?",
-                     (*(values[name] for name in COUNTS), now, actor))
+                     "credit_band=?,credit_updated_at=? WHERE telegram_id=?",
+                     (*(values[name] for name in COUNTS), band, now, actor))
         db.audit(conn, actor, "credit_survey_updated", actor, "self")
         from server.registration import public_view
         row = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (actor,)).fetchone()
@@ -164,7 +172,9 @@ def access_reason(registration, identity_present, category, *, now=None):
     """
     if not registration:
         return "registration"
-    if age(registration["birth_date"]) < 18:
+    if registration["birth_date"] and age(registration["birth_date"]) < 18:
+        return "underage"
+    if not registration["birth_date"] and not registration["adult_confirmed"]:
         return "underage"
     if not identity_present:
         return "identity"

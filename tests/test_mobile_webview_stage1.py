@@ -94,6 +94,14 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                           return getComputedStyle(document.querySelector('#participant-nav')).visibility;
                         }""")
                         self.assertEqual(keyboard_visibility, "hidden")
+                        page.evaluate("document.documentElement.classList.remove('tg-keyboard-open')")
+                        page.locator("#finance-request-amount").focus()
+                        self.assertTrue(page.locator("html").evaluate("el => el.classList.contains('tg-keyboard-open')"))
+                        self.assertEqual(page.locator("#participant-nav").evaluate("el => getComputedStyle(el).display"),"none")
+                        self.assertTrue(page.locator(".tg-keyboard-done").is_visible())
+                        page.locator(".tg-keyboard-done").click()
+                        self.assertFalse(page.locator("html").evaluate("el => el.classList.contains('tg-keyboard-open')"))
+                        self.assertNotEqual(page.evaluate("document.activeElement.id"),"finance-request-amount")
                         page.close()
             finally:
                 browser.close()

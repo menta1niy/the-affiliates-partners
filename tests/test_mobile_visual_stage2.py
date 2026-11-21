@@ -81,7 +81,7 @@ class MobileVisualStage2Tests(unittest.TestCase):
 
                         page.locator('#participant-nav [data-view="profile"]').click()
                         page.locator("#participant-legacy-onboarding").wait_for(state="visible")
-                        self.assertEqual(page.locator("#participant-legacy-onboarding label.check > span").count(), 2)
+                        self.assertEqual(page.locator("#participant-legacy-onboarding label.check > span").count(), 3)
                         self.assert_no_horizontal_overflow(page, width)
                         page.close()
             finally:
