@@ -57,7 +57,7 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                         page.add_init_script(TELEGRAM + ";\n" + FIXTURE)
                         page.goto(self.base + "/partners/#tgWebAppData=stage1")
                         page.locator("#participant-nav").wait_for(state="visible")
-                        self.assertFalse(page.evaluate("Boolean(window.__fullscreenRequested)"))
+                        self.assertTrue(page.evaluate("Boolean(window.__fullscreenRequested)"))
                         self.assertEqual(page.evaluate("document.documentElement.scrollWidth"), width)
                         page.locator('#participant-nav [data-view="profile"]').click()
                         page.locator("#participant-credit-save").wait_for(state="visible")

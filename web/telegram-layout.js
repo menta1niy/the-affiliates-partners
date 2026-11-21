@@ -77,8 +77,13 @@
     app.onEvent?.('fullscreenChanged', updateInsets);
     app.onEvent?.('fullscreenFailed', updateInsets);
     updateInsets();
-    // expand() is sufficient: forcing fullscreen on iOS places Telegram's
-    // status and navigation overlays on top of a scrolling document.
+    // expand() only expands Telegram's bottom sheet. The fullscreen request
+    // removes the persistent sheet header so the Mini App looks native.
+    // Telegram may reject it on older clients; keep the normal layout as a
+    // fallback, and apply content safe-area padding on fullscreenChanged.
+    if (typeof app.requestFullscreen === 'function' && !app.isFullscreen) {
+      try { app.requestFullscreen(); } catch { updateInsets(); }
+    }
   } catch {
     // Older Telegram versions still use expand() and the CSS safe-area fallback.
     updateInsets();
