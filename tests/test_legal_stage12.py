@@ -72,10 +72,15 @@ class LegalReleaseGateTests(unittest.TestCase):
             self.assertIn(url, links.urls)
             self.assertTrue((root / "web" / "legal" / (name + ".html")).is_file())
 
-    def test_current_drafts_must_not_pass_release_gate(self):
+    def test_owner_confirmed_documents_pass_document_gate_but_have_open_release_issues(self):
+        import json
         root = Path(__file__).resolve().parents[1]
-        with self.assertRaisesRegex(ValueError, "approval missing"):
-            validate(root)
+        self.assertEqual(validate(root), VERSION)
+        evidence = json.loads((root / "deployment" / "legal-approval.json").read_text(encoding="utf-8"))
+        self.assertEqual(evidence["confirmation_type"], "owner-confirmed-via-chat")
+        self.assertEqual(evidence["registry_verification"], "pending")
+        self.assertIs(evidence["release_ready"], False)
+        self.assertTrue(evidence["unresolved_required_facts"])
 
     def test_approval_metadata_alone_cannot_release_draft_documents(self):
         import json
