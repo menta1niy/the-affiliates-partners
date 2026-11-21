@@ -89,8 +89,11 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                         })""")
                         self.assertLessEqual(geometry["button"], geometry["dock"] - 12, geometry)
 
-                        page.evaluate("document.documentElement.classList.add('tg-keyboard-open')")
-                        self.assertEqual(page.locator("#participant-nav").evaluate("el => getComputedStyle(el).visibility"), "hidden")
+                        keyboard_visibility = page.evaluate("""() => {
+                          document.documentElement.classList.add('tg-keyboard-open');
+                          return getComputedStyle(document.querySelector('#participant-nav')).visibility;
+                        }""")
+                        self.assertEqual(keyboard_visibility, "hidden")
                         page.close()
             finally:
                 browser.close()

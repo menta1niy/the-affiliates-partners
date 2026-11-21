@@ -325,11 +325,12 @@
             <div><span>ВЫПЛАЧЕНО</span><strong id="finance-paid">—</strong></div>
             <div><span>НАЧИСЛЕНО ВСЕГО</span><strong id="finance-accrued">—</strong></div>
           </div>
+          <p id="finance-load-status" class="participant-finance-load-status" role="status" aria-live="polite" hidden></p>
           <form id="participant-finance-request" class="participant-finance-request">
             <label for="finance-request-amount">Сумма запроса в рублях
               <input type="number" inputmode="numeric" min="1" max="10000000" step="1" id="finance-request-amount" required>
             </label>
-            <button id="finance-request-submit" type="submit" class="btn primary">Запросить выплату</button>
+            <button id="finance-request-submit" type="submit" class="btn primary" disabled>Запросить выплату</button>
             <p id="finance-request-feedback" role="status"></p>
           </form>
           <div class="participant-finance-history">
@@ -368,8 +369,8 @@
                 <input id="participant-legacy-birth" type="date" autocomplete="bday">
               </label>
               <p class="participant-registration-disclaimer">Документы: <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия</a>. Версия: <span id="legacy-legal-version">—</span>.</p>
-              <label class="check"><input type="checkbox" id="participant-legacy-privacy">Даю согласие на обработку данных по <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">отдельному документу</a>.</label>
-              <label class="check"><input type="checkbox" id="participant-legacy-terms">Принимаю <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условия участия</a>.</label>
+              <label class="check"><input type="checkbox" id="participant-legacy-privacy"><span>Даю согласие на обработку данных по <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">отдельному документу</a>.</span></label>
+              <label class="check"><input type="checkbox" id="participant-legacy-terms"><span>Принимаю <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условия участия</a>.</span></label>
             </div>
             <div class="participant-profile-credit-fields">
               <label for="participant-credit-cards">Кредитные карты<input id="participant-credit-cards" type="number" min="0" max="50" step="1" inputmode="numeric" required></label>

@@ -3624,3 +3624,115 @@ dialog select,dialog input { max-width:100%; }
     padding-bottom: max(28px, var(--tg-bottom-protection));
   }
 }
+
+/* iPhone visual audit — stage 2/2: readable cards and compact touch-safe forms. */
+@media (max-width:740px) {
+  .participant-app :is(.participant-account-heading,.participant-screen-intro,.participant-profile-top,
+    .participant-offer-top,.participant-offer-summary,.participant-offer-controls) {min-width:0;}
+  .participant-app .participant-account-heading {align-items:flex-start;gap:10px;}
+  .participant-app .participant-account-heading > div {min-width:0;flex:1 1 auto;}
+  .participant-app .participant-account-heading h2 {
+    font-size:clamp(20px,5.6vw,27px);line-height:1.26;overflow-wrap:anywhere;
+  }
+  .participant-app #status-pill {max-width:38%;flex:0 0 auto;}
+  .participant-app .participant-next-step {padding:18px 17px;}
+  .participant-app .participant-next-step h3 {margin-top:12px;line-height:1.3;}
+  .participant-app .participant-next-step .btn {min-height:46px;}
+  .participant-app .participant-stats {padding-top:24px;}
+
+  /* Four named filters are all visible, with sort remaining a separate control. */
+  .participant-app .participant-offer-controls {
+    display:grid;grid-template-columns:minmax(0,1fr) 44px;
+    align-items:start;gap:9px;margin-bottom:8px;
+  }
+  .participant-app .participant-offer-filter {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;overflow:visible;padding:0;width:100%;
+  }
+  .participant-app .participant-offer-filter button {
+    width:100%;min-width:0;min-height:42px;padding:7px 5px;
+    white-space:normal;text-align:center;font-size:10.5px;line-height:1.25;
+  }
+  .participant-app .participant-offer-sort-label {width:44px;height:44px;min-width:44px;}
+  .participant-app .participant-offer-filter-count {margin:4px 0 12px;}
+  .participant-app .participant-offers .offer-item {padding:16px 15px;}
+  .participant-app .participant-offer-top {gap:10px;align-items:flex-start;}
+  .participant-app .participant-offer-top > :first-child {min-width:0;}
+  .participant-app .participant-offer-top h3 {
+    overflow-wrap:anywhere;font-size:clamp(16px,4.6vw,19px);line-height:1.3;
+  }
+  .participant-app .participant-offer-status {
+    flex:0 1 auto;max-width:48%;min-width:0;
+    text-align:center;white-space:normal;overflow-wrap:anywhere;
+  }
+  .participant-app .participant-offer-summary {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .participant-app .participant-offer-summary .participant-offer-detail {min-width:0;padding:11px 10px;}
+  .participant-app .participant-offer-summary .participant-offer-target strong {
+    display:block;overflow:visible;-webkit-line-clamp:unset;line-clamp:unset;
+    font-size:11px;line-height:1.45;overflow-wrap:anywhere;
+  }
+  .participant-app .participant-offer-access-status {align-items:flex-start;gap:8px;margin:12px 0;}
+  .participant-app .participant-offer-access-status small {min-width:0;flex:1 1 120px;}
+  .participant-app .participant-offer-detail-button {min-height:48px;margin-top:13px;}
+
+  /* Detail dialog is a scrollable card with consistent, fully accessible actions. */
+  .participant-app .participant-offer-dialog {padding:19px 17px 22px;overscroll-behavior-y:contain;}
+  .participant-app .participant-offer-dialog-head {gap:8px;margin-bottom:12px;}
+  .participant-app .participant-offer-dialog :is(h2,h3) {overflow-wrap:anywhere;}
+  .participant-app .participant-offer-dialog .participant-offer-profile-action,
+  .participant-app .participant-offer-dialog .participant-offer-unavailable {min-height:48px;}
+
+  /* The panel hierarchy stays legible without 90+px empty placeholder cards. */
+  .participant-app .participant-statistics-panel {padding:17px 15px;gap:12px;}
+  .participant-app .participant-statistics-panel h2 {font-size:clamp(17px,4.5vw,21px);line-height:1.32;}
+  .participant-app .participant-statistics-grid {gap:8px;}
+  .participant-app .participant-statistics-grid article {
+    min-height:77px;gap:7px;padding:11px 10px;align-content:center;
+  }
+  .participant-app .participant-statistics-grid span,
+  .participant-app .participant-statistics-counts span {
+    font-size:10px;letter-spacing:.025em;line-height:1.35;
+  }
+  .participant-app .participant-statistics-counts {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .participant-app .participant-statistics-counts>div {padding:11px;gap:6px;min-width:0;}
+
+  .participant-app .participant-profile {padding:17px 15px;}
+  .participant-app .participant-profile-top {gap:13px;padding:18px 0;align-items:center;}
+  .participant-app .participant-profile-top > div:last-child {min-width:0;}
+  .participant-app #profile-name,.participant-app #profile-username {overflow-wrap:anywhere;}
+  .participant-app .participant-technical {padding:10px 13px;margin-top:14px;}
+  .participant-app .participant-technical summary {min-height:44px;}
+  .participant-app #referral-panel .copy-row {min-width:0;}
+  .participant-app #referral-link {min-width:0;font-size:12px;text-overflow:ellipsis;}
+  .participant-app .participant-profile-form-panel {padding:17px 15px;gap:12px;}
+  .participant-app .participant-profile-edit-form {gap:12px;}
+  .participant-app .participant-profile-fields,
+  .participant-app .participant-profile-credit-fields {gap:13px;}
+  .participant-app .participant-profile-fields label,
+  .participant-app .participant-profile-credit-fields label {gap:6px;margin:0;line-height:1.35;}
+  .participant-app .participant-profile-fields input,
+  .participant-app .participant-profile-credit-fields input {min-height:46px;font-size:16px;}
+  .participant-app .participant-profile-legacy {gap:13px;padding:14px 12px;}
+  .participant-app .participant-profile-legacy .check {
+    display:grid;grid-template-columns:22px minmax(0,1fr);
+    align-items:start;gap:10px;min-height:0;margin:0;
+    font-size:12px;line-height:1.55;
+  }
+  .participant-app .participant-profile-legacy .check input {margin:2px 0 0;}
+  .participant-app .participant-profile-legacy .check a {overflow-wrap:anywhere;}
+  .participant-app .participant-registration-disclaimer {overflow-wrap:anywhere;}
+  .participant-app .participant-profile-edit-form .btn {min-height:48px;}
+
+  .participant-app .participant-finance-panel {padding:17px 15px;gap:12px;}
+  .participant-app .participant-finance-stats {gap:8px;}
+  .participant-app .participant-finance-stats > div {min-height:73px;padding:11px;gap:7px;}
+  .participant-app .participant-finance-stats > div:first-child {min-height:72px;}
+  .participant-app .participant-finance-request {padding:13px;gap:10px;}
+  .participant-app .participant-finance-load-status {
+    margin:0;padding:11px 12px;border:1px solid var(--accent-amber-edge);
+    border-radius:12px;background:rgba(228,163,74,.06);
+    color:var(--color-secondary);font-size:12px;line-height:1.55;
+  }
+  .participant-app .participant-finance-request .btn {min-height:48px;}
+  .participant-app .participant-finance-history h3 {margin-top:9px;}
+}

@@ -46,6 +46,7 @@
     }
   }
   let financeRequestId=0;
+  let financeAvailableRub=null;
   let statisticsRequestId=0;
   const money = value => Number.isSafeInteger(Number(value))
     ? new Intl.NumberFormat("ru-RU").format(Number(value))+" ₽" : "—";
@@ -93,6 +94,11 @@
     const id=++financeRequestId;
     const fields=["finance-available","finance-reserved","finance-paid","finance-accrued"];
     for(const field of fields)text(field,"Загрузка…");
+    financeAvailableRub=null;
+    $("finance-request-submit").disabled=true;
+    $("finance-request-amount").removeAttribute("max");
+    text("finance-load-status","Проверяем подтверждённый баланс…");
+    show("finance-load-status",true);
     const renderRows=(target,items,kind)=>{
       const root=$(target);root.replaceChildren();
       if(!items?.length){const p=document.createElement("p");p.className="muted";
@@ -113,12 +119,18 @@
     try{
       const data=await api("/finance/overview");
       if(id!==financeRequestId)return;
+      if(!data?.balances || !["available_rub","reserved_rub","paid_rub","accrued_rub"].every(key=>
+        Number.isSafeInteger(data.balances[key]) && data.balances[key]>=0))
+        throw new Error("Сервер вернул неполные данные о балансе.");
       text("finance-available",money(data.balances.available_rub));
       text("finance-reserved",money(data.balances.reserved_rub));
       text("finance-paid",money(data.balances.paid_rub));
       text("finance-accrued",money(data.balances.accrued_rub));
-      $("finance-request-amount").max=String(Math.min(10000000,data.balances.available_rub));
-      $("finance-request-submit").disabled=data.balances.available_rub<1;
+      financeAvailableRub=data.balances.available_rub;
+      $("finance-request-amount").max=String(Math.min(10000000,financeAvailableRub));
+      $("finance-request-submit").disabled=financeAvailableRub<1;
+      show("finance-load-status",false);
+      text("finance-request-feedback",financeAvailableRub<1?"Запрос станет доступен после подтверждённого начисления.":"");
       renderRows("finance-withdrawals",data.withdrawals,"withdrawals");
       renderRows("finance-accruals",data.accruals,"accruals");
       const ref=data.referral;
@@ -138,8 +150,12 @@
       }
     }catch(err){
       if(id!==financeRequestId)return;
+      financeAvailableRub=null;
+      $("finance-request-submit").disabled=true;
       text("finance-available","—");text("finance-reserved","—");text("finance-paid","—");text("finance-accrued","—");
-      text("finance-request-feedback","Не удалось загрузить финансы: "+err.message);
+      text("finance-load-status","Баланс временно недоступен. Обновите страницу и повторите попытку.");
+      show("finance-load-status",true);
+      text("finance-request-feedback","Запрос выплаты недоступен до загрузки подтверждённого баланса.");
     }
   }
   const gateReasons={
@@ -981,8 +997,10 @@
     const field=$("finance-request-amount");
     const amount=Number(field.value);
     try{
+      if(financeAvailableRub===null)throw new Error("Баланс ещё не подтверждён. Повторите загрузку.");
       if(!field.value.trim()||!Number.isSafeInteger(amount)||amount<1)
         throw new Error("Введите положительную сумму в целых рублях.");
+      if(amount>financeAvailableRub)throw new Error("Сумма превышает доступный баланс.");
       if(!window.confirm("Запросить выплату "+money(amount)+"? Сумма будет зарезервирована до решения."))
         return;
       await api("/finance/withdraw",{amount_rub:amount});
@@ -990,7 +1008,7 @@
       text("finance-request-feedback","Заявка отправлена на рассмотрение.");
       await loadFinance();
     }catch(e){text("finance-request-feedback",e.message);}
-    finally{submit.disabled=false;}
+    finally{submit.disabled=financeAvailableRub===null || financeAvailableRub<1;}
   });
   $("participant-credit-form").addEventListener("submit",async event=>{
     event.preventDefault();
