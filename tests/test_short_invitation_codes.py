@@ -1,6 +1,7 @@
 """Invitation code format, collision handling and legacy Telegram entry points."""
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
 
 from server import db
 from tests.test_registration import HttpHarness, OWNER, ALICE, BOB
@@ -14,6 +15,18 @@ class ShortInvitationCodeTests(unittest.TestCase):
     owner_invite = HttpHarness.owner_invite
     register = HttpHarness.register
     webhook_start = HttpHarness.webhook_start
+
+    def test_username_lookup_uses_cursor_fetchall_on_postgres(self):
+        # PostgreSQL's wrapper Cursor is deliberately not iterable.
+        cursor = Mock()
+        cursor.fetchall.return_value = [{"id": 123, "username": "manager"}]
+        conn = Mock()
+        conn.execute.return_value = cursor
+        people = [{"manager_id": 123, "agency_id": None, "referrer_id": None, "introduced_by_id": None}]
+        db.attach_reference_usernames(conn, people)
+        cursor.fetchall.assert_called_once_with()
+        self.assertEqual(people[0]["manager_username"], "manager")
+
     def test_new_agency_and_referral_codes_are_six_uppercase_characters(self):
         agency = self.owner_invite()
         self.assertRegex(agency, r"^[A-Z0-9]{6}$")

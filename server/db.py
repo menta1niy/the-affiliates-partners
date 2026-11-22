@@ -288,7 +288,7 @@ def attach_reference_usernames(conn, users, invitations=()):
     if not ids:
         return
     params = tuple(ids)
-    rows = conn.execute("SELECT id,username FROM users WHERE id IN (" + ",".join("?" for _ in params) + ")", params)
+    rows = conn.execute("SELECT id,username FROM users WHERE id IN (" + ",".join("?" for _ in params) + ")", params).fetchall()
     names = {row["id"]: row["username"] for row in rows}
     for item in users:
         for field in fields:
