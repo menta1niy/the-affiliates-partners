@@ -3667,6 +3667,22 @@ dialog select,dialog input { max-width:100%; }
 }
 
 /* iPhone visual audit — stage 2/2: readable cards and compact touch-safe forms. */
+/* Admin: keep overview shortcuts and record actions aligned on narrow screens. */
+.admin-control .admin-quick-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.admin-control .admin-quick-actions .btn {width:100%;min-width:0;min-height:44px;padding:10px 8px;text-align:center;line-height:1.3;white-space:normal;}
+@media(max-width:740px) {
+  .admin-control .admin-records td:last-child {min-width:0;max-width:100%;}
+  .admin-control .admin-records td:last-child .actions {
+    display:flex;flex-wrap:nowrap;gap:5px;width:100%;min-width:0;
+    overflow-x:auto;overscroll-behavior-x:contain;padding:2px 0 7px;
+    scrollbar-width:thin;
+  }
+  .admin-control .admin-records td:last-child .actions .btn {
+    flex:0 0 auto;min-height:36px;margin:0;padding:7px 9px;
+    font-size:10px;white-space:nowrap;line-height:1.25;
+  }
+  .admin-control .admin-quick-actions .btn {font-size:clamp(10px,2.9vw,13px);}
+}
 .participant-app #participant-offers-view > .participant-screen-offers + #offers-section {
   margin-top: 24px;
 }

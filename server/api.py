@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(sender, dict) and isinstance(chat, dict) and type(sender.get("id")) is int and sender["id"] > 0 and sender["id"] == chat.get("id") and chat.get("type") == "private":
             import re
             text = message.get("text", "")
-            match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+((?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
+            match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+([A-Z0-9]{6}|(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
             fresh = db.record_start(body["update_id"], sender["id"], match.group(1) if match else None)
         else:
             fresh = db.record_start(body["update_id"], 0, None)

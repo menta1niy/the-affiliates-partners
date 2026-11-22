@@ -49,6 +49,7 @@
   function notice(message){$("admin-notice").textContent=message;show("admin-notice",!!message);}
   function number(value){return value!==null && value!==undefined && Number.isFinite(Number(value))?new Intl.NumberFormat("ru-RU").format(Number(value)):"—";}
   function personName(user){return [user.first_name,user.last_name].filter(Boolean).join(" ") || user.name || (user.username ? "@"+user.username : "Без имени");}
+  function telegramName(username,id){return typeof username==="string" && username.trim()?"@"+username.trim().replace(/^@/,""):(id?"Username не указан":"—");}
   function roleOf(user){return user.role || "lead";}
   function statusOf(user){return user.status || "pending";}
   function make(tag,content,className) {
@@ -79,7 +80,7 @@
       statusBadge.dataset.status=person.status||"pending";
       profileHeader.append(identity,statusBadge);content.append(profileHeader);
       const meta=make("div",undefined,"admin-profile-meta");
-      [["Telegram ID",person.id],["Username",person.username?"@"+person.username:null],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",person.agency_id],["Реферер",person.referrer_id],["Пригласил",person.introduced_by_id],["Менеджер",person.manager_id],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(meta,key,value));
+      [["Telegram",telegramName(person.username,person.id)],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(meta,key,value));
       content.append(meta);
       if(data.crm_lead_id){
         detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
@@ -224,14 +225,14 @@
     if (!users.length){container.append(make("p","Записей нет.","empty"));return;}
     const table=make("table");
     const head=make("thead"),headRow=make("tr");
-    ["Участник","Внутренний ID","Telegram ID","Статус","Роль","Источник","Менеджер","Действия"].forEach(v=>headRow.append(make("th",v)));
+    ["Участник","Внутренний ID","Telegram","Статус","Роль","Источник","Менеджер","Действия"].forEach(v=>headRow.append(make("th",v)));
     head.append(headRow);table.append(head);
     const body=make("tbody");
     users.forEach(user=>{
       const row=make("tr");
       const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
-      const ids=[user.introduced_by_id?"Пригласил: "+user.introduced_by_id:"",user.agency_id?"Агентство: "+user.agency_id:"",user.referrer_id?"Реферер: "+user.referrer_id:""].filter(Boolean);
-      row.append(make("td",personName(user)+(user.username?" · @"+user.username:"")),make("td",user.internal_id ?? "—"),make("td",user.id || user.user_id || "—"),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",user.manager_id || "—"));
+      const ids=[user.introduced_by_id?"Пригласил: "+telegramName(user.introduced_by_username,user.introduced_by_id):"",user.agency_id?"Агентство: "+telegramName(user.agency_username,user.agency_id):"",user.referrer_id?"Реферер: "+telegramName(user.referrer_username,user.referrer_id):""].filter(Boolean);
+      row.append(make("td",personName(user)),make("td",user.internal_id ?? "—"),make("td",telegramName(user.username,user.id || user.user_id)),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",telegramName(user.manager_username,user.manager_id)));
       row.className="admin-data-row";
       const actions=make("td");const group=make("div",undefined,"actions");
       group.append(action("Карточка",()=>openParticipant(user)));
@@ -248,7 +249,7 @@
       if(permitted && state.role==="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
       if(permitted && statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
       actions.append(group);row.append(actions);
-      row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Участник","Внутренний ID","Telegram ID","Статус","Роль","Источник","Менеджер","Действия"][index]);
+      row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Участник","Внутренний ID","Telegram","Статус","Роль","Источник","Менеджер","Действия"][index]);
       body.append(row);
     });
     table.append(body);container.append(table);
@@ -293,29 +294,29 @@
         make("td",invite.candidate_label || "Без имени"),
         make("td",invite.kind==="agency"?"Агентство":"Реферал"),
         make("td",invite.code || "—"),
-        make("td",invite.assignee_id || invite.issuer_id || "—"),
+        make("td",invite.assignee_id?telegramName(invite.assignee_username,invite.assignee_id):telegramName(invite.issuer_username,invite.issuer_id)),
         make("td",stateLabel)
       );
-      const cell=make("td");
-      if(canShare && typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
+      const cell=make("td");const controls=make("div",undefined,"actions");
+      if(canShare && typeof invite.code==="string" && /^(?:[A-Z0-9]{6}|(?:ag|ref)_[a-zA-Z0-9_-]{8,48})$/.test(invite.code)){
         const link="https://t.me/affialite_partners_bot?start="+encodeURIComponent(invite.code);
-        cell.append(action("Копировать",async()=>{
+        controls.append(action("Копировать",async()=>{
           if(!navigator.clipboard?.writeText)throw new Error("Копирование недоступно: выделите код приглашения в таблице.");
           await navigator.clipboard.writeText(link);
           notice("Ссылка приглашения скопирована.");
         }));
-        const start=make("a","Открыть /start","btn ghost");start.href=link;start.target="_blank";start.rel="noopener noreferrer";cell.append(start);
+        const start=make("a","Открыть /start","btn ghost");start.href=link;start.target="_blank";start.rel="noopener noreferrer";controls.append(start);
       }
       if(usable && (state.role==="owner" || Number(invite.issuer_id)===state.actorId) &&
-         typeof invite.code==="string" && /^(?:ag|ref)_[a-zA-Z0-9_-]{8,48}$/.test(invite.code)){
-        cell.append(action("Отозвать",async()=>{
+         typeof invite.code==="string" && /^(?:[A-Z0-9]{6}|(?:ag|ref)_[a-zA-Z0-9_-]{8,48})$/.test(invite.code)){
+        controls.append(action("Отозвать",async()=>{
           if(!window.confirm("Отозвать приглашение "+invite.code+"? Ссылка перестанет действовать, отменить отзыв нельзя."))return;
           const result=await api("/invitations/revoke",{code:invite.code});
           notice(result.changed===false?"Приглашение уже отозвано.":"Приглашение отозвано.");
           await loadDashboard();
         }));
       }
-      row.append(cell);
+      cell.append(controls);row.append(cell);
       row.className="admin-data-row";
       row.querySelectorAll("td").forEach((field,index)=>field.dataset.label=["Кандидат","Источник","Код","Ответственный","Состояние","Ссылка"][index]);
       body.append(row);

@@ -74,6 +74,7 @@ class Stage9ReferralTests(unittest.TestCase):
                                       channel='Channel', fixed_rub=100, percent_bps=250)
         self.assertEqual(status, 200, created)
         self.assertTrue(created['display_id'].startswith('B-'))
+        self.assertRegex(created['invite_code'], r'^[A-Z0-9]{6}$')
         self.assertEqual(self.as_user('/api/blogger/overview', 990011)[0], 200)
         self.assertEqual(self.webhook_start(998002, BOB, created['invite_code'])[0], 200)
         self.assertEqual(self.as_user('/api/register', BOB, **{**TEST_ONBOARDING,'consent':True})[0], 200)

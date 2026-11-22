@@ -20,7 +20,8 @@ STATUS_NOTIFICATIONS = {
     "rejected": "Заявка отклонена.",
     "blocked": "Ваш аккаунт заблокирован.",
 }
-CODE_PATTERN = re.compile(r"^(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48}$")
+CODE_PATTERN = re.compile(r"^(?:[A-Z0-9]{6}|(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})$")
+INVITATION_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 BLOGGER_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.I)
 _PG_INIT_LOCK = threading.Lock()
 _PG_INITIALIZED_URL = None
@@ -51,6 +52,15 @@ def postgres_url():
     if not url and (required or ready):
         raise RuntimeError("PARTNERS_DATABASE_URL is required when PostgreSQL mode is enabled")
     return url
+
+
+def new_invitation_code(conn):
+    """Generate a uniformly random code and avoid existing (including revoked) codes."""
+    for _ in range(32):
+        code = "".join(secrets.choice(INVITATION_ALPHABET) for _ in range(6))
+        if conn.execute("SELECT 1 FROM invitations WHERE code=?", (code,)).fetchone() is None:
+            return code
+    raise Problem(503, "Не удалось создать уникальный код приглашения")
 
 
 @contextmanager
@@ -267,6 +277,25 @@ def public_user(row):
     result["display_id"] = (("B-" if row["role"] == "blogger" else "L-") +
                             str(row["internal_id"]).zfill(6)) if row["internal_id"] is not None and row["role"] in ("lead", "referrer", "blogger") else None
     return result
+
+
+def attach_reference_usernames(conn, users, invitations=()):
+    """Add display-only Telegram usernames to already-authorized admin records."""
+    fields = ("manager", "agency", "referrer", "introduced_by")
+    ids = {item.get(field + "_id") for item in users for field in fields if item.get(field + "_id")}
+    ids.update(item.get("assignee_id") for item in invitations if item.get("assignee_id"))
+    ids.update(item.get("issuer_id") for item in invitations if item.get("issuer_id"))
+    if not ids:
+        return
+    params = tuple(ids)
+    rows = conn.execute("SELECT id,username FROM users WHERE id IN (" + ",".join("?" for _ in params) + ")", params)
+    names = {row["id"]: row["username"] for row in rows}
+    for item in users:
+        for field in fields:
+            item[field + "_username"] = names.get(item.get(field + "_id")) or ""
+    for item in invitations:
+        item["assignee_username"] = names.get(item.get("assignee_id")) or ""
+        item["issuer_username"] = names.get(item.get("issuer_id")) or ""
 
 
 def allocate_internal_id(conn):
@@ -543,7 +572,7 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
             ).fetchone()
             if existing:
                 return {"code": existing["code"], "invite_code": existing["code"], "assignee_id": None}
-        code = ("ag_" if kind == "agency" else "ref_") + secrets.token_urlsafe(18)
+        code = new_invitation_code(conn)
         conn.execute("INSERT INTO invitations(code,kind,issuer_id,assignee_id,created_at,candidate_label) VALUES(?,?,?,?,?,?)",
                      (code, kind, actor, assignee, int(time.time()), candidate_label))
         audit(conn, actor, "invite_" + kind, assignee)
@@ -564,7 +593,7 @@ def invite_blogger(actor, owner_id, blogger_uuid):
         existing = conn.execute("SELECT code FROM invitations WHERE kind='blogger' AND blogger_uuid=? AND active=1 ORDER BY created_at LIMIT 1", (blogger_uuid.lower(),)).fetchone()
         if existing:
             return {"code": existing["code"], "invite_code": existing["code"], "blogger_uuid": blogger_uuid.lower(), "channel": binding["channel"]}
-        code = "blog_" + secrets.token_urlsafe(18)
+        code = new_invitation_code(conn)
         conn.execute("INSERT INTO invitations(code,kind,issuer_id,created_at,blogger_uuid) VALUES(?,'blogger',?,?,?)",
                      (code, binding["issuer_id"], int(time.time()), blogger_uuid.lower()))
         audit(conn, actor, "invite_blogger", binding["issuer_id"], "blogger_uuid=" + blogger_uuid.lower())
@@ -616,10 +645,10 @@ def capture_pending_source(conn, sender_id, code):
     if valid_invitation_source(conn, sender_id, code):
         inserted = conn.execute("INSERT OR IGNORE INTO pending_starts(telegram_id,code,updated_at) VALUES(?,?,?)",
                                 (sender_id, code, int(time.time())))
-        if inserted.rowcount and code.startswith("ref_"):
-            invitation = conn.execute("SELECT i.issuer_id,u.role FROM invitations i "
+        if inserted.rowcount:
+            invitation = conn.execute("SELECT i.kind,i.issuer_id,u.role FROM invitations i "
                                       "JOIN users u ON u.id=i.issuer_id WHERE i.code=?", (code,)).fetchone()
-            if invitation and invitation["role"] in ("lead", "referrer"):
+            if invitation and invitation["kind"] == "referral" and invitation["role"] in ("lead", "referrer"):
                 enqueue(conn, "referral:visit:" + str(sender_id), invitation["issuer_id"],
                         "The Affiliates Partners\nПо вашей ссылке перешёл новый пользователь. "
                         "Регистрация ещё не завершена.")
@@ -724,6 +753,7 @@ def dashboard(actor, owner_id):
             item = dict(invitation)
             item["usable"] = valid_invitation_source(conn, 0, item["code"])
             invites.append(item)
+        attach_reference_usernames(conn, users, invites)
         return {"counts": {k: counts.get(k, 0) for k in STATUSES}, "users": users,
                 "users_truncated": sum(counts.values()) > len(users),
                 "pending": [user for user in users if user["status"] == "pending"], "invites": invites, "audit": [dict(x) for x in events]}
@@ -769,7 +799,9 @@ def admin_users_page(actor, owner_id, *, page=1, status="", role="", query=""):
         limit = 50
         rows = conn.execute("SELECT * FROM users" + where + " ORDER BY registered_at DESC,id DESC LIMIT ? OFFSET ?",
                             tuple(params) + (limit, (page - 1) * limit)).fetchall()
-        return {"users": [public_user(row) for row in rows], "page": page, "page_size": limit,
+        users = [public_user(row) for row in rows]
+        attach_reference_usernames(conn, users)
+        return {"users": users, "page": page, "page_size": limit,
                 "total": total, "has_next": page * limit < total}
 
 
@@ -790,7 +822,9 @@ def admin_participant_detail(actor, owner_id, target_id):
         audit_rows = scoped_audit_rows(conn, staff, 200)
         audit_rows = [dict(row) for row in audit_rows if row["target_id"] == target_id or row["actor_id"] == target_id]
         snapshot = json.loads(state["payload"]) if state else {"applications": [], "lead_payouts": []}
-        return {"user": public_user(target), "crm_lead_id": crm_id,
+        participant = public_user(target)
+        attach_reference_usernames(conn, [participant])
+        return {"user": participant, "crm_lead_id": crm_id,
                 "bound_at": binding["bound_at"] if binding else None,
                 "offers": [json.loads(row["payload"]) for row in offers],
                 "reports": [dict(row) for row in reports],
