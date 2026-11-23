@@ -502,6 +502,9 @@ dialog select,dialog input { max-width:100%; }
 }
 .participant-app .shell { max-width:1200px; }
 .participant-app .top { height:78px; }
+.participant-app .participant-top {justify-content:flex-start;}
+.participant-app .participant-top .brand {display:inline-flex;align-items:center;min-width:0;}
+.participant-app .participant-top .brand small {color:var(--color-secondary);}
 .participant-app .header-indicator {
   display:inline-block;width:5px;height:5px;margin-left:7px;
   border-radius:50%;background:#fff;box-shadow:0 0 9px rgba(255,255,255,.56);
