@@ -3863,3 +3863,21 @@ dialog select,dialog input { max-width:100%; }
     font-weight:650;letter-spacing:-.02em;white-space:nowrap;
   }
 }
+
+/* Authorized admin lead card: same verified and potential amounts as participant. */
+.admin-control .admin-lead-finance {min-width:0;margin:18px 0;padding:21px;}
+.admin-control .admin-lead-finance h3 {margin:9px 0 17px;font-size:clamp(18px,2.5vw,23px);}
+.admin-control .admin-lead-finance-label {margin:17px 0 9px;font-size:12px;line-height:1.45;color:var(--color-secondary);}
+.admin-control .admin-lead-finance-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+.admin-control .admin-lead-finance-cell {display:grid;gap:7px;min-width:0;padding:13px;border:1px solid var(--float-border);border-radius:13px;background:rgba(255,255,255,.025);}
+.admin-control .admin-lead-finance-cell span {font-size:11px;line-height:1.45;color:var(--color-secondary);overflow-wrap:anywhere;}
+.admin-control .admin-lead-finance-cell strong {font-size:clamp(15px,2.5vw,21px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.admin-control .admin-lead-finance-withdrawal {display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--divider);font-size:12px;line-height:1.5;}
+.admin-control .admin-lead-finance-withdrawal span {color:var(--color-secondary);text-align:right;}
+.admin-control .admin-assignment-status,.admin-control .admin-assignment-credit {font-size:12px;line-height:1.5;color:var(--color-secondary);}
+@media(max-width:540px){
+  .admin-control .admin-lead-finance {padding:15px;}
+  .admin-control .admin-lead-finance-grid {gap:7px;}
+  .admin-control .admin-lead-finance-cell {padding:11px 9px;}
+  .admin-control .admin-lead-finance-cell strong {font-size:15px;}
+}

@@ -88,6 +88,68 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
             finally:
                 browser.close()
 
+    def test_lead_card_shows_verified_and_potential_money_consistently(self):
+        offers = []
+        for _ in range(3):
+            status, body = self.as_user('/api/admin/mvp/offer', OWNER,
+                name='Тестовая карта', category='Дебетовые карты',
+                target_action='Оформить карту', payout_rub=1000, hold_days=7)
+            self.assertEqual(status, 200, body)
+            offer_id = body['offer_id']
+            offers.append(offer_id)
+            self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,
+                user_id=self.lead_a, offer_id=offer_id)[0], 200)
+        for offer_id, stage in zip(offers, ('in_progress','completed','submitted')):
+            self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,
+                user_id=self.lead_a, offer_id=offer_id, stage=stage)[0], 200)
+        self.assertEqual(self.as_user('/api/admin/finance/accrue', OWNER,
+            user_id=self.lead_a, offer_id=offers[2], amount_rub=600,
+            source_reference='browser.lead.finance.1')[0], 200)
+        # This fixture creates active users without the additional profile
+        # onboarding required by the real withdrawal endpoint. Insert the
+        # already-paid ledger state only to test what the card renders.
+        from server import finance
+        with db.transaction() as conn:
+            finance.schema(conn)
+            conn.execute(
+                "INSERT INTO finance_withdrawals(id,telegram_id,amount_rub,status,"
+                "payment_reference,created_at,updated_at) VALUES(?, ?,400,'paid',?,100,101)",
+                ('wd_'+'1'*24, self.lead_a, 'browser.lead.payment.1'))
+
+        with patch('server.api.bot_token', return_value=TOKEN), patch('server.api.admin_id', return_value=OWNER), sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                for actor, width in ((OWNER, 1440), (self.admin, 390)):
+                    with self.subTest(actor=actor, width=width):
+                        page = browser.new_page(viewport={'width':width,'height':844})
+                        errors = []
+                        page.on('pageerror', lambda e: errors.append(str(e)))
+                        page.goto(self.base + '/partners/admin/#tgWebAppData=' +
+                            __import__('urllib.parse',fromlist=['quote']).quote(init_data(actor), safe=''),
+                            wait_until='domcontentloaded')
+                        page.locator('[data-section="people"]').click()
+                        page.locator('[data-subtab="users"]').click()
+                        page.locator('#user-query').fill(str(self.lead_a))
+                        page.get_by_role('button', name='Карточка').first.click()
+                        dialog = page.locator('#participant-detail')
+                        finance = dialog.locator('.admin-lead-finance')
+                        finance.wait_for(state='visible')
+                        self.assertIn('В работе / на проверке', finance.inner_text())
+                        self.assertIn('Холд: завершено вручную', finance.inner_text())
+                        self.assertIn('1 000 ₽', finance.inner_text())
+                        self.assertIn('600 ₽', finance.inner_text())
+                        self.assertIn('400 ₽', finance.inner_text())
+                        self.assertIn('200 ₽', finance.inner_text())
+                        self.assertIn('Выплачена', finance.inner_text())
+                        self.assertIn('Подтверждённые начисления: 600', dialog.inner_text())
+                        self.assertIn('Статус: В работе', dialog.inner_text())
+                        self.assertIn('Статус: Завершено', dialog.inner_text())
+                        self.assertFalse(errors, errors)
+                        self.assertLessEqual(finance.bounding_box()['x'] + finance.bounding_box()['width'], width+1)
+                        page.close()
+            finally:
+                browser.close()
+
     def test_switching_cards_does_not_show_stale_participant(self):
         with patch('server.api.bot_token', return_value=TOKEN), patch('server.api.admin_id', return_value=OWNER), sync_playwright() as p:
             browser = p.chromium.launch(headless=True)

@@ -824,12 +824,30 @@ def admin_participant_detail(actor, owner_id, target_id):
         snapshot = json.loads(state["payload"]) if state else {"applications": [], "lead_payouts": []}
         participant = public_user(target)
         attach_reference_usernames(conn, [participant])
-        return {"user": participant, "crm_lead_id": crm_id,
+        result = {"user": participant, "crm_lead_id": crm_id,
                 "bound_at": binding["bound_at"] if binding else None,
                 "offers": [json.loads(row["payload"]) for row in offers],
                 "reports": [dict(row) for row in reports],
                 "status": snapshot, "status_updated_at": state["updated_at"] if state else None,
                 "audit": audit_rows[:100]}
+        # Financial details are restricted to the owner and tenant-authorized
+        # admins. Staff can still view their existing operational snapshot.
+        if staff["role"] in ("owner", "admin") and target["role"] in ("lead", "referrer"):
+            from server import finance, statistics
+            result["statistics"] = statistics.participant_snapshot(conn, target_id)
+            result["finance"] = {
+                "balances": result["statistics"]["verified"],
+                "accruals": [finance._public_accrual(row) for row in conn.execute(
+                    "SELECT * FROM finance_accruals WHERE telegram_id=? "
+                    "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()],
+                "withdrawals": [finance._public_withdrawal(row) for row in conn.execute(
+                    "SELECT * FROM finance_withdrawals WHERE telegram_id=? "
+                    "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()],
+                "accrual_by_offer": {row["offer_id"]: row["amount_rub"] for row in conn.execute(
+                    "SELECT offer_id,SUM(amount_rub) AS amount_rub FROM finance_accruals "
+                    "WHERE telegram_id=? GROUP BY offer_id", (target_id,)).fetchall()},
+            }
+        return result
 
 
 def decision(actor, owner_id, target_id, choice, reason=""):

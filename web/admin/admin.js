@@ -61,6 +61,40 @@
   function action(label,fn,variant="ghost"){const button=make("button",label,"btn "+variant);button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
+  function adminLeadFinance(content,data){
+    if(!data.statistics || !data.finance)return;
+    const section=make("section",undefined,"panel admin-lead-finance");
+    section.append(make("span","ФИНАНСЫ УЧАСТНИКА","section-kicker"),make("h3","Финансовая сводка"));
+    const potential=data.statistics.potential||{};
+    const verified=data.finance.balances||{};
+    function amounts(title,source,items){
+      section.append(make("h4",title,"admin-lead-finance-label"));
+      const grid=make("div",undefined,"admin-lead-finance-grid");
+      for(const [name,key] of items){
+        const item=make("div",undefined,"admin-lead-finance-cell");
+        item.append(make("span",name),make("strong",source[key]==null?"—":number(source[key])+" ₽"));
+        grid.append(item);
+      }
+      section.append(grid);
+    }
+    amounts("Предварительные суммы — не баланс",potential,[
+      ["Не начато","not_started_rub"],["В работе / на проверке","in_work_rub"],
+      ["Холд: завершено вручную","hold_rub"]]);
+    amounts("Подтверждённый финансовый учёт",verified,[
+      ["Начислено","accrued_rub"],["Доступно к выводу","available_rub"],
+      ["Зарезервировано под вывод","reserved_rub"],["Фактически выплачено","paid_rub"]]);
+    section.append(make("p","Холд — потенциальная ставка завершённых офферов до финансового подтверждения. Резерв — уже начисленные деньги по заявкам на вывод. Выплачено учитывается только после отметки фактического платежа.","muted"));
+    const withdrawals=data.finance.withdrawals||[];
+    section.append(make("h4","Заявки на вывод","admin-lead-finance-label"));
+    if(!withdrawals.length)section.append(make("p","Заявок на вывод пока нет.","muted"));
+    else for(const row of withdrawals){
+      const labels={pending:"Ожидает проверки",confirmed:"Подтверждена, ожидает платежа",rejected:"Отклонена",paid:"Выплачена"};
+      const item=make("div",undefined,"admin-lead-finance-withdrawal");
+      item.append(make("strong",number(row.amount_rub)+" ₽"),make("span",labels[row.status]||row.status||"—"));
+      section.append(item);
+    }
+    content.append(section);
+  }
   async function openParticipant(user){
     const requestId=++participantRequestId;
     const id=Number(user.id || user.user_id);
@@ -82,6 +116,9 @@
       const meta=make("div",undefined,"admin-profile-meta");
       [["Telegram",telegramName(person.username,person.id)],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(meta,key,value));
       content.append(meta);
+      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+        adminLeadFinance(content,data);
+      }
       if(data.crm_lead_id){
         detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
         detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
@@ -100,6 +137,11 @@
         for(const offer of assignments){
           const item=make("div",undefined,"participant-detail-item admin-assignment");
           item.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("strong",offer.name),make("p",`${offer.payout_rub} ₽ за целевое действие · Холд ${offer.hold_days} дн. · ${offer.target_action}`));
+          item.append(make("p","Статус: "+(manualStages[offer.stage]||offer.stage||"—"),"admin-assignment-status"));
+          const credited=Number(data.finance?.accrual_by_offer?.[offer.id]||0);
+          if(credited>0)item.append(make("p","Подтверждённые начисления: "+number(credited)+" ₽","admin-assignment-credit"));
+          const crmPaid=(data.status?.lead_payouts||[]).some(row=>row.offer_id===offer.id && row.status==="paid" && !row.reversed);
+          if(crmPaid)item.append(make("p","CRM: отмечена оплата по офферу (отдельный источник)","admin-assignment-credit"));
           const select=make("select");
           select.setAttribute("aria-label","Статус оффера "+offer.name);
           for(const [key,label] of Object.entries(manualStages)){const option=make("option",label);option.value=key;select.append(option);}select.value=offer.stage;
