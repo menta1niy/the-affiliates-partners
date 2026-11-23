@@ -99,6 +99,19 @@
     if (className) el.className=className;
     return el;
   }
+  const reviewLabels={pending:"На рассмотрении",approved:"Подтверждено менеджером",rejected:"Отклонено менеджером"};
+  const withdrawalLabels={pending:"На рассмотрении",confirmed:"Подтверждена, ожидает платежа",rejected:"Отклонена",paid:"Выплачена"};
+  const crmPayoutLabels={confirmed:"Вознаграждение подтверждено CRM",paid:"Оплата отмечена в CRM",rejected:"Отклонено CRM"};
+  function statusMark(source,code,label){
+    const group=make("span",undefined,"status-source");
+    group.dataset.source=source;
+    group.dataset.status=code||"unknown";
+    const names={offer:"Оффер",review:"Проверка",crm:"CRM",withdrawal:"Вывод средств",
+      ledger:"Финансовый реестр"};
+    group.append(make("span",names[source]||"Статус","status-source-name"),
+      make("strong",label||"Статус не указан","status-source-value"));
+    return group;
+  }
   function action(label,fn,variant="ghost"){const button=make("button",label,"btn "+variant);button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
@@ -129,9 +142,9 @@
     section.append(make("h4","Заявки на вывод","admin-lead-finance-label"));
     if(!withdrawals.length)section.append(make("p","Заявок на вывод пока нет.","muted"));
     else for(const row of withdrawals){
-      const labels={pending:"Ожидает проверки",confirmed:"Подтверждена, ожидает платежа",rejected:"Отклонена",paid:"Выплачена"};
       const item=make("div",undefined,"admin-lead-finance-withdrawal");
-      item.append(make("strong",number(row.amount_rub)+" ₽"),make("span",labels[row.status]||row.status||"—"));
+      item.append(make("strong",number(row.amount_rub)+" ₽"),
+        statusMark("withdrawal",row.status,withdrawalLabels[row.status]||"Неизвестный статус"));
       section.append(item);
     }
     content.append(section);
@@ -164,7 +177,16 @@
         detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
         detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
         detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
-        detailRows(content,"Подтверждённые выплаты CRM",data.status?.lead_payouts,[["Оффер","offer_id"],["Сумма","amount"],["Статус","status"],["Отменена","reversed"]]);
+        content.append(make("h3","Отметки о вознаграждениях CRM"));
+        if(!data.status?.lead_payouts?.length)content.append(make("p","Отметок CRM пока нет.","muted"));
+        for(const payout of data.status?.lead_payouts||[]){
+          const row=make("div",undefined,"participant-detail-item");
+          row.append(statusMark("crm",payout.reversed?"reversed":payout.status,
+            payout.reversed?"Отменено в CRM":crmPayoutLabels[payout.status]||"Неизвестный статус CRM"));
+          detailLine(row,"Оффер",payout.offer_id);
+          detailLine(row,"Сумма по CRM",payout.amount);
+          content.append(row);
+        }
       }
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
         const section=make("section",undefined,"panel admin-profile-assignments");section.append(make("span","ОФФЕРЫ / РУЧНЫЕ СТАТУСЫ","section-kicker"),make("h3","Управление назначениями"));
@@ -178,11 +200,11 @@
         for(const offer of assignments){
           const item=make("div",undefined,"participant-detail-item admin-assignment");
           item.append(make("span",offer.category||"Банковский оффер","section-kicker"),make("strong",offer.name),make("p",`${offer.payout_rub} ₽ за целевое действие · Холд ${offer.hold_days} дн. · ${offer.target_action}`));
-          item.append(make("p","Статус: "+(manualStages[offer.stage]||offer.stage||"—"),"admin-assignment-status"));
+          item.append(statusMark("offer",offer.stage,manualStages[offer.stage]||"Неизвестная стадия"));
           const credited=Number(data.finance?.accrual_by_offer?.[offer.id]||0);
           if(credited>0)item.append(make("p","Подтверждённые начисления: "+number(credited)+" ₽","admin-assignment-credit"));
           const crmPaid=(data.status?.lead_payouts||[]).some(row=>row.offer_id===offer.id && row.status==="paid" && !row.reversed);
-          if(crmPaid)item.append(make("p","CRM: отмечена оплата по офферу (отдельный источник)","admin-assignment-credit"));
+          if(crmPaid)item.append(statusMark("crm","paid","Оплата отмечена в CRM — не выплата из реестра"));
           const select=make("select");
           select.setAttribute("aria-label","Статус оффера "+offer.name);
           for(const [key,label] of Object.entries(manualStages)){const option=make("option",label);option.value=key;select.append(option);}select.value=offer.stage;
@@ -1068,13 +1090,11 @@
       if(!response.withdrawals?.length){
         root.append(make("p","Заявок с таким статусом нет.","muted"));return;
       }
-      const statusNames={pending:"На рассмотрении",confirmed:"Подтверждена",
-        rejected:"Отклонена",paid:"Выплачена"};
       for(const payout of response.withdrawals){
         const card=make("article",undefined,"admin-offer-event-card");
         card.append(make("span",payout.display_id+" · "+payout.id.slice(-8),"section-kicker"));
         card.append(make("h3",number(payout.amount_rub)+" ₽"));
-        card.append(make("p",statusNames[payout.status]||payout.status));
+        card.append(statusMark("withdrawal",payout.status,withdrawalLabels[payout.status]||"Неизвестный статус"));
         if(payout.review_note)card.append(make("p","Комментарий: "+payout.review_note,"muted"));
         if(payout.status==="pending"||payout.status==="confirmed"){
           const note=make("textarea");note.maxLength=300;note.rows=2;
@@ -1123,15 +1143,15 @@
       if(!response.events?.length){
         root.append(make("p","Заявок по офферам с этим статусом нет.","muted"));return;
       }
-      const statuses={pending:"На рассмотрении",approved:"Подтверждено",rejected:"Отклонено"};
       for(const event of response.events){
         const card=make("article",undefined,"admin-offer-event-card");
         card.append(make("span",event.display_id+" · "+(event.kind==="mfo_request"?"Запрос МФО":"Отчёт по этапу"),"section-kicker"));
         card.append(make("h3",event.offer_name||"Оффер"));
-        const summary=make("p",(event.kind==="mfo_request"?"Запросить оффер":
-          leadStageOptions[event.lead_stage]||event.lead_stage)+" · "+
-          (statuses[event.review_status]||event.review_status));
+        const summary=make("p",event.kind==="mfo_request"?"Запросить оффер":
+          leadStageOptions[event.lead_stage]||event.lead_stage);
         card.append(summary);
+        card.append(statusMark("review",event.review_status,
+          reviewLabels[event.review_status]||"Неизвестное решение"));
         if(event.proof_url){
           const link=make("a","Открыть ссылку подтверждения ↗","btn ghost");
           link.href=event.proof_url;link.target="_blank";link.rel="noopener noreferrer";

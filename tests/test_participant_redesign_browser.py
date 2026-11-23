@@ -239,6 +239,7 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertIn("Ожидает проверки",page.locator("#offers .participant-offer-next").inner_text())
                         self.assertEqual(page.locator("#offers .participant-offer-detail-button").first.inner_text(),"Проверить статус →")
                         self.assertEqual(page.locator("#offers .participant-offer-status").get_attribute("data-status"),"submitted")
+                        self.assertIn("На проверке",page.locator("#offers .participant-offer-status").inner_text())
                         page.locator('[data-offer-filter="completed"]').click()
                         self.assertIn("Отмечено администратором",page.locator("#offers .participant-offer-next").inner_text())
                         self.assertEqual(page.locator("#offers .participant-offer-detail-button").first.inner_text(),"Посмотреть результат →")

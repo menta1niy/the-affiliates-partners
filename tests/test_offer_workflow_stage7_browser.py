@@ -149,6 +149,7 @@ class Stage7BrowserTests(unittest.TestCase):
                 page.locator('[data-subtab="offer_reviews"]').click()
                 page.locator(".admin-offer-event-card").first.wait_for()
                 self.assertIn("L-000113",page.locator(".admin-offer-event-card").first.inner_text())
+                self.assertEqual(page.locator(".admin-offer-event-card .status-source[data-source='review']").first.get_attribute("data-status"),"pending")
                 page.on("dialog",lambda dialog:dialog.accept())
                 page.locator(".admin-offer-event-card").get_by_role("button",name="Подтвердить").click()
                 page.wait_for_function("Boolean(window.__reviewStage7)")

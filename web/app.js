@@ -103,17 +103,19 @@
       const root=$(target);root.replaceChildren();
       if(!items?.length){const p=document.createElement("p");p.className="muted";
         p.textContent="Записей пока нет.";root.append(p);return;}
-      const labels={pending:"На рассмотрении",confirmed:"Подтверждена",
-        rejected:"Отклонена",paid:"Выплачена"};
       for(const entry of items){
         const item=document.createElement("div");item.className="participant-finance-history-item";
         const title=document.createElement("strong");
-        title.textContent=money(entry.amount_rub)+" · "+
-          (kind==="withdrawals"?(labels[entry.status]||entry.status):"Подтверждённое начисление");
+        title.textContent=money(entry.amount_rub);
         const detail=document.createElement("small");detail.textContent=kind==="withdrawals"
           ?(entry.review_note||"Заявка № "+entry.id.slice(-8))
           :"Основание: "+entry.source_reference;
-        item.append(title,detail);root.append(item);
+        item.append(title,
+          kind==="withdrawals"
+            ?statusMark("withdrawal",entry.status,withdrawalLabels[entry.status]||"Неизвестный статус")
+            :statusMark("ledger","accrued","Подтверждённое начисление"),
+          detail);
+        root.append(item);
       }
     };
     try{
@@ -507,6 +509,20 @@
   function stageLabel(stage){
     return (manualStages[stage]||manualStages.assigned).label;
   }
+  const reviewLabels={pending:"Ожидает решения менеджера",approved:"Подтверждено менеджером",
+    rejected:"Отклонено менеджером"};
+  const withdrawalLabels={pending:"На рассмотрении",confirmed:"Подтверждена, ожидает платежа",
+    rejected:"Отклонена",paid:"Выплачена"};
+  function statusMark(source,code,label){
+    const group=document.createElement("span");group.className="status-source";
+    group.dataset.source=source;group.dataset.status=code||"unknown";
+    const name=document.createElement("span");name.className="status-source-name";
+    name.textContent=({offer:"Оффер",review:"Проверка",crm:"CRM",withdrawal:"Вывод средств",
+      ledger:"Финансовый реестр"})[source]||"Статус";
+    const value=document.createElement("strong");value.className="status-source-value";
+    value.textContent=label||"Статус не указан";
+    group.append(name,value);return group;
+  }
   function offerStatus(stage){
     const info=manualStages[stage]||manualStages.assigned;
     const status=document.createElement("span");status.className="pill participant-offer-status";
@@ -649,11 +665,10 @@
       const section=document.createElement("section");section.className="participant-offer-activity";
       const title=document.createElement("strong");title.textContent="Последнее действие";
       const description=document.createElement("p");
-      const names={pending:"Ожидает рассмотрения",approved:"Подтверждено менеджером",
-                   rejected:"Отклонено менеджером"};
-      description.textContent=(event.kind==="mfo_request"?"Запрос МФО":
-        leadStageLabels[event.lead_stage]||"Отчёт")+" · "+(names[event.review_status]||event.review_status);
-      section.append(title,description);
+      description.textContent=event.kind==="mfo_request"?"Запрос МФО":
+        leadStageLabels[event.lead_stage]||"Отчёт";
+      section.append(title,description,statusMark("review",event.review_status,
+        reviewLabels[event.review_status]||"Неизвестное решение"));
       if(event.review_note)section.append(document.createTextNode("Комментарий: "+event.review_note));
       offerDialogContent.append(section);
     }
@@ -787,9 +802,8 @@
       item.append(top,summary,nextOfferAction(offer.stage));
       if(offer.latest_event){
         const feedback=document.createElement("p");feedback.className="participant-offer-event-feedback";
-        const labels={pending:"Отправлено на проверку",approved:"Отметка подтверждена менеджером",
-                      rejected:"Отметка отклонена менеджером"};
-        feedback.textContent=labels[offer.latest_event.review_status]||"Получено решение менеджера";
+        feedback.append(statusMark("review",offer.latest_event.review_status,
+          reviewLabels[offer.latest_event.review_status]||"Неизвестное решение"));
         item.append(feedback);
       }
       if(unavailableReason(offer)){
@@ -884,7 +898,7 @@
       const row=document.createElement("div");row.className="history-entry";
       const heading=document.createElement("strong");heading.textContent=applicationStageLabels[item.stage]||"Статус CRM";
       const details=document.createElement("p");details.className="muted";details.textContent="Оффер: "+String(item.offer_id||"—");
-      row.append(heading,details);container.append(row);
+      row.append(statusMark("crm",item.stage,heading.textContent),details);container.append(row);
     }
     for(const payout of payouts){
       const row=document.createElement("div");row.className="history-entry";
@@ -892,7 +906,7 @@
       heading.textContent=payout.reversed?"Начисление отменено CRM":payout.status==="paid"?"Выплата отмечена CRM":"Вознаграждение подтверждено CRM";
       const details=document.createElement("p");details.className="muted";
       details.textContent="Оффер: "+String(payout.offer_id||"—")+" · Сумма: "+String(payout.amount||"0")+" ₽";
-      row.append(heading,details);container.append(row);
+      row.append(statusMark("crm",payout.reversed?"reversed":payout.status,heading.textContent),details);container.append(row);
     }
   }
   async function loadCrmStatus(){
