@@ -148,6 +148,8 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                 self.assertIn("Недоступно", cards.nth(1).inner_text())
                 cards.nth(1).locator(".participant-offer-detail-button").click()
                 self.assertTrue(page.locator("#participant-offer-dialog").is_visible())
+                guide=page.locator("#participant-offer-dialog .participant-offer-workflow")
+                self.assertIn("Устраните ограничение",guide.inner_text())
                 self.assertFalse(page.locator("#participant-offer-dialog .participant-offer-link").count())
                 page.close()
             finally:
@@ -242,6 +244,9 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(page.locator("#offers .participant-offer-detail-button").first.inner_text(),"Посмотреть результат →")
                         page.locator("#offers .participant-offer-detail-button").first.click()
                         self.assertIn("не подтверждение банковского начисления",page.locator(".participant-offer-full-next").inner_text())
+                        workflow=page.locator("#participant-offer-dialog .participant-offer-workflow")
+                        self.assertIn("Результат отмечен", workflow.inner_text())
+                        self.assertIn("Проверьте начисления", workflow.inner_text())
                         page.locator("#participant-offer-close").click()
                         page.locator('[data-offer-filter="all"]').click()
                         page.locator("#offer-sort").select_option("payout_desc")

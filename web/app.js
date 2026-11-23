@@ -562,6 +562,44 @@
   function closeOfferDialog(){if(offerDialog.open)offerDialog.close();}
   $("participant-offer-close").addEventListener("click",closeOfferDialog);
   offerDialog.addEventListener("click",event=>{if(event.target===offerDialog)closeOfferDialog();});
+  function offerWorkflowGuide(offer){
+    const section=document.createElement("section");
+    section.className="participant-offer-workflow";
+    const heading=document.createElement("h3");heading.textContent="Порядок выполнения";
+    const list=document.createElement("ol");
+    const restricted=Boolean(unavailableReason(offer));
+    const requiresApproval=Boolean(offer.requires_request&&!offer.mfo_approved);
+    const steps=[
+      ["Изучите условия","Проверьте целевое действие, инструкцию, ставку и срок проверки."],
+      requiresApproval
+        ?["Запросите доступ","Отправьте запрос на оффер МФО и дождитесь решения менеджера."]
+        :["Выполните действие","Перейдите к предложению по ссылке, если доступ разрешён."],
+      ["Отправьте подтверждение","При доступности отчёта выберите этап и приложите ссылку или скриншот."],
+      ["Дождитесь решения","Отчёт рассматривает менеджер. Ручной статус не означает банковское начисление."]
+    ];
+    if(restricted&&!requiresApproval){
+      steps[1]=["Устраните ограничение","Проверьте требование доступа перед продолжением."];
+    }
+    if(offer.stage==="completed"){
+      steps[2]=["Результат отмечен","Администратор отметил задание завершённым. Это ещё не финансовое подтверждение."];
+      steps[3]=["Проверьте начисления","Подтверждённые средства учитываются отдельно в финансовом разделе."];
+    }else if(offer.stage==="rejected"){
+      steps[2]=["Изучите отказ","Посмотрите комментарий администратора к заданию."];
+      steps[3]=["Уточните дальнейшие действия","Обратитесь к администратору перед новой отправкой."];
+    }else if(offer.latest_event?.review_status==="pending"&&offer.latest_event?.kind==="stage"){
+      steps[2]=["Отчёт отправлен","Действие ожидает рассмотрения менеджером."];
+    }
+    steps.forEach(([name,description],index)=>{
+      const item=document.createElement("li");
+      const label=document.createElement("strong");label.textContent=name;
+      const detail=document.createElement("span");detail.textContent=description;
+      item.append(label,detail);
+      if(index===1&&restricted)item.classList.add("is-blocked");
+      list.append(item);
+    });
+    section.append(heading,list);
+    return section;
+  }
   function openOfferDetail(offer){
     offerDialogContent.replaceChildren();
     const title=document.createElement("h2");
@@ -605,6 +643,7 @@
       hint.textContent="Это возможные этапы. Отметки о выполнении будут доступны после подключения подтверждений.";
       section.append(hint);offerDialogContent.append(section);
     }
+    offerDialogContent.append(offerWorkflowGuide(offer));
     if(offer.latest_event){
       const event=offer.latest_event;
       const section=document.createElement("section");section.className="participant-offer-activity";

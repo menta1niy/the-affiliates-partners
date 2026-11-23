@@ -3881,3 +3881,42 @@ dialog select,dialog input { max-width:100%; }
   .admin-control .admin-lead-finance-cell {padding:11px 9px;}
   .admin-control .admin-lead-finance-cell strong {font-size:15px;}
 }
+
+/* Development plan stage 5: clear, read-only execution guide in the offer dialog. */
+.participant-app .participant-offer-workflow {
+  min-width:0;margin-top:20px;padding:18px;
+  border:1px solid var(--float-border);
+  border-radius:var(--float-inner-radius);
+  background:rgba(255,255,255,.025);
+}
+.participant-app .participant-offer-workflow h3 {
+  margin:0 0 15px;font-size:16px;line-height:1.4;
+}
+.participant-app .participant-offer-workflow ol {
+  list-style:none;counter-reset:offerstep;margin:0;padding:0;
+  display:grid;gap:14px;
+}
+.participant-app .participant-offer-workflow li {
+  counter-increment:offerstep;position:relative;display:grid;gap:5px;
+  padding-left:37px;min-width:0;
+}
+.participant-app .participant-offer-workflow li::before {
+  content:counter(offerstep);position:absolute;left:0;top:0;
+  display:grid;place-items:center;width:26px;height:26px;
+  border:1px solid rgba(255,255,255,.22);border-radius:9px;
+  color:var(--color-text);font-size:11px;font-weight:750;
+}
+.participant-app .participant-offer-workflow li strong {
+  font-size:13px;line-height:1.4;
+}
+.participant-app .participant-offer-workflow li span {
+  color:var(--color-secondary);font-size:12px;line-height:1.55;
+  overflow-wrap:anywhere;
+}
+.participant-app .participant-offer-workflow li.is-blocked::before {
+  border-style:dashed;
+}
+@media(max-width:540px) {
+  .participant-app .participant-offer-workflow {padding:15px 13px;}
+  .participant-app .participant-offer-workflow li {padding-left:33px;}
+}

@@ -97,6 +97,12 @@ class Stage7BrowserTests(unittest.TestCase):
                         cards=page.locator(".participant-offers .offer-item")
                         self.assertEqual(cards.count(),2)
                         cards.first.locator(".participant-offer-detail-button").click()
+                        guide=page.locator("#participant-offer-dialog .participant-offer-workflow")
+                        self.assertEqual(guide.locator("li").count(),4)
+                        self.assertEqual(guide.locator("li strong").all_inner_texts(),
+                            ["Изучите условия","Выполните действие",
+                             "Отправьте подтверждение","Дождитесь решения"])
+                        self.assertIn("Порядок выполнения",guide.inner_text())
                         form=page.locator(".participant-offer-report-form")
                         form.wait_for(state="visible")
                         self.assertEqual(form.locator("select option").count(),2)
@@ -110,6 +116,9 @@ class Stage7BrowserTests(unittest.TestCase):
                         form.locator('button[type="submit"]').click()
                         page.locator("#participant-offer-dialog").wait_for(state="hidden")
                         cards.last.locator(".participant-offer-detail-button").click()
+                        mfo_guide=page.locator("#participant-offer-dialog .participant-offer-workflow")
+                        self.assertEqual(mfo_guide.locator("li").nth(1).locator("strong").inner_text(),
+                                         "Запросите доступ")
                         self.assertTrue(page.locator(".participant-offer-request").is_visible())
                         self.assertFalse(page.locator(".participant-offer-unavailable").is_enabled())
                         page.locator(".participant-offer-request").click()
