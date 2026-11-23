@@ -181,6 +181,10 @@
                 </select>
               </label>
             </div>
+            <div class="admin-assignment-filter-actions">
+              <button type="button" class="btn ghost" id="admin-assignment-reset-filters">Сбросить фильтры</button>
+              <span id="admin-assignment-visible-count" class="muted" role="status">Загружаем результаты…</span>
+            </div>
             <p id="admin-assignment-selected-lead" class="admin-assignment-selected-lead" hidden></p>
             <div id="admin-assignment-users" class="admin-assignment-users" aria-live="polite"></div>
             <div id="admin-assignment-pagination" class="admin-assignment-pages"></div>
@@ -196,7 +200,7 @@
               <button type="button" class="btn ghost" id="admin-assignment-clear">Очистить выбор</button>
               <button type="button" class="btn primary" id="admin-assignment-review" disabled>Проверить назначения</button>
             </div>
-            <small>«Выбрать все» действует на текущие результаты фильтра и страницу. Выбор с других страниц сохраняется (не более 200).</small>
+            <small>«Выбрать все» действует только на текущие результаты и страницу. Выбранные участники с других страниц сохраняются (не более 200). Перед массовым назначением обязательно проверьте предварительный расчёт.</small>
           </div>
           <div id="admin-assignment-result" class="message" role="status" hidden></div>
         </section>

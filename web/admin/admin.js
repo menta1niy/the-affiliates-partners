@@ -774,8 +774,21 @@
   const assignmentUI={
     mode:"offer_to_leads",catalog:[],offerId:"",lead:null,
     chosenUsers:new Map(),chosenOffers:new Set(),people:[],page:1,total:0,
-    previewPayload:null,loading:false
+    previewPayload:null,previewSignature:null,selectionRevision:0,loading:false
   };
+  function assignmentSignature(){
+    const payload=assignmentSelectionPayload();
+    if(payload.user_ids)payload.user_ids.sort((a,b)=>a-b);
+    if(payload.offer_ids)payload.offer_ids.sort();
+    return JSON.stringify(payload);
+  }
+  function invalidateAssignmentPreview(){
+    assignmentUI.selectionRevision++;
+    assignmentUI.previewPayload=null;
+    assignmentUI.previewSignature=null;
+    const dialog=$("admin-bulk-confirm");
+    if(dialog.open&&!assignmentUI.loading)dialog.close();
+  }
   function assignmentMessage(message,isError=false){
     const node=$("admin-assignment-result");node.textContent=message;
     node.hidden=!message;node.classList.toggle("error",isError);
@@ -799,6 +812,7 @@
     target.replaceChildren(new Option("Выберите предложение",""));
     for(const offer of offers)target.add(new Option(offer.name+" · "+number(offer.payout_rub)+" ₽",offer.id));
     if(!offers.some(offer=>offer.id===assignmentUI.offerId)) {
+      if(assignmentUI.offerId)invalidateAssignmentPreview();
       assignmentUI.offerId="";
       assignmentUI.chosenUsers.clear();
     }
@@ -812,6 +826,7 @@
       control.disabled=!assignmentUI.lead;
       control.checked=assignmentUI.chosenOffers.has(offer.id);
       control.addEventListener("change",()=>{
+        invalidateAssignmentPreview();
         if(control.checked){
           if(assignmentUI.chosenOffers.size>=200){
             control.checked=false;assignmentMessage("За одну операцию можно выбрать не больше 200 офферов.",true);return;
@@ -850,6 +865,7 @@
       input.checked=single?assignmentUI.lead?.id===id:assignmentUI.chosenUsers.has(id);
       input.setAttribute("aria-label",(single?"Выбрать лида ":"Назначить оффер участнику ")+personName(person));
       input.addEventListener("change",()=>{
+        invalidateAssignmentPreview();
         if(single){
           if(assignmentUI.lead?.id!==id)assignmentUI.chosenOffers.clear();
           assignmentUI.lead={...person,id};
@@ -875,6 +891,10 @@
     }
     const pages=$("admin-assignment-pagination");pages.replaceChildren();
     pages.append(make("span","Страница "+assignmentUI.page+" · всего "+number(assignmentUI.total)));
+    $("admin-assignment-visible-count").textContent=single
+      ?"На странице: "+assignmentUI.people.length+" · "+(assignmentUI.lead?"выбран 1 лид":"лид не выбран")
+      :"На странице: "+assignmentUI.people.length+" · выбрано здесь: "+
+        assignmentUI.people.filter(person=>assignmentUI.chosenUsers.has(Number(person.id))).length;
     const previous=action("Назад",()=>loadAssignmentPeople(assignmentUI.page-1));
     previous.disabled=assignmentUI.page<=1;
     const next=action("Далее",()=>loadAssignmentPeople(assignmentUI.page+1));
@@ -886,6 +906,7 @@
     if(!canManageOffers() || state.section!=="assignments")return;
     const requestId=++state.requests.assignments;
     $("admin-assignment-users").replaceChildren(make("p","Загружаем участников…","muted"));
+    $("admin-assignment-visible-count").textContent="Загружаем результаты…";
     $("admin-assignment-pagination").replaceChildren();
     try{
       const result=await api("/admin/mvp/assignment-candidates",{
@@ -899,12 +920,14 @@
     }catch(e){
       if(requestId===state.requests.assignments){
         $("admin-assignment-users").replaceChildren(make("p",e.message,"message error"));
+        $("admin-assignment-visible-count").textContent="Результаты недоступны";
         assignmentMessage(e.message,true);
       }
     }
   }
   function changeAssignmentMode(mode){
     if(!["offer_to_leads","lead_to_offers"].includes(mode))return;
+    if(assignmentUI.mode!==mode)invalidateAssignmentPreview();
     assignmentUI.mode=mode;assignmentMessage("");
     const single=mode==="lead_to_offers";
     document.querySelectorAll("[data-assign-mode]").forEach(button=>
@@ -942,6 +965,8 @@
   async function reviewAssignments(){
     if(assignmentUI.loading)return;
     const payload=assignmentSelectionPayload();
+    const signature=assignmentSignature();
+    const revision=assignmentUI.selectionRevision;
     const selected=payload.user_ids||payload.offer_ids;
     if(!selected?.length || (payload.mode==="offer_to_leads"?!payload.offer_id:!payload.user_id)){
       assignmentMessage("Сначала выберите основной оффер или лида и участников назначения.",true);return;
@@ -949,7 +974,12 @@
     assignmentUI.loading=true;updateAssignmentSummary();assignmentMessage("");
     try{
       const result=await api("/admin/mvp/bulk-assignment",{...payload,preview:true});
+      if(revision!==assignmentUI.selectionRevision||signature!==assignmentSignature()){
+        assignmentMessage("Выбор изменился во время проверки. Повторите предварительный расчёт.",true);
+        return;
+      }
       assignmentUI.previewPayload=payload;
+      assignmentUI.previewSignature=signature;
       const dialog=$("admin-bulk-confirm");
       $("admin-bulk-summary").textContent=payload.mode==="offer_to_leads"
         ?"Один оффер для "+result.requested+" участников."
@@ -967,10 +997,16 @@
   }
   async function commitAssignments(){
     if(assignmentUI.loading || !assignmentUI.previewPayload)return;
+    if(!$("admin-bulk-confirm").open||
+      assignmentUI.previewSignature!==assignmentSignature()){
+      invalidateAssignmentPreview();
+      assignmentMessage("Выбор изменился. Проверьте назначения заново перед сохранением.",true);
+      return;
+    }
     assignmentUI.loading=true;$("admin-bulk-commit").disabled=true;
     try{
       const result=await api("/admin/mvp/bulk-assignment",assignmentUI.previewPayload);
-      $("admin-bulk-confirm").close();assignmentUI.previewPayload=null;
+      $("admin-bulk-confirm").close();invalidateAssignmentPreview();
       assignmentUI.chosenUsers.clear();assignmentUI.chosenOffers.clear();
       assignmentMessage("Добавлено: "+result.created+". Уже было назначено: "+result.already_assigned+".");
       notice("Ручные назначения сохранены: "+result.created);
@@ -1291,7 +1327,10 @@
   document.querySelectorAll("[data-assign-mode]").forEach(button=>
     button.addEventListener("click",()=>changeAssignmentMode(button.dataset.assignMode)));
   $("admin-assignment-offer").addEventListener("change",event=>{
-    if(assignmentUI.offerId!==event.target.value)assignmentUI.chosenUsers.clear();
+    if(assignmentUI.offerId!==event.target.value){
+      invalidateAssignmentPreview();
+      assignmentUI.chosenUsers.clear();
+    }
     assignmentUI.offerId=event.target.value;assignmentMessage("");updateAssignmentSummary();
     renderAssignmentPeople();
   });
@@ -1304,7 +1343,18 @@
   $("admin-assignment-role-filter").addEventListener("change",()=>loadAssignmentPeople(1));
   $("admin-assignment-offer-search").addEventListener("input",()=>renderAssignmentCatalog());
   $("admin-assignment-category-filter").addEventListener("change",()=>renderAssignmentCatalog());
+  $("admin-assignment-reset-filters").addEventListener("click",()=>{
+    clearTimeout(assignmentSearchDelay);
+    $("admin-assignment-search").value="";
+    $("admin-assignment-role-filter").value="all";
+    $("admin-assignment-offer-search").value="";
+    $("admin-assignment-category-filter").value="";
+    renderAssignmentCatalog();
+    loadAssignmentPeople(1);
+    assignmentMessage("Фильтры сброшены. Выбранные назначения сохранены.");
+  });
   $("admin-assignment-select-all").addEventListener("click",()=>{
+    invalidateAssignmentPreview();
     if(assignmentUI.mode==="offer_to_leads"){
       const next=new Map(assignmentUI.chosenUsers);
       for(const person of assignmentUI.people)next.set(Number(person.id),person);
@@ -1319,6 +1369,7 @@
     assignmentMessage("");updateAssignmentSummary();
   });
   $("admin-assignment-clear").addEventListener("click",()=>{
+    invalidateAssignmentPreview();
     if(assignmentUI.mode==="offer_to_leads"){
       assignmentUI.chosenUsers.clear();renderAssignmentPeople();
     }else{
@@ -1328,7 +1379,9 @@
   });
   $("admin-assignment-review").addEventListener("click",reviewAssignments);
   $("admin-bulk-cancel").addEventListener("click",()=>$("admin-bulk-confirm").close());
-  $("admin-bulk-confirm").addEventListener("close",()=>{assignmentUI.previewPayload=null;});
+  $("admin-bulk-confirm").addEventListener("close",()=>{
+    assignmentUI.previewPayload=null;assignmentUI.previewSignature=null;
+  });
   $("admin-bulk-commit").addEventListener("click",commitAssignments);
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   $("admin-action-refresh").addEventListener("click",()=>{

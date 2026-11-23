@@ -397,3 +397,78 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                         page.close()
             finally:
                 browser.close()
+
+    def test_bulk_preview_expires_after_selection_change_and_filters_reset(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                for width in (320,390,1440):
+                    with self.subTest(width=width):
+                        page=browser.new_page(viewport={'width':width,'height':844})
+                        errors=[]
+                        page.on('pageerror',lambda e:errors.append(str(e)))
+                        page.add_init_script(BOOTSTRAP)
+                        page.add_init_script("""(() => {
+                          const original=window.fetch;
+                          window.fetch=(url,opts)=>{
+                            if(String(url).endsWith('/admin/mvp/bulk-assignment') &&
+                               JSON.parse(opts.body).preview){
+                              return new Promise(resolve=>setTimeout(
+                                ()=>resolve(original(url,opts)),450));
+                            }
+                            return original(url,opts);
+                          };
+                        })()""")
+                        page.goto(self.base+'/partners/admin/#tgWebAppData=visual-fixture&role=owner&stage4=1')
+                        page.locator('[data-section="assignments"]').click()
+                        users=page.locator('#admin-assignment-users input[type="checkbox"]')
+                        users.first.wait_for()
+                        page.locator('#admin-assignment-offer').select_option('manual_a')
+                        users.first.check()
+                        page.locator('#admin-assignment-review').click()
+                        users.nth(1).check()
+                        page.locator('#admin-assignment-result').get_by_text(
+                            'Выбор изменился во время проверки',exact=False).wait_for()
+                        self.assertFalse(page.locator('#admin-bulk-confirm').is_visible())
+                        self.assertEqual(len(page.evaluate('window.__assignmentCalls')),1)
+                        page.locator('#admin-assignment-review').click()
+                        dialog=page.locator('#admin-bulk-confirm')
+                        dialog.wait_for(state='visible')
+                        # Programmatic change mimics an external state update
+                        # while modal is open; stale confirmation must be refused.
+                        page.evaluate("""() => document.querySelector(
+                          '#admin-assignment-users input[type="checkbox"]').click()""")
+                        dialog.wait_for(state='hidden')
+                        self.assertFalse(page.locator('#admin-bulk-commit').is_visible())
+                        self.assertEqual(len(page.evaluate('window.__assignmentCalls')),2)
+                        page.locator('#admin-assignment-search').fill('second_participant')
+                        page.locator('#admin-assignment-role-filter').select_option('referrer')
+                        page.locator('#admin-assignment-reset-filters').click()
+                        self.assertEqual(page.locator('#admin-assignment-search').input_value(),'')
+                        self.assertEqual(page.locator('#admin-assignment-role-filter').input_value(),'all')
+                        self.assertIn('выбрано здесь:',page.locator('#admin-assignment-visible-count').inner_text())
+                        self.assertIn('Выбрано: 1',page.locator('#admin-assignment-selected-count').inner_text())
+                        page.locator('#admin-assignment-review').click()
+                        dialog.wait_for(state='visible')
+                        dialog.locator('#admin-bulk-commit').click()
+                        page.locator('#admin-assignment-result').get_by_text('Добавлено: 1',exact=False).wait_for()
+                        self.assertEqual(len(page.evaluate('window.__assignmentCalls')),4)
+                        self.assertFalse(page.evaluate(
+                            'document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'))
+                        self.assertFalse(errors,errors)
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_staff_cannot_open_bulk_assignment_workspace(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=self.open_admin(browser,390,'staff',stage4=True)
+                self.assertFalse(page.locator('[data-section="assignments"]').is_visible())
+                page.evaluate("""() => document.querySelector('[data-section="assignments"]').click()""")
+                self.assertTrue(page.locator('[data-workspace="assignments"]').is_hidden())
+                self.assertTrue(page.locator('[data-workspace="overview"]').is_visible())
+                page.close()
+            finally:
+                browser.close()

@@ -3998,6 +3998,14 @@ dialog select,dialog input { max-width:100%; }
 }
 .admin-control .admin-action-card .btn {min-height:44px;white-space:normal;line-height:1.4;}
 /* Stage 9: show in-flight actions without changing layout or re-enabling siblings. */
+.admin-control .admin-assignment-filter-actions {
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap;margin:0 0 12px;
+}
+.admin-control .admin-assignment-filter-actions .btn {min-height:44px;}
+.admin-control .admin-assignment-filter-actions [role="status"] {
+  font-size:12px;line-height:1.45;overflow-wrap:anywhere;
+}
 .participant-app button[aria-busy="true"],.admin-control button[aria-busy="true"] {
   cursor:progress;opacity:.73;
 }
