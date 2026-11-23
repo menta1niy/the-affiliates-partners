@@ -135,6 +135,70 @@ class Stage7BrowserTests(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_lead_stage_delayed_submit_is_not_sent_twice(self):
+        delayed = LEAD_BOOT.replace(
+            "if(data!==undefined)return Promise.resolve(new Response(JSON.stringify(data),{",
+            "if(data!==undefined)return new Promise(resolve=>setTimeout(()=>resolve(new Response(JSON.stringify(data),{"
+        ).replace(
+            "status:200,headers:{'Content-Type':'application/json'}}));",
+            "status:200,headers:{'Content-Type':'application/json'}})),route==='/mvp/submit'?500:0));"
+        )
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=browser.new_page(viewport={"width":320,"height":844})
+                page.add_init_script(delayed)
+                page.goto(self.base+"/partners/#tgWebAppData=stage9")
+                page.locator("#kpi-total").get_by_text("2",exact=True).wait_for()
+                page.locator('#participant-nav [data-view="offers"]').click()
+                page.locator(".participant-offers .offer-item").first.locator(".participant-offer-detail-button").click()
+                form=page.locator(".participant-offer-report-form")
+                form.locator('input[type="url"]').fill("https://example.test/proof")
+                form.locator('button[type="submit"]').click()
+                self.assertTrue(form.locator('button[type="submit"]').is_disabled())
+                self.assertEqual(form.locator('button[type="submit"]').get_attribute("aria-busy"),"true")
+                page.evaluate("""() => document.querySelector('.participant-offer-report-form')
+                  .dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))""")
+                page.locator("#participant-offer-dialog").wait_for(state="hidden")
+                self.assertEqual(len(page.evaluate("window.__stage7Calls")),1)
+                page.close()
+            finally:
+                browser.close()
+
+    def test_admin_review_delayed_action_disables_sibling_controls(self):
+        delayed=ADMIN_BOOT.replace(
+            "if(path==='/admin/mvp/review-event'){",
+            "if(path==='/admin/mvp/review-event'){window.__stage9ReviewCalls=(window.__stage9ReviewCalls||0)+1;"
+        ).replace(
+            "if(data!==undefined)return Promise.resolve(new Response(JSON.stringify(data),",
+            "if(data!==undefined)return new Promise(resolve=>setTimeout(()=>resolve(new Response(JSON.stringify(data),"
+        ).replace(
+            "{status:200,headers:{'Content-Type':'application/json'}}));",
+            "{status:200,headers:{'Content-Type':'application/json'}})),path==='/admin/mvp/review-event'?500:0));"
+        )
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=browser.new_page(viewport={"width":390,"height":844})
+                page.add_init_script(delayed)
+                page.goto(self.base+"/partners/admin/#tgWebAppData=stage9&role=owner")
+                page.locator("#admin-app").wait_for(state="visible")
+                page.locator('[data-section="people"]').click()
+                page.locator('[data-subtab="offer_reviews"]').click()
+                group=page.locator(".admin-offer-event-card .admin-offer-event-actions").first
+                group.wait_for(state="visible")
+                page.on("dialog",lambda dialog:dialog.accept())
+                group.get_by_role("button",name="Подтвердить").click()
+                self.assertTrue(group.get_by_role("button",name="Отклонить").is_disabled())
+                self.assertEqual(group.locator('button[aria-busy="true"]').count(),1)
+                page.evaluate("""() => document.querySelector('.admin-offer-event-actions button').click()""")
+                page.wait_for_function("window.__stage9ReviewCalls===1")
+                page.wait_for_function("!document.querySelector('.admin-offer-event-actions button')?.hasAttribute('aria-busy')")
+                self.assertEqual(page.evaluate("window.__stage9ReviewCalls"),1)
+                page.close()
+            finally:
+                browser.close()
+
     def test_admin_offer_review_tab_mobile(self):
         with sync_playwright() as pw:
             browser=pw.chromium.launch(headless=True)

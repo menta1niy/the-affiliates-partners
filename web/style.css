@@ -3997,6 +3997,13 @@ dialog select,dialog input { max-width:100%; }
   overflow-wrap:anywhere;
 }
 .admin-control .admin-action-card .btn {min-height:44px;white-space:normal;line-height:1.4;}
+/* Stage 9: show in-flight actions without changing layout or re-enabling siblings. */
+.participant-app button[aria-busy="true"],.admin-control button[aria-busy="true"] {
+  cursor:progress;opacity:.73;
+}
+.participant-app [role="status"],.admin-control [role="status"] {
+  overflow-wrap:anywhere;
+}
 @media(max-width:740px) {
   .admin-control .admin-priority {flex-direction:column;align-items:stretch;padding:16px;gap:13px;}
   .admin-control .admin-priority .btn {width:100%;}

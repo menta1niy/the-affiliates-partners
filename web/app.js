@@ -449,9 +449,20 @@
           const submit=document.createElement("button");submit.className="btn primary";submit.type="submit";submit.textContent="Сообщить о действии";
           const feedback=document.createElement("p");feedback.className="muted";feedback.setAttribute("role","status");
           form.append(selection,note,submit,feedback);
-          form.addEventListener("submit",async event=>{event.preventDefault();submit.disabled=true;taskNotice("");feedback.textContent="Отправляем отчёт…";
-            try{await api("/tasks/report",{offer_id:String(offer.id),action:selection.value,note:note.value});taskNotice("Отчёт принят. Подтверждение результата ожидается от CRM.");note.value="";await loadTasks();}
-            catch(e){feedback.textContent="Не удалось отправить отчёт: "+e.message;}finally{submit.disabled=false;}});
+          let sending=false;
+          form.addEventListener("submit",async event=>{
+            event.preventDefault();if(sending)return;
+            sending=true;submit.disabled=true;submit.setAttribute("aria-busy","true");
+            const original=submit.textContent;submit.textContent="Отправляем…";
+            taskNotice("");feedback.textContent="Отправляем отчёт…";
+            try{
+              await api("/tasks/report",{offer_id:String(offer.id),action:selection.value,note:note.value});
+              feedback.textContent="Отчёт принят. Ожидайте подтверждения CRM.";
+              taskNotice("Отчёт принят. Подтверждение результата ожидается от CRM.");note.value="";
+              await loadTasks();
+            }catch(e){feedback.textContent="Не удалось отправить отчёт: "+e.message;}
+            finally{submit.textContent=original;submit.disabled=false;submit.removeAttribute("aria-busy");sending=false;}
+          });
           item.append(form);
         }
         list.append(item);
@@ -682,11 +693,16 @@
       request.disabled=offer.latest_event?.review_status==="pending"&&offer.latest_event?.kind==="mfo_request";
       if(request.disabled)request.textContent="Запрос на рассмотрении";
       request.addEventListener("click",async()=>{
-        request.disabled=true;
+        if(request.disabled)return;
+        request.disabled=true;request.setAttribute("aria-busy","true");
+        request.textContent="Отправляем запрос…";
         try{
           await api("/mvp/submit",{kind:"mfo_request",offer_id:offer.id});
           closeOfferDialog();await loadManualOverview();
-        }catch(e){request.disabled=false;error(e.message);}
+        }catch(e){
+          request.disabled=false;request.textContent="Повторить запрос";
+          error("Не удалось отправить запрос МФО: "+e.message);
+        }finally{request.removeAttribute("aria-busy");}
       });
       offerDialogContent.append(request);
     }
@@ -717,8 +733,13 @@
       submit.textContent="Отправить этап на проверку";
       const message=document.createElement("p");message.className="participant-form-feedback";message.setAttribute("role","status");
       form.append(stageLabel,urlLabel,fileLabel,note,submit,message);
+      let sending=false;
       form.addEventListener("submit",async event=>{
-        event.preventDefault();submit.disabled=true;message.textContent="Отправляем…";
+        event.preventDefault();if(sending)return;
+        sending=true;submit.disabled=true;submit.setAttribute("aria-busy","true");
+        const original=submit.textContent;
+        submit.textContent="Проверяем и отправляем…";
+        message.textContent="Проверяем подтверждение и отправляем отчёт менеджеру…";
         try{
           const values={kind:"stage",offer_id:offer.id,lead_stage:stages.value,proof_url:url.value.trim()};
           if(file.files?.[0]){
@@ -738,8 +759,13 @@
           }
           if(!values.screenshot&&!values.proof_url)throw new Error("Добавьте ссылку или скриншот.");
           await api("/mvp/submit",values);
+          message.textContent="Отчёт отправлен. Ожидайте решения менеджера.";
           closeOfferDialog();await loadManualOverview();
-        }catch(e){message.textContent=e.message;submit.disabled=false;}
+        }catch(e){message.textContent="Не удалось отправить отчёт: "+e.message;}
+        finally{
+          sending=false;submit.disabled=false;submit.textContent=original;
+          submit.removeAttribute("aria-busy");
+        }
       });
       section.append(form);offerDialogContent.append(section);
     }

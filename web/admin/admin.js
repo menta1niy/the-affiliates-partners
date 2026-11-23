@@ -112,7 +112,28 @@
       make("strong",label||"Статус не указан","status-source-value"));
     return group;
   }
-  function action(label,fn,variant="ghost"){const button=make("button",label,"btn "+variant);button.type="button";button.addEventListener("click",async()=>{button.disabled=true;error("");try{await fn();}catch(e){error(e.message);}finally{button.disabled=false;}});return button;}
+  function action(label,fn,variant="ghost"){
+    const button=make("button",label,"btn "+variant);button.type="button";
+    let running=false;
+    button.addEventListener("click",async()=>{
+      if(running||button.disabled)return;
+      running=true;error("");notice("");
+      const group=button.closest(".admin-offer-event-actions,.admin-assignment-actions");
+      const siblings=group?[...group.querySelectorAll("button")]:[button];
+      const prior=siblings.map(element=>element.disabled);
+      siblings.forEach(element=>element.disabled=true);
+      button.setAttribute("aria-busy","true");
+      button.textContent="Обрабатываем…";
+      try{await fn();}catch(e){error(e.message);}
+      finally{
+        button.textContent=label;
+        button.removeAttribute("aria-busy");
+        siblings.forEach((element,index)=>element.disabled=prior[index]);
+        running=false;
+      }
+    });
+    return button;
+  }
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
   function adminLeadFinance(content,data){
