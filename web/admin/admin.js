@@ -1482,7 +1482,7 @@
   catalogButton.addEventListener("click",()=>{error("");openOfferCatalog().catch(e=>error(e.message));});
   $("admin-primary-action").addEventListener("click",()=>navigateTab("pending",true));
   async function start(){
-    try{tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");}catch{}
+    // Telegram viewport/fullscreen initialization is shared by telegram-layout.js.
     if(!initData()){show("no-access",true);$("no-access-message").textContent="Откройте панель через Telegram Mini App.";return;}
     try {
       const session=await api("/session");

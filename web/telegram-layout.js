@@ -6,6 +6,9 @@
   const root = document.documentElement;
   root.classList.add('tg-webapp');
   const inset = (value) => Math.max(0, Math.min(160, Number(value) || 0));
+  const optional = (method, ...args) => {
+    try { app[method]?.(...args); } catch { /* Optional Telegram API failed. */ }
+  };
   let doneButton;
   const editable = (element) => element?.matches?.('input:not([readonly]):not([disabled]), textarea:not([readonly]):not([disabled]), select:not([disabled]), [contenteditable="true"]');
   const ensureDoneButton = () => {
@@ -65,27 +68,19 @@
     }
   });
 
-  try {
-    app.ready();
-    app.expand();
-    app.disableVerticalSwipes?.();
-    app.setHeaderColor?.('#080909');
-    app.setBackgroundColor?.('#080909');
-    app.setBottomBarColor?.('#080909');
-    app.onEvent?.('safeAreaChanged', updateInsets);
-    app.onEvent?.('contentSafeAreaChanged', updateInsets);
-    app.onEvent?.('fullscreenChanged', updateInsets);
-    app.onEvent?.('fullscreenFailed', updateInsets);
-    updateInsets();
-    // expand() only expands Telegram's bottom sheet. The fullscreen request
-    // removes the persistent sheet header so the Mini App looks native.
-    // Telegram may reject it on older clients; keep the normal layout as a
-    // fallback, and apply content safe-area padding on fullscreenChanged.
-    if (typeof app.requestFullscreen === 'function' && !app.isFullscreen) {
-      try { app.requestFullscreen(); } catch { updateInsets(); }
-    }
-  } catch {
-    // Older Telegram versions still use expand() and the CSS safe-area fallback.
-    updateInsets();
+  optional('ready');
+  optional('expand');
+  optional('disableVerticalSwipes');
+  optional('setHeaderColor', '#080909');
+  optional('setBackgroundColor', '#080909');
+  optional('setBottomBarColor', '#080909');
+  for (const event of ['safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged', 'fullscreenFailed']) {
+    optional('onEvent', event, updateInsets);
+  }
+  updateInsets();
+  // expand() resizes the bottom sheet; fullscreen removes the sheet header.
+  // Failure is non-fatal and preserves ordinary CSS safe-area fallbacks.
+  if (typeof app.requestFullscreen === 'function' && !app.isFullscreen) {
+    try { app.requestFullscreen(); } catch { updateInsets(); }
   }
 })();

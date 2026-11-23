@@ -1185,6 +1185,6 @@
   $("refresh").addEventListener("click",refresh);
   $("pending-refresh").addEventListener("click",refresh);
   $("rejected-refresh").addEventListener("click",refresh);
-  try {tg?.ready();tg?.expand();tg?.setHeaderColor?.("#080909");} catch {}
+  // Telegram viewport/fullscreen initialization is shared by telegram-layout.js.
   refresh();
 })();

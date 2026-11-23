@@ -262,7 +262,9 @@ class ResponsiveInteractionQA(unittest.TestCase):
                             for i in range(buttons.count()):
                                 item=buttons.nth(i)
                                 self.assertEqual(item.locator(".nav-icon").count(),1)
-                                self.assertFalse(item.locator(".nav-label").is_visible())
+                                # Stage 3 deliberately made participant mobile
+                                # labels visible; admin dock still uses icons only.
+                                self.assertEqual(item.locator(".nav-label").is_visible(),not admin)
                                 self.assertTrue(item.get_attribute("aria-label"))
                                 rect=item.bounding_box()
                                 self.assertGreaterEqual(rect["width"],44,rect)
@@ -409,6 +411,62 @@ class ResponsiveInteractionQA(unittest.TestCase):
                 self.assertGreaterEqual(result["top"],83,result)
                 self.assertGreaterEqual(result["bottom"],61,result)
                 page.close()
+            finally:
+                browser.close()
+
+    def test_fullscreen_request_survives_optional_telegram_api_failures(self):
+        with sync_playwright() as playwright:
+            browser=playwright.chromium.launch(headless=True)
+            try:
+                for admin in (False,True):
+                    for fullscreen_allowed in (False,True):
+                        with self.subTest(admin=admin,fullscreen_allowed=fullscreen_allowed):
+                            page=browser.new_page(viewport={"width":390,"height":844})
+                            page.route("https://telegram.org/js/telegram-web-app.js",
+                                lambda route:route.fulfill(status=200,content_type="application/javascript",body=""))
+                            mock="""(mode => {
+                              const events={};window.__tgEvents=events;
+                              window.__tgFullscreenRequests=0;
+                              window.Telegram={WebApp:{
+                                initData:'ui-fixture',isFullscreen:false,
+                                safeAreaInset:{top:48,right:9,bottom:26,left:9},
+                                contentSafeAreaInset:{top:56,right:13,bottom:34,left:13},
+                                ready(){},expand(){},
+                                disableVerticalSwipes(){throw Error('optional method failed');},
+                                setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},
+                                onEvent(name,callback){events[name]=callback;},
+                                requestFullscreen(){
+                                  ++window.__tgFullscreenRequests;
+                                  if(mode==='denied')throw Error('fullscreen unavailable');
+                                  this.isFullscreen=true;
+                                  events.fullscreenChanged?.();
+                                },
+                                BackButton:{show(){},hide(){},onClick(){}}
+                              }};
+                            })('%s')""" % ("allowed" if fullscreen_allowed else "denied")
+                            page.add_init_script(mock)
+                            page.add_init_script(BOOTSTRAP if admin else FIXTURE)
+                            path="/partners/admin/" if admin else "/partners/"
+                            page.goto(self.base+path+"#tgWebAppData=ui-fixture&state=active&role=owner")
+                            page.locator("#admin-app" if admin else "#account").wait_for(state="visible")
+                            result=page.evaluate("""() => ({
+                              requests:window.__tgFullscreenRequests,
+                              fullscreen:document.documentElement.classList.contains('tg-fullscreen'),
+                              events:Object.keys(window.__tgEvents),
+                              top:parseFloat(getComputedStyle(document.querySelector('.shell')).paddingTop)
+                            })""")
+                            self.assertEqual(result["requests"],1,result)
+                            self.assertEqual(result["fullscreen"],fullscreen_allowed,result)
+                            for event in ("safeAreaChanged","contentSafeAreaChanged","fullscreenChanged","fullscreenFailed"):
+                                self.assertIn(event,result["events"])
+                            self.assertGreaterEqual(result["top"],56,result)
+                            change=page.evaluate("""() => {
+                              window.Telegram.WebApp.contentSafeAreaInset.top=91;
+                              window.__tgEvents.contentSafeAreaChanged();
+                              return parseFloat(getComputedStyle(document.querySelector('.shell')).paddingTop);
+                            }""")
+                            self.assertGreaterEqual(change,91)
+                            page.close()
             finally:
                 browser.close()
 
