@@ -806,7 +806,7 @@
     }
     const list=document.createElement("div");list.className="offer-list";
     for(const offer of offers){
-      const item=document.createElement("article");item.className="offer-item";
+      const item=document.createElement("article");item.className="offer-item offer-editorial-dark";
       attachOfferLogo(item,offer);
       const top=document.createElement("div");top.className="participant-offer-top";
       const heading=document.createElement("div");heading.className="participant-offer-heading";
@@ -820,12 +820,18 @@
       const summary=document.createElement("div");summary.className="participant-offer-summary";
       const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
       const target=offerDetail("ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action||"Уточните условия","participant-offer-target");
-      summary.append(payment,target);
+      const main=document.createElement("div");main.className="participant-offer-editorial-main";
+      main.append(top,target);
+      summary.append(main,payment);
       const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
       button.textContent=offerCardAction(offer);
       button.setAttribute("aria-label",button.textContent.replace(" →","")+": "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
-      item.append(top,summary);
+      const footer=document.createElement("div");footer.className="participant-offer-editorial-footer";
+      footer.append(document.createElement("span"));
+      footer.firstChild.className="participant-offer-editorial-note";
+      footer.firstChild.textContent="Условия и подтверждение — внутри оффера";
+      item.append(summary);
       if(offer.latest_event){
         const feedback=document.createElement("p");feedback.className="participant-offer-event-feedback";
         feedback.append(statusMark("review",offer.latest_event.review_status,
@@ -838,7 +844,7 @@
         const explanation=document.createElement("small");explanation.textContent=unavailableReason(offer);
         restriction.append(pill,explanation);item.append(restriction);
       }
-      item.append(button);list.append(item);
+      footer.append(button);item.append(footer);list.append(item);
     }
     root.append(list);
   }
