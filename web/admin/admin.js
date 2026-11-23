@@ -707,18 +707,39 @@
       pendingFile=null;removeLogo=true;fileInput.value="";setPreview("");
     });
     async function encodeLogo(file){
-      const image=await createImageBitmap(file);
+      let image,cleanup=()=>{};
+      if(typeof createImageBitmap==="function"){
+        try{image=await createImageBitmap(file);cleanup=()=>image.close();}catch(_){/* Safari WebView fallback below */}
+      }
+      if(!image){
+        const url=URL.createObjectURL(file);
+        try{
+          image=await new Promise((resolve,reject)=>{
+            const element=new Image();element.onload=()=>resolve(element);
+            element.onerror=()=>reject(new Error("Не удалось прочитать изображение"));element.src=url;
+          });
+        }catch(err){URL.revokeObjectURL(url);throw err;}
+        cleanup=()=>URL.revokeObjectURL(url);
+      }
       try{
-        const scale=Math.min(1,960/Math.max(image.width,image.height));
+        const scale=Math.min(1,640/Math.max(image.width,image.height));
         const canvas=document.createElement("canvas");
         canvas.width=Math.max(1,Math.round(image.width*scale));
         canvas.height=Math.max(1,Math.round(image.height*scale));
         canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
-        const data=canvas.toDataURL("image/webp",.78);
-        if(!data.startsWith("data:image/webp;base64,")||data.length>1_350_000)
-          throw new Error("Логотип слишком большой после сжатия. Выберите другое изображение.");
+        let data="";
+        for(const quality of [.75,.55,.4]){
+          data=canvas.toDataURL("image/webp",quality);
+          if(!data.startsWith("data:image/webp;base64,"))
+            throw new Error("Telegram не поддерживает WebP-экспорт. Попробуйте другой браузер или загрузите логотип позже.");
+          if(data.length<=220_000)break;
+          canvas.width=Math.max(1,Math.round(canvas.width*.8));
+          canvas.height=Math.max(1,Math.round(canvas.height*.8));
+          canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
+        }
+        if(data.length>220_000)throw new Error("Не удалось достаточно сжать логотип. Выберите изображение меньшего размера.");
         return data;
-      }finally{image.close();}
+      }finally{cleanup();}
     }
     const stagesSection=make("fieldset",undefined,"admin-offer-stages");
     stagesSection.append(make("legend","Этапы для лида"));
@@ -803,7 +824,20 @@
           const row=make("div");row.append(make("span",key),make("strong",value));terms.append(row);
         }
         item.append(terms);
-        if(canEdit)item.append(action("Редактировать",()=>{loadEditor(offer);form.scrollIntoView({behavior:"smooth",block:"start"});}));
+        if(canEdit){
+          const controls=make("div",undefined,"admin-catalog-form-actions");
+          controls.append(action("Редактировать",()=>{loadEditor(offer);form.scrollIntoView({behavior:"smooth",block:"start"});}));
+          controls.append(action("Удалить",async()=>{
+            if(!window.confirm(`Удалить оффер «${offer.name}» из каталога? История участников и начислений сохранится.`))return;
+            try{
+              await api("/admin/mvp/offer/delete",{offer_id:offer.id});
+              if(editingId===offer.id)resetEditor();
+              await reload();if(state.section==="offers")await renderOffersView();
+              notice("Оффер удалён из каталога. История сохранена.");
+            }catch(err){error(err.message);}
+          }));
+          item.append(controls);
+        }
         list.append(item);
       }
       return offers;

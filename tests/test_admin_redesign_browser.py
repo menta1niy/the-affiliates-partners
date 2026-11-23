@@ -85,6 +85,10 @@ BOOTSTRAP = r"""(() => {
       window.__lastOfferPayload=JSON.parse(opts.body);
       data={offer_id:'manual_12345678901234567890'};
     }
+    if(path==='/admin/mvp/offer/delete') {
+      window.__lastDeletePayload=JSON.parse(opts.body);
+      data={deleted:true,offer_id:window.__lastDeletePayload.offer_id};
+    }
     if(path==='/admin/participant') data={user:people[0],
       manual:{statistics:{total:1,in_progress:0,completed:0},offers:[sampleOffer]},audit:[]};
     if(data!==undefined)return Promise.resolve(new Response(JSON.stringify(data),
@@ -344,9 +348,29 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                 payload=page.evaluate('window.__lastOfferPayload')
                 self.assertEqual(payload['lead_stages'],['application_sent','loan_issued'])
                 self.assertTrue(payload['logo_data'].startswith('data:image/webp;base64,'))
+                self.assertLessEqual(len(payload['logo_data']),220_000)
                 self.assertNotIn('age_min',payload)
                 self.assertNotIn('auto_assign',payload)
                 page.close()
+            finally:
+                browser.close()
+
+    def test_catalog_delete_requires_confirmation_and_calls_safe_endpoint(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=self.open_admin(browser,390)
+                page.locator('[data-section="offers"]').click()
+                page.get_by_role('button',name='Управлять каталогом').click()
+                dialog=page.locator('#mvp-catalog-dialog')
+                dialog.get_by_role('button',name='Удалить').first.wait_for()
+                page.once('dialog',lambda d:d.dismiss())
+                dialog.get_by_role('button',name='Удалить').first.click()
+                self.assertIsNone(page.evaluate('window.__lastDeletePayload'))
+                page.once('dialog',lambda d:d.accept())
+                dialog.get_by_role('button',name='Удалить').first.click()
+                page.wait_for_function('Boolean(window.__lastDeletePayload)')
+                self.assertEqual(page.evaluate('window.__lastDeletePayload.offer_id'),'manual_a')
             finally:
                 browser.close()
 

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS manual_offers (
   created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
 );
 ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS logo_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS deleted_at BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS lead_stages TEXT NOT NULL
   DEFAULT '["application_sent","meeting_scheduled","product_received"]';
 CREATE TABLE IF NOT EXISTS offer_logos (

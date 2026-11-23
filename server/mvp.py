@@ -111,6 +111,8 @@ def schema(conn):
     if "lead_stages" not in existing:
         conn.execute("""ALTER TABLE manual_offers ADD COLUMN lead_stages TEXT NOT NULL
                         DEFAULT '["application_sent","meeting_scheduled","product_received"]'""")
+    if "deleted_at" not in existing:
+        conn.execute("ALTER TABLE manual_offers ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS offer_logos (
         logo_hash TEXT PRIMARY KEY, image_data BLOB NOT NULL,
         created_at INTEGER NOT NULL)""")
@@ -172,7 +174,7 @@ def catalog(actor, owner_id):
     with db.transaction() as conn:
         _admin(conn, actor, owner_id)
         schema(conn)
-        rows = conn.execute("SELECT * FROM manual_offers ORDER BY created_at DESC,id DESC LIMIT 300").fetchall()
+        rows = conn.execute("SELECT * FROM manual_offers WHERE deleted_at=0 ORDER BY created_at DESC,id DESC LIMIT 300").fetchall()
         return {"offers": [_offer(row) for row in rows]}
 
 
@@ -207,7 +209,7 @@ def save_offer(actor, owner_id, data):
         schema(conn)
         previous = None
         if offer_id:
-            previous = conn.execute("SELECT logo_hash FROM manual_offers WHERE id=?", (offer_id,)).fetchone()
+            previous = conn.execute("SELECT logo_hash FROM manual_offers WHERE id=? AND deleted_at=0", (offer_id,)).fetchone()
             if not previous:
                 raise db.Problem(404, "Оффер не найден")
         logo_hash = "" if remove_logo else previous["logo_hash"] if previous else ""
@@ -224,6 +226,26 @@ def save_offer(actor, owner_id, data):
                          (offer_id, name, category, target_action, payout, hold, instructions, link, int(active), logo_hash, lead_stages, now, now))
         db.audit(conn, actor, "manual_offer_save", None, offer_id)
         return {"offer_id": offer_id}
+
+
+def delete_offer(actor, owner_id, data):
+    """Hide an offer from the catalogue without deleting assignments or ledger references."""
+    offer_id = data.get("offer_id")
+    if not isinstance(offer_id, str) or not OFFER_ID.fullmatch(offer_id):
+        raise db.Problem(400, "Некорректный оффер")
+    db.initialize()
+    with db.transaction() as conn:
+        staff = _admin(conn, actor, owner_id)
+        if staff["role"] != "owner":
+            raise db.Problem(403, "Удалять офферы может только владелец")
+        schema(conn)
+        offer = conn.execute("SELECT id FROM manual_offers WHERE id=? AND deleted_at=0", (offer_id,)).fetchone()
+        if not offer:
+            raise db.Problem(404, "Оффер не найден")
+        conn.execute("UPDATE manual_offers SET active=0,deleted_at=?,updated_at=? WHERE id=?",
+                     (int(time.time()), int(time.time()), offer_id))
+        db.audit(conn, actor, "manual_offer_delete", None, offer_id)
+        return {"deleted": True, "offer_id": offer_id}
 
 
 def _participant(conn, staff, user_id):
@@ -254,7 +276,7 @@ def assignment(actor, owner_id, data):
         target = _participant(conn, staff, user_id)
         if target["status"] != "active":
             raise db.Problem(409, "Сначала одобрите участника")
-        offer = conn.execute("SELECT active FROM manual_offers WHERE id=?", (offer_id,)).fetchone()
+        offer = conn.execute("SELECT active FROM manual_offers WHERE id=? AND deleted_at=0", (offer_id,)).fetchone()
         if not offer:
             raise db.Problem(404, "Оффер не найден")
         if enabled and not offer["active"]:
@@ -346,7 +368,7 @@ def bulk_assignment(actor, owner_id, data):
             if target["status"] != "active":
                 raise db.Problem(409, "Сначала одобрите всех выбранных участников")
         for offer_id in offer_ids:
-            offer = conn.execute("SELECT active FROM manual_offers WHERE id=?", (offer_id,)).fetchone()
+            offer = conn.execute("SELECT active FROM manual_offers WHERE id=? AND deleted_at=0", (offer_id,)).fetchone()
             if not offer:
                 raise db.Problem(404, "Оффер не найден")
             if not offer["active"]:

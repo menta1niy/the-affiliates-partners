@@ -74,7 +74,7 @@ class Handler(BaseHTTPRequestHandler):
         routes = {"/api/session", "/api/register", "/api/invitations/referral", "/api/invitations/revoke", "/api/admin/invitations", "/api/admin/invitations/blogger",
                   "/api/admin/dashboard", "/api/admin/users", "/api/admin/participant", "/api/admin/decision", "/api/admin/assign", "/api/admin/audit", "/api/admin/attribution",
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
-                  "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/assignment",
+                  "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/offer/delete", "/api/admin/mvp/assignment",
                   "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
                   "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding",
                   "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
@@ -209,6 +209,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = mvp.catalog(user["id"], owner)
             elif route == "/api/admin/mvp/offer":
                 result = mvp.save_offer(user["id"], owner, body)
+            elif route == "/api/admin/mvp/offer/delete":
+                result = mvp.delete_offer(user["id"], owner, body)
             elif route == "/api/admin/mvp/assignment":
                 result = mvp.assignment(user["id"], owner, body)
             elif route == "/api/admin/mvp/assignment-candidates":

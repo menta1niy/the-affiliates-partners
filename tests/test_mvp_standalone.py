@@ -144,6 +144,30 @@ class StandaloneMvpTests(HttpHarness):
         current=next(item for item in response["offers"] if item["id"]==offer)
         self.assertEqual(current["name"],"Карта Test")
 
+    def test_delete_offer_hides_catalog_but_preserves_assignment_and_financial_history(self):
+        self.register_open_user(ALICE)
+        offer = self.create_offer()
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,
+            user_id=ALICE,offer_id=offer,stage='completed')[0],200)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',ALICE,offer_id=offer)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',OWNER,offer_id='bad')[0],400)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',OWNER,offer_id=offer),
+                         (200,{'deleted':True,'offer_id':offer}))
+        self.assertNotIn(offer,[item['id'] for item in self.as_user('/api/admin/mvp/catalog',OWNER)[1]['offers']])
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',OWNER,offer_id=offer)[0],404)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer',OWNER,offer_id=offer,
+            name='Reopen',category='Card',target_action='Do',payout_rub=1,hold_days=0)[0],404)
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment',OWNER,
+            user_id=ALICE,offer_id=offer)[0],404)
+        self.assertEqual(self.as_user('/api/mvp/overview',ALICE)[1]['offers'],[])
+        history=self.as_user('/api/admin/participant',OWNER,user_id=ALICE)[1]['manual']['offers']
+        self.assertEqual(len(history),1)
+        self.assertEqual(history[0]['id'],offer)
+        with db.transaction() as conn:
+            row=conn.execute('SELECT active,deleted_at FROM manual_offers WHERE id=?',(offer,)).fetchone()
+            self.assertEqual(row['active'],0)
+            self.assertGreater(row['deleted_at'],0)
+
     def test_sqlite_legacy_catalog_columns_are_migrated_in_place(self):
         from server import mvp
         db.initialize()

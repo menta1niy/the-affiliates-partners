@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS manual_offers (
   target_action TEXT NOT NULL, payout_rub INTEGER NOT NULL,
   hold_days INTEGER NOT NULL, instructions TEXT NOT NULL DEFAULT '',
   referral_url TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
-  logo_hash TEXT NOT NULL DEFAULT '',
+  logo_hash TEXT NOT NULL DEFAULT '', deleted_at BIGINT NOT NULL DEFAULT 0,
   lead_stages TEXT NOT NULL DEFAULT '["application_sent","meeting_scheduled","product_received"]',
   created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL
 );
@@ -355,6 +355,7 @@ def initialize(url):
         conn.execute("ALTER TABLE invitations ADD COLUMN IF NOT EXISTS candidate_label TEXT NOT NULL DEFAULT ''")
         conn.execute("ALTER TABLE invitations ADD COLUMN IF NOT EXISTS blogger_uuid TEXT")
         conn.execute("ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS logo_hash TEXT NOT NULL DEFAULT ''")
+        conn.execute("ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS deleted_at BIGINT NOT NULL DEFAULT 0")
         conn.execute("""ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS lead_stages TEXT NOT NULL
                         DEFAULT '["application_sent","meeting_scheduled","product_received"]'""")
         # Replace only the two known legacy domain checks, preserving all other constraints.
