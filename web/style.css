@@ -3847,3 +3847,19 @@ dialog select,dialog input { max-width:100%; }
   .participant-app .participant-finance-request .btn {min-height:48px;}
   .participant-app .participant-finance-history h3 {margin-top:9px;}
 }
+
+/* Stage 3/12: four readable participant tabs, without changing the admin dock. */
+@media (max-width:740px) {
+  .participant-app { --dock-action-width:66px; }
+  .participant-app #participant-nav a {
+    flex-direction:column;gap:2px;
+    font-size:9px;line-height:1.15;
+  }
+  .participant-app #participant-nav .nav-icon {
+    width:19px;height:19px;flex:0 0 19px;
+  }
+  .participant-app #participant-nav .nav-label {
+    display:block;font-size:9px;line-height:1.15;
+    font-weight:650;letter-spacing:-.02em;white-space:nowrap;
+  }
+}

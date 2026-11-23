@@ -23,6 +23,11 @@ TELEGRAM_MOCK = r"""(() => {
     setHeaderColor(){},setBackgroundColor(){},setBottomBarColor(){},
     onEvent(event,fn){events[event]=fn;},
     requestFullscreen(){},
+    BackButton:{
+      show(){window.__tgBackShown=true;},
+      hide(){window.__tgBackShown=false;},
+      onClick(handler){window.__tgBackClick=handler;}
+    },
   }};
 })()"""
 
@@ -299,6 +304,50 @@ class ResponsiveInteractionQA(unittest.TestCase):
                         self.assertTrue(page.locator("#participant-offers-view").is_visible())
                         nav.locator('[data-view="home"]').click()
                         self.assertTrue(page.locator("#participant-home").is_visible())
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_participant_four_labeled_tabs_and_telegram_back(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for width in (320, 390, 430, 1440):
+                    with self.subTest(width=width):
+                        page = self.open_page(browser, admin=False, width=width)
+                        nav = page.locator("#participant-nav")
+                        self.assertEqual(nav.locator("a[data-view]").count(), 4)
+                        expected = ["Главная", "Офферы", "Активность", "Профиль"]
+                        self.assertEqual(nav.locator(".nav-label").all_inner_texts(), expected)
+                        for label in nav.locator(".nav-label").all():
+                            self.assertTrue(label.is_visible())
+                        self.assertEqual(page.evaluate("history.state.participantNavDepth"), 0)
+                        self.assertFalse(page.evaluate("window.__tgBackShown"))
+                        for index,view in enumerate(("offers","statistics","profile"),start=1):
+                            nav.locator(f'[data-view="{view}"]').click()
+                            self.assertEqual(page.evaluate("history.state.participantNavDepth"),index)
+                            self.assertEqual(page.locator("#participant-nav [aria-current='page']").count(),1)
+                            self.assertTrue(page.locator(
+                                {"offers":"#participant-offers-view",
+                                 "statistics":"#participant-statistics-view",
+                                 "profile":"#participant-profile-view"}[view]).is_visible())
+                            self.assertTrue(page.evaluate("window.__tgBackShown"))
+                        self.assertEqual(page.title(),"The Affiliates — Профиль")
+                        self.assertTrue(page.locator("#participant-statistics-view").is_hidden())
+                        page.evaluate("window.__tgBackClick()")
+                        page.locator("#participant-statistics-view").wait_for(state="visible")
+                        self.assertEqual(page.title(),"The Affiliates — Активность")
+                        page.evaluate("window.__tgBackClick()")
+                        page.locator("#participant-offers-view").wait_for(state="visible")
+                        page.evaluate("window.__tgBackClick()")
+                        page.locator("#participant-home").wait_for(state="visible")
+                        self.assertFalse(page.evaluate("window.__tgBackShown"))
+                        self.assertEqual(page.evaluate("history.state.participantNavDepth"),0)
+                        sizes = page.evaluate("""() => ({
+                          scroll: document.documentElement.scrollWidth,
+                          available: document.documentElement.clientWidth
+                        })""")
+                        self.assertLessEqual(sizes["scroll"],sizes["available"]+1)
                         page.close()
             finally:
                 browser.close()

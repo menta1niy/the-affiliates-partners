@@ -174,9 +174,18 @@
   let participantTabsEnabled = false;
   let participantView = "home";
   const participantViews = {home:"participant-home",offers:"participant-offers-view",statistics:"participant-statistics-view",profile:"participant-profile-view"};
+  function participantNavState(){
+    const state=history.state;
+    return state && Object.hasOwn(participantViews,state.participantView) ? state : null;
+  }
   function setParticipantView(view, addHistory = false) {
     if (!participantTabsEnabled || !Object.hasOwn(participantViews, view)) return;
-    if (addHistory && view !== participantView) history.pushState({...history.state,participantView:view},"",location.href);
+    if (addHistory && view !== participantView){
+      const state=participantNavState();
+      const depth=Number.isSafeInteger(state?.participantNavDepth) && state.participantNavDepth>=0
+        ?state.participantNavDepth:0;
+      history.pushState({...history.state,participantView:view,participantNavDepth:depth+1},"",location.href);
+    }
     participantView = view;
     for (const [name,id] of Object.entries(participantViews)) show(id,name===view);
     if(view==="statistics")loadStatistics();
@@ -187,7 +196,7 @@
     document.title={
       home:"The Affiliates — Главная",
       offers:"The Affiliates — Офферы",
-      statistics:"The Affiliates — Статистика",
+      statistics:"The Affiliates — Активность",
       profile:"The Affiliates — Профиль"
     }[view];
     try { if(view==="home") tg?.BackButton?.hide(); else tg?.BackButton?.show(); } catch {}
@@ -197,7 +206,11 @@
     participantTabsEnabled=enabled;
     show("participant-nav",enabled);
     show("participant-next-action",enabled);
-    if(enabled)setParticipantView(participantView);
+    if(enabled){
+      const saved=participantNavState();
+      if(!saved)history.replaceState({...history.state,participantView:"home",participantNavDepth:0},"",location.href);
+      setParticipantView(saved?.participantView||participantView);
+    }
     else {
       for(const id of Object.values(participantViews)) show(id,true);
       try {tg?.BackButton?.hide();} catch {}
@@ -209,7 +222,11 @@
     if(link.id==="participant-next-action" && homeSelectedOffer)openOfferDetail(homeSelectedOffer);
   }));
   addEventListener("popstate",event=>setParticipantView(event.state?.participantView||"home"));
-  try {tg?.BackButton?.onClick?.(()=>{if(participantTabsEnabled && participantView!=="home")history.back();});} catch {}
+  try {tg?.BackButton?.onClick?.(()=>{
+    if(!participantTabsEnabled||participantView==="home")return;
+    if((participantNavState()?.participantNavDepth||0)>0)history.back();
+    else setParticipantView("home",true);
+  });} catch {}
   function nextStep(title,description,buttonLabel="Посмотреть офферы →"){
     text("participant-next-title",title);
     text("participant-next-description",description);
