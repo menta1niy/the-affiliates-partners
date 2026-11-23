@@ -206,6 +206,7 @@
   document.querySelectorAll("[data-view],[data-go-view]").forEach(link=>link.addEventListener("click",event=>{
     if(!participantTabsEnabled)return;
     event.preventDefault();setParticipantView(link.dataset.view||link.dataset.goView,true);
+    if(link.id==="participant-next-action" && homeSelectedOffer)openOfferDetail(homeSelectedOffer);
   }));
   addEventListener("popstate",event=>setParticipantView(event.state?.participantView||"home"));
   try {tg?.BackButton?.onClick?.(()=>{if(participantTabsEnabled && participantView!=="home")history.back();});} catch {}
@@ -213,6 +214,56 @@
     text("participant-next-title",title);
     text("participant-next-description",description);
     text("participant-next-action",buttonLabel);
+  }
+  let homeSelectedOffer=null;
+  function homeOverviewReset(){
+    homeSelectedOffer=null;
+    show("participant-current-offer",false);
+    show("participant-home-activity",false);
+    $("participant-home-activity-list").replaceChildren();
+  }
+  function homeEventDate(timestamp){
+    const value=Number(timestamp);
+    return Number.isFinite(value)&&value>0
+      ?new Date(value*1000).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"})
+      :"Дата не указана";
+  }
+  function updateHomeOverview(offers){
+    offers=offers.filter(offer=>offer&&typeof offer==="object");
+    const prioritized=["in_progress","assigned","rejected","submitted"];
+    homeSelectedOffer=prioritized.map(stage=>offers.find(offer=>offer.stage===stage)).find(Boolean)||null;
+    const chosen=homeSelectedOffer;
+    show("participant-current-offer",Boolean(chosen));
+    if(chosen){
+      text("participant-current-offer-name",chosen.name||"Предложение");
+      text("participant-current-offer-status",stageLabel(chosen.stage));
+      if(unavailableReason(chosen)){
+        text("participant-next-description",unavailableReason(chosen));
+        text("participant-next-action","Посмотреть условия →");
+      }else{
+        text("participant-next-description",(chosen.name||"Предложение")+" · "+(manualStages[chosen.stage]||manualStages.assigned).next);
+        text("participant-next-action",chosen.stage==="submitted"?"Посмотреть статус →":"Открыть оффер →");
+      }
+    }
+    const activity=offers.filter(offer=>Number.isSafeInteger(Number(offer.status_updated_at))&&Number(offer.status_updated_at)>0&&Number(offer.status_updated_at)<8640000000000)
+      .sort((a,b)=>Number(b.status_updated_at)-Number(a.status_updated_at)).slice(0,3);
+    const list=$("participant-home-activity-list");list.replaceChildren();
+    if(!activity.length){
+      const empty=document.createElement("p");empty.className="muted";
+      empty.textContent=offers.length?"История изменений пока недоступна.":"Изменений пока нет — назначения появятся здесь.";
+      list.append(empty);
+    }
+    for(const offer of activity){
+      const entry=document.createElement("div");entry.className="participant-home-activity-item";
+      const details=document.createElement("div");
+      const name=document.createElement("strong");name.textContent=offer.name||"Предложение";
+      const status=document.createElement("span");status.textContent="Статус: "+stageLabel(offer.stage);
+      details.append(name,status);
+      const date=document.createElement("time");date.textContent=homeEventDate(offer.status_updated_at);
+      date.dateTime=new Date(Number(offer.status_updated_at)*1000).toISOString();
+      entry.append(details,date);list.append(entry);
+    }
+    show("participant-home-activity",true);
   }
   const actions={opened:"Открыл предложение",started:"Приступил к заданию",submitted:"Отправил заявку"};
   const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Получено",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
@@ -712,9 +763,11 @@
     else if(offers.some(offer=>offer?.stage==="assigned"))nextStep("Новые задания","Посмотрите условия перед началом.","Открыть →");
     else if(stages.submitted>0)nextStep("На проверке",stages.submitted+" ожидают решения администратора.","Посмотреть →");
     else nextStep("Всё обработано","Новые офферы появятся после назначения.","К офферам →");
+    updateHomeOverview(offers);
   }
   function resetParticipantKpis(){
     for(const id of ["kpi-total","kpi-in-progress","kpi-submitted","kpi-completed"])text(id,"—");
+    homeOverviewReset();
   }
   function offerDetail(label,value,className=""){
     const wrapper=document.createElement("div");

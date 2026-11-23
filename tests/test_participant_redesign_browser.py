@@ -78,6 +78,58 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
+    def test_home_current_offer_and_latest_status_changes(self):
+        data = (FIXTURE
+            .replace("stage:'assigned',", "stage:'assigned',status_updated_at:1763850000,")
+            .replace("stage:'in_progress',", "stage:'in_progress',status_updated_at:1763900000,")
+            .replace("stage:'submitted',", "stage:'submitted',status_updated_at:1763800000,")
+            .replace("stage:'completed',", "stage:'completed',status_updated_at:1763750000,"))
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for width in (320, 390, 1440):
+                    with self.subTest(width=width):
+                        page = browser.new_page(viewport={"width":width,"height":844})
+                        errors = []
+                        page.on("pageerror",lambda error: errors.append(str(error)))
+                        page.add_init_script(data)
+                        page.goto(self.base+"/partners/#tgWebAppData=ui-fixture&state=active")
+                        page.locator(".participant-home-activity-item").first.wait_for()
+                        self.assertEqual(page.locator(".participant-home-activity-item").count(),3)
+                        self.assertIn("Вторая карта",page.locator(".participant-home-activity-item").first.inner_text())
+                        self.assertEqual(page.locator("#participant-current-offer-name").inner_text(),"Вторая карта")
+                        self.assertIn("В работе",page.locator("#participant-current-offer-status").inner_text())
+                        self.assertFalse(page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"))
+                        page.locator("#participant-next-action").click()
+                        self.assertTrue(page.locator("#participant-offer-dialog").is_visible())
+                        self.assertTrue(page.locator("#participant-offers-view").is_visible())
+                        self.assertIn("Вторая карта",page.locator("#participant-offer-dialog").inner_text())
+                        self.assertFalse(errors,errors)
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_home_empty_and_failed_overview_do_not_invent_activity(self):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                for mode in ("empty","error-once"):
+                    with self.subTest(mode=mode):
+                        page = browser.new_page(viewport={"width":390,"height":844})
+                        page.add_init_script(FIXTURE)
+                        page.goto(self.base+f"/partners/#tgWebAppData=ui-fixture&state=active&overview={mode}")
+                        if mode=="empty":
+                            page.locator("#kpi-total").get_by_text("0",exact=True).wait_for()
+                            self.assertTrue(page.locator("#participant-home-activity").is_visible())
+                            self.assertIn("Изменений пока нет",page.locator("#participant-home-activity-list").inner_text())
+                        else:
+                            page.locator(".participant-offer-state-error").wait_for(state="attached")
+                            self.assertFalse(page.locator("#participant-home-activity").is_visible())
+                            self.assertFalse(page.locator("#participant-current-offer").is_visible())
+                        page.close()
+            finally:
+                browser.close()
+
     def test_active_cards_kpis_navigation_and_mobile_layout(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)

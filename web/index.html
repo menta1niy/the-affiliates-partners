@@ -160,6 +160,11 @@
           <div class="section-kicker">СЕЙЧАС</div>
           <h3 id="participant-next-title">Проверяем задания…</h3>
           <p id="participant-next-description">Здесь появится следующий шаг.</p>
+          <div id="participant-current-offer" class="participant-current-offer" hidden>
+            <span class="participant-home-label">ТЕКУЩИЙ ОФФЕР</span>
+            <strong id="participant-current-offer-name"></strong>
+            <span id="participant-current-offer-status"></span>
+          </div>
           <a class="btn primary" href="#offers" data-go-view="offers" id="participant-next-action">К офферам →</a>
         </section>
         <div class="participant-account-cards" id="participant-access-summary">
@@ -179,6 +184,12 @@
             <article class="metric"><span>ЗАВЕРШЕНО</span><strong id="kpi-completed">—</strong></article>
           </div>
           <details class="participant-stats-disclaimer"><summary>О статусах и выплатах</summary><p>Статусы обновляет администратор. «Завершено» не означает начисление или выплату банком.</p></details>
+        </section>
+        <section id="participant-home-activity" class="participant-home-activity panel" aria-labelledby="participant-home-activity-title" hidden>
+          <div class="section-kicker">ПОСЛЕДНИЕ ИЗМЕНЕНИЯ</div>
+          <h3 id="participant-home-activity-title">По вашим офферам</h3>
+          <div id="participant-home-activity-list" aria-live="polite"><p class="muted">Загружаем события…</p></div>
+          <a href="#offers" data-go-view="offers" class="participant-home-activity-link">Все офферы →</a>
         </section>
         </div>
 
