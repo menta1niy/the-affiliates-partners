@@ -4,6 +4,7 @@
   const tg = window.Telegram?.WebApp;
   const state = {users:[],pending:[],invites:[],tab:"pending",section:"overview",role:"",actorId:null,
     pages:{users:1,pending:1},requests:{users:0,pending:0,assignments:0}};
+  let actionCenterRequest=0;
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
@@ -373,10 +374,69 @@
     state.invites=Array.isArray(data.invites)?data.invites:[];
     const totals={total:counts.total ?? counts.users ?? counts.total_users ?? Object.values(counts).reduce((sum,value)=>sum+(Number(value)||0),0),pending:counts.pending,active:counts.active,blocked:counts.blocked};
     for(const key of ["total","pending","active","blocked"])$("count-"+key).textContent=number(totals[key]);
+    const pendingNumber=counts.pending;
+    $("admin-action-pending").textContent=pendingNumber==null?"—":number(pendingNumber);
+    $("admin-action-pending-description").textContent=pendingNumber==null?
+      "Количество заявок недоступно.":"Участники, ожидающие регистрации";
     renderTable($("pending-list"),pending,"pending");renderTable($("users-list"),users,"users");
     renderInvites();
   }
-  async function loadDashboard(){const data=await api("/admin/dashboard");renderDashboard(data);await Promise.all([loadUsersPage("pending"),loadUsersPage("users")]);}
+  function setActionCenterResult(kind,result){
+    const value=$("admin-action-"+kind);
+    const description=$("admin-action-"+kind+"-description");
+    if(result.status==="rejected"){
+      value.textContent="—";
+      description.textContent="Данные недоступны. Откройте список для повторной проверки.";
+      return;
+    }
+    const records=result.value;
+    if(!Array.isArray(records)){
+      value.textContent="—";
+      description.textContent="Ответ сервера не содержит списка.";
+      return;
+    }
+    value.textContent=records.length===100?"100+":number(records.length);
+    description.textContent=kind==="reviews"?
+      (records.length===100?"Не менее 100 отчётов ожидают проверки":"Отчётов ожидают решения менеджера"):
+      (records.length===100?"Не менее 100 заявок ожидают обработки":"На рассмотрении и подтверждены к оплате");
+  }
+  async function loadActionCenter(){
+    const request=++actionCenterRequest;
+    for(const kind of ["reviews","finance"]){
+      $("admin-action-"+kind).textContent="—";
+      $("admin-action-"+kind+"-description").textContent="Обновляем…";
+    }
+    const results=await Promise.allSettled([
+      api("/admin/mvp/events",{status:"pending"}).then(data=>data.events),
+      Promise.all([
+        api("/admin/finance/withdrawals",{status:"pending"}),
+        api("/admin/finance/withdrawals",{status:"confirmed"})
+      ]).then(([pending,confirmed])=>({
+        pending:pending.withdrawals,confirmed:confirmed.withdrawals
+      }))
+    ]);
+    if(request!==actionCenterRequest)return;
+    setActionCenterResult("reviews",results[0]);
+    const payments=results[1];
+    if(payments.status==="fulfilled"){
+      const groups=payments.value;
+      if(Array.isArray(groups.pending)&&Array.isArray(groups.confirmed)){
+        const combined=[...groups.pending,...groups.confirmed];
+        setActionCenterResult("finance",{status:"fulfilled",value:combined});
+        $("admin-action-finance").textContent=number(combined.length);
+        if(groups.pending.length===100||groups.confirmed.length===100){
+          $("admin-action-finance").textContent=number(combined.length)+"+";
+          $("admin-action-finance-description").textContent="Не менее "+number(combined.length)+" заявок в двух очередях";
+        }
+      }else setActionCenterResult("finance",{status:"fulfilled",value:null});
+    }else setActionCenterResult("finance",payments);
+  }
+  async function loadDashboard(){
+    const data=await api("/admin/dashboard");
+    renderDashboard(data);
+    await Promise.all([loadUsersPage("pending"),loadUsersPage("users")]);
+    await loadActionCenter();
+  }
   async function loadAudit(){
     const root=$("audit-list");root.replaceChildren();
     try {
@@ -1173,6 +1233,9 @@
   $("admin-bulk-confirm").addEventListener("close",()=>{assignmentUI.previewPayload=null;});
   $("admin-bulk-commit").addEventListener("click",commitAssignments);
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
+  $("admin-action-refresh").addEventListener("click",()=>{
+    loadDashboard().catch(e=>error(e.message));
+  });
   const catalogButton=$("mvp-catalog-anchor");
   catalogButton.id="mvp-catalog-open";
   catalogButton.addEventListener("click",()=>{error("");openOfferCatalog().catch(e=>error(e.message));});

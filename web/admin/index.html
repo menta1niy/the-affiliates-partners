@@ -100,6 +100,33 @@
             <button type="button" class="btn primary" data-go-section="people" data-go-subtab="pending">Рассмотреть заявки →</button>
             <button type="button" class="btn primary" data-go-section="assignments" data-owner-admin>Назначить офферы →</button>
           </div>
+          <section class="admin-action-center" aria-labelledby="admin-action-center-title">
+            <div class="admin-action-center-heading">
+              <div><div class="section-kicker">ТРЕБУЮТ ВНИМАНИЯ</div><h3 id="admin-action-center-title">Рабочие задачи</h3></div>
+              <button type="button" id="admin-action-refresh" class="btn ghost">Обновить задачи ↻</button>
+            </div>
+            <p class="admin-action-center-hint">Данные только в пределах ваших прав. Очереди проверок и выплат отображают до 100 последних записей каждого статуса.</p>
+            <div class="admin-action-center-grid">
+              <article class="admin-action-card" data-action-card="pending">
+                <span>РЕГИСТРАЦИИ</span>
+                <strong id="admin-action-pending">—</strong>
+                <p id="admin-action-pending-description">Загрузка данных…</p>
+                <button type="button" class="btn ghost" data-go-section="people" data-go-subtab="pending">Открыть заявки →</button>
+              </article>
+              <article class="admin-action-card" data-action-card="reviews">
+                <span>ПРОВЕРКА ОФФЕРОВ</span>
+                <strong id="admin-action-reviews">—</strong>
+                <p id="admin-action-reviews-description">Загрузка данных…</p>
+                <button type="button" class="btn ghost" data-go-section="people" data-go-subtab="offer_reviews">Открыть проверки →</button>
+              </article>
+              <article class="admin-action-card" data-action-card="finance">
+                <span>ЗАЯВКИ НА ВЫПЛАТУ</span>
+                <strong id="admin-action-finance">—</strong>
+                <p id="admin-action-finance-description">Загрузка данных…</p>
+                <button type="button" class="btn ghost" data-go-section="people" data-go-subtab="finance">Открыть выплаты →</button>
+              </article>
+            </div>
+          </section>
         </section>
         <section data-workspace="offers" class="admin-workspace" aria-label="Каталог офферов" hidden>
           <div class="admin-section-title">

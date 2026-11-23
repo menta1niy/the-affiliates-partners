@@ -52,6 +52,14 @@ BOOTSTRAP = r"""(() => {
       data={users:filtered,total:filtered.length,has_next:false};
     }
     if(path==='/admin/audit') data={events:[]};
+    if(path==='/admin/mvp/events') data={events:[
+      {id:'evt_1',review_status:'pending'},
+      {id:'evt_2',review_status:'pending'}]};
+    if(path==='/admin/finance/withdrawals'){
+      const status=JSON.parse(opts?.body||'{}').status;
+      data={withdrawals:status==='pending'?[{id:'wd_a',status:'pending'}]:
+        status==='confirmed'?[{id:'wd_b',status:'confirmed'}]:[]};
+    }
     if(path==='/admin/mvp/catalog') data={offers:stage4?stage4Offers:[sampleOffer]};
     if(path==='/admin/mvp/assignment-candidates'){
       const body=JSON.parse(opts?.body||'{}');
@@ -152,6 +160,34 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                             })''')
                             self.assertLessEqual(measured['scroll'],measured['viewport']+1,measured)
                             self.assertEqual(measured['tableDisplay'],'block')
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_overview_action_center_shows_real_queues_and_routes(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                for role,width in (('owner',1440),('admin',390),('staff',320)):
+                    with self.subTest(role=role,width=width):
+                        page=self.open_admin(browser,width,role)
+                        errors=[]
+                        page.on('pageerror',lambda e:errors.append(str(e)))
+                        page.locator('#admin-action-reviews').get_by_text('2',exact=True).wait_for()
+                        self.assertEqual(page.locator('#admin-action-pending').inner_text(),'1')
+                        self.assertEqual(page.locator('#admin-action-finance').inner_text(),'2')
+                        self.assertEqual(page.locator('.admin-action-card').count(),3)
+                        self.assertFalse(page.evaluate(
+                            'document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'))
+                        page.locator('[data-action-card="reviews"] button').click()
+                        self.assertTrue(page.locator('[data-panel="offer_reviews"]').is_visible())
+                        page.locator('[data-section="overview"]').click()
+                        page.locator('[data-action-card="finance"] button').click()
+                        self.assertTrue(page.locator('[data-panel="finance"]').is_visible())
+                        page.locator('[data-section="overview"]').click()
+                        page.locator('[data-action-card="pending"] button').click()
+                        self.assertTrue(page.locator('[data-panel="pending"]').is_visible())
+                        self.assertFalse(errors,errors)
                         page.close()
             finally:
                 browser.close()
