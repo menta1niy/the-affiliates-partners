@@ -825,7 +825,7 @@
       button.textContent=offerCardAction(offer);
       button.setAttribute("aria-label",button.textContent.replace(" →","")+": "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
-      item.append(top,summary,nextOfferAction(offer.stage));
+      item.append(top,summary);
       if(offer.latest_event){
         const feedback=document.createElement("p");feedback.className="participant-offer-event-feedback";
         feedback.append(statusMark("review",offer.latest_event.review_status,

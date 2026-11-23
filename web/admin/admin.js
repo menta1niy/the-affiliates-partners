@@ -49,6 +49,7 @@
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"На проверке",completed:"Завершено",rejected:"Отклонено"};
+  const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Продукт получен",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
   const leadStageOptions={
     application_sent:"Отправил заявку",meeting_scheduled:"Назначена встреча",
     product_received:"Продукт получен",account_opened:"Счёт открыт",loan_issued:"Займ получен"
@@ -86,11 +87,55 @@
     return result;
   }
   function show(id,value){$(id).hidden=!value;}
-  function error(message){$("admin-error").textContent=message;show("admin-error",!!message);}
-  function notice(message){$("admin-notice").textContent=message;show("admin-notice",!!message);}
+  const toastTimers=new Map();
+  function toast(id,message){
+    const element=$(id);if(!element)return;
+    const modal=[...document.querySelectorAll("dialog[open]")].at(-1);
+    (modal||document.body).append(element);
+    clearTimeout(toastTimers.get(id));
+    element.classList.remove("toast-visible");
+    element.textContent=message||"";
+    if(!message){element.hidden=true;return;}
+    element.hidden=false;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>element.classList.add("toast-visible")));
+    toastTimers.set(id,setTimeout(()=>{
+      element.classList.remove("toast-visible");
+      toastTimers.set(id,setTimeout(()=>{element.hidden=true;},380));
+    },message?4000:0));
+  }
+  function error(message){toast("admin-error",message);}
+  function notice(message){toast("admin-notice",message);}
   function number(value){return value!==null && value!==undefined && Number.isFinite(Number(value))?new Intl.NumberFormat("ru-RU").format(Number(value)):"—";}
   function personName(user){return [user.first_name,user.last_name].filter(Boolean).join(" ") || user.name || (user.username ? "@"+user.username : "Без имени");}
   function telegramName(username,id){return typeof username==="string" && username.trim()?"@"+username.trim().replace(/^@/,""):(id?"Username не указан":"—");}
+  const actionNames={manual_offer_save:"Оффер сохранён",manual_offer_delete:"Оффер удалён из каталога",
+    manual_assignment:"Назначение оффера изменено",assign:"Роль или менеджер изменены",
+    invite_referral:"Создано реферальное приглашение",invite_agency:"Создано приглашение",
+    invite_blogger:"Создано приглашение блогера",invite_revoke:"Приглашение отозвано",
+    register:"Участник зарегистрирован",mvp_registration:"Отправлена заявка на регистрацию",
+    decision_approve:"Регистрация одобрена",decision_reject:"Заявка отклонена",decision_block:"Участник заблокирован",
+    attribution_correction:"Источник участника исправлен",owner_bootstrap:"Владелец зарегистрирован",owner_restore:"Доступ владельца восстановлен"};
+  function auditTitle(event){return actionNames[event.action]||({offer:'Оффер',registration:'Регистрация'}[event.action]||"Системное действие");}
+  function auditDetails(event){
+    const raw=String(event.details||event.reason||"");
+    if(event.action==="assign"){
+      const role=raw.match(/(?:^|;)role=([^;]+)/)?.[1];
+      return role?"Новая роль: "+(roles[role]||role):"Изменены права доступа";
+    }
+    if(event.action==="manual_offer_save"||event.action==="manual_offer_delete")return "Изменение каталога предложений";
+    if(event.action?.startsWith("invite_"))return "Действие с приглашением";
+    if(event.action==="manual_assignment")return "Обновлено назначение и его статус";
+    if(event.action?.startsWith("decision_"))return raw||"Решение принято администратором";
+    if(/(?:telegram_id|offer_id|user_id|blogger_uuid|code_sha256|^manual_|^[0-9]{8,})/i.test(raw))return "Технические реквизиты скрыты; детали доступны в профильных разделах";
+    return raw.replace(/\b(?:None|null)\b/g,"не назначен").slice(0,240);
+  }
+  function auditDate(value){const seconds=Number(value);return Number.isFinite(seconds)&&seconds>0?new Date(seconds*1000).toLocaleString("ru-RU",{dateStyle:"medium",timeStyle:"short"}):"Дата неизвестна";}
+  function auditCard(event){
+    const item=make("article",undefined,"audit-entry audit-human-entry");
+    const top=make("div",undefined,"audit-human-heading");top.append(make("strong",auditTitle(event)),make("time",auditDate(event.created_at||event.timestamp)));
+    const people=make("p",undefined,"audit-human-people");people.textContent="Автор: "+(event.actor_name||"Участник без username")+(event.target_name?" · Участник: "+event.target_name:"");
+    item.append(top,people);const details=auditDetails(event);if(details)item.append(make("p",details,"audit-human-detail"));return item;
+  }
   function roleOf(user){return user.role || "lead";}
   function statusOf(user){return user.status || "pending";}
   function make(tag,content,className) {
@@ -149,13 +194,14 @@
     const add=(source,code,label,details,at,kind="event")=>{
       timeline.push({source,code,label,details:String(details||""),at:time(at),kind});
     };
-    const offerNames=new Map((data.manual?.offers||[]).map(offer=>[offer.id,offer.name]));
+    const offerNames=new Map([...(data.manual?.offers||[]),...(data.offers||[])].map(offer=>[offer.id||offer.offer_id,offer.name]).filter(([id,name])=>id&&name));
+    const offerLabel=id=>offerNames.get(id)||"Оффер (название не получено)";
     for(const offer of data.manual?.offers||[]){
       add("offer",offer.stage,manualStages[offer.stage]||"Неизвестная стадия",
-        offer.name||offer.id,offer.status_updated_at);
+        offer.name||"Оффер",offer.status_updated_at);
     }
     for(const event of data.offer_events||[]){
-      const offer=offerNames.get(event.offer_id)||event.offer_id;
+      const offer=offerLabel(event.offer_id);
       const subject=event.kind==="mfo_request"?"Запрос доступа МФО":"Отчёт по этапу";
       const decision=reviewLabels[event.review_status]||"Неизвестное решение";
       add("review",event.review_status,subject+": "+decision,
@@ -168,28 +214,28 @@
     }
     for(const report of data.reports||[]){
       add("crm","report","Отчёт участника для CRM",
-        "Оффер: "+String(report.offer_id||"—")+" · "+String(report.action||"—"),report.created_at);
+        offerLabel(report.offer_id)+" · отправлен отчёт",report.created_at);
     }
     for(const event of data.audit||[]){
-      add("audit",event.action,"Действие в системе: "+String(event.action||"—"),
-        String(event.details||""),event.created_at);
+      add("audit",event.action,auditTitle(event),
+        (event.actor_name?"Автор: "+event.actor_name+" · ":"")+auditDetails(event),event.created_at);
     }
     const crmAt=data.status_updated_at;
     for(const application of data.status?.applications||[]){
       add("crm",application.stage,"Стадия заявки по снимку CRM",
-        "Оффер: "+String(application.offer_id||"—")+" · "+String(application.stage||"—"),
+        offerLabel(application.offer_id)+" · "+String(applicationStageLabels[application.stage]||"Статус CRM обновлён"),
         crmAt,"snapshot");
     }
     for(const payout of data.status?.lead_payouts||[]){
       add("crm",payout.reversed?"reversed":payout.status,
         "Вознаграждение по снимку CRM",
-        "Оффер: "+String(payout.offer_id||"—")+" · статус CRM: "+String(payout.status||"—")+
+        offerLabel(payout.offer_id)+" · "+String(crmPayoutLabels[payout.status]||"Отметка CRM")+
         (payout.reversed?" · отменено":"")+" · сумма CRM: "+String(payout.amount??"—"),
         crmAt,"snapshot");
     }
     for(const accrual of data.finance?.accruals||[]){
       add("ledger","accrued","Подтверждённое начисление",
-        number(accrual.amount_rub)+" ₽ · оффер: "+String(offerNames.get(accrual.offer_id)||accrual.offer_id||"—"),
+        number(accrual.amount_rub)+" ₽ · "+offerLabel(accrual.offer_id),
         accrual.created_at);
     }
     for(const withdrawal of data.finance?.withdrawals||[]){
@@ -272,22 +318,24 @@
       statusBadge.dataset.status=person.status||"pending";
       profileHeader.append(identity,statusBadge);content.append(profileHeader);
       const meta=make("div",undefined,"admin-profile-meta");
-      [["Telegram",telegramName(person.username,person.id)],["Роль",roles[person.role]||person.role],["Состояние",statuses[person.status]||person.status],["Источник (сохранённый)",person.source],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)],["CRM Lead ID",data.crm_lead_id]].forEach(([key,value])=>detailLine(meta,key,value));
+      [["Username",telegramName(person.username,person.id)],["Внутренний номер",person.internal_id],["Роль",roles[person.role]||person.role],["Статус",statuses[person.status]||person.status],["Источник",person.source==="agency"?"Агентство":person.source==="referral"?"Реферал":"Не указан"],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)]].forEach(([key,value])=>detailLine(meta,key,value));
       content.append(meta);
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
         adminLeadFinance(content,data);
       }
       if(data.crm_lead_id){
+        const crmOfferNames=new Map((data.offers||[]).map(o=>[o.id||o.offer_id,o.name]).filter(([key,value])=>key&&value));
+        const crmOfferName=id=>crmOfferNames.get(id)||"Оффер CRM (название не получено)";
         detailRows(content,"Назначенные офферы CRM",data.offers,[["Оффер","name"],["Рекламодатель","advertiser"],["Действие","target_action"],["Вознаграждение участника","lead_reward"],["Условия","instructions"]]);
-        detailRows(content,"Отчёты участника",data.reports,[["Оффер","offer_id"],["Действие","action"],["Комментарий","note"],["Время","created_at"]]);
-        detailRows(content,"Стадии заявок CRM",data.status?.applications,[["Оффер","offer_id"],["Стадия","stage"]]);
+        detailRows(content,"Отчёты участника",(data.reports||[]).map(r=>({...r,offer_name:crmOfferName(r.offer_id),created_label:auditDate(r.created_at)})),[["Оффер","offer_name"],["Действие","action"],["Комментарий","note"],["Время","created_label"]]);
+        detailRows(content,"Стадии заявок CRM",(data.status?.applications||[]).map(r=>({...r,offer_name:crmOfferName(r.offer_id),stage_label:applicationStageLabels[r.stage]||"Статус CRM обновлён"})),[["Оффер","offer_name"],["Стадия","stage_label"]]);
         content.append(make("h3","Отметки о вознаграждениях CRM"));
         if(!data.status?.lead_payouts?.length)content.append(make("p","Отметок CRM пока нет.","muted"));
         for(const payout of data.status?.lead_payouts||[]){
           const row=make("div",undefined,"participant-detail-item");
           row.append(statusMark("crm",payout.reversed?"reversed":payout.status,
             payout.reversed?"Отменено в CRM":crmPayoutLabels[payout.status]||"Неизвестный статус CRM"));
-          detailLine(row,"Оффер",payout.offer_id);
+          detailLine(row,"Оффер",crmOfferName(payout.offer_id));
           detailLine(row,"Сумма по CRM",payout.amount);
           content.append(row);
         }
@@ -367,7 +415,10 @@
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
         content.append(participantTimeline(data));
       }
-      detailRows(content,"Журнал действий",data.audit,[["Действие","action"],["Кем","actor_id"],["Комментарий","details"],["Время","created_at"]]);
+      const history=make("section",undefined,"admin-audit-profile");history.append(make("h3","История действий"));
+      if(!data.audit?.length)history.append(make("p","Действий пока нет.","muted"));
+      else for(const event of data.audit)history.append(auditCard(event));
+      content.append(history);
     }catch(e){if(dialog.open && requestId===participantRequestId)content.replaceChildren(make("p",e.message,"message error"));}
   }
   async function decide(user,decision) {
@@ -437,14 +488,13 @@
     if (!users.length){container.append(make("p","Записей нет.","empty"));return;}
     const table=make("table");
     const head=make("thead"),headRow=make("tr");
-    ["Участник","Внутренний ID","Telegram","Статус","Роль","Источник","Менеджер","Действия"].forEach(v=>headRow.append(make("th",v)));
+    ["Username","Внутренний №","Источник","Действия"].forEach(v=>headRow.append(make("th",v)));
     head.append(headRow);table.append(head);
     const body=make("tbody");
     users.forEach(user=>{
       const row=make("tr");
       const sourceDescription=user.source==="referral"?"Реферал":user.source==="agency"?"Агентство":"Не указан";
-      const ids=[user.introduced_by_id?"Пригласил: "+telegramName(user.introduced_by_username,user.introduced_by_id):"",user.agency_id?"Агентство: "+telegramName(user.agency_username,user.agency_id):"",user.referrer_id?"Реферер: "+telegramName(user.referrer_username,user.referrer_id):""].filter(Boolean);
-      row.append(make("td",personName(user)),make("td",user.internal_id ?? "—"),make("td",telegramName(user.username,user.id || user.user_id)),make("td",statuses[statusOf(user)] || statusOf(user)),make("td",roles[roleOf(user)] || roleOf(user)),make("td",sourceDescription+(ids.length?" · "+ids.join(" · "):"")),make("td",telegramName(user.manager_username,user.manager_id)));
+      row.append(make("td",telegramName(user.username,user.id || user.user_id)),make("td",user.internal_id??"—"),make("td",sourceDescription));
       row.className="admin-data-row";
       const actions=make("td");const group=make("div",undefined,"actions");
       group.append(action("Карточка",()=>openParticipant(user)));
@@ -461,7 +511,7 @@
       if(permitted && state.role==="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
       if(permitted && statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
       actions.append(group);row.append(actions);
-      row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Участник","Внутренний ID","Telegram","Статус","Роль","Источник","Менеджер","Действия"][index]);
+      row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Username","Внутренний №","Источник","Действия"][index]);
       body.append(row);
     });
     table.append(body);container.append(table);
@@ -630,10 +680,7 @@
       const events=Array.isArray(data.events)?data.events:(Array.isArray(data.audit)?data.audit:[]);
       if(!events.length){root.append(make("p","Записей пока нет.","empty"));return;}
       events.forEach(event=>{
-        const item=make("div",undefined,"audit-entry");
-        item.append(make("strong",event.action || event.event || "Действие"),make("div",[event.actor_id ? "Автор: "+event.actor_id : "",event.target_id ? "Участник: "+event.target_id : "",event.details || event.reason || ""].filter(Boolean).join(" · ")));
-        if(event.created_at || event.timestamp)item.append(make("time",event.created_at || event.timestamp));
-        root.append(item);
+        root.append(auditCard(event));
       });
     }catch(e){root.append(make("p",e.message,"empty"));error(e.message);}
   }

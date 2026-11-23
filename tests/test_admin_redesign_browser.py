@@ -110,6 +110,26 @@ class AdminRedesignBrowserTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
+    def test_compact_people_and_top_toast_at_mobile_width(self):
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                page=self.open_admin(browser,390)
+                page.locator('#reload').click()
+                notice=page.locator('#admin-notice')
+                notice.wait_for(state='visible')
+                self.assertEqual(notice.evaluate('el=>getComputedStyle(el).position'),'fixed')
+                self.assertLess(notice.bounding_box()['y'],150)
+                page.locator('[data-section="people"]').click()
+                page.locator('[data-subtab="users"]').click()
+                page.locator('#users-list .admin-data-row').first.wait_for()
+                self.assertEqual(page.locator('#users-list thead th').all_inner_texts(),
+                                 ['Username','Внутренний №','Источник','Действия'])
+                self.assertEqual(page.locator('#users-list .admin-data-row').first.locator('td').count(),4)
+                self.assertEqual(page.locator('.tg-keyboard-done').count(),0)
+            finally:
+                browser.close()
+
     def open_admin(self,browser,width,role='owner',stage4=False):
         page=browser.new_page(viewport={'width':width,'height':844})
         page.add_init_script(BOOTSTRAP)

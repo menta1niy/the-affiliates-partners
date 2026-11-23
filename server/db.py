@@ -821,6 +821,7 @@ def admin_participant_detail(actor, owner_id, target_id):
         reports = conn.execute("SELECT report_id,offer_id,action,note,created_at FROM participant_task_reports WHERE telegram_id=? AND crm_lead_id=? ORDER BY created_at DESC,report_id DESC LIMIT 100", (target_id, crm_id)).fetchall() if crm_id else []
         audit_rows = scoped_audit_rows(conn, staff, 200)
         audit_rows = [dict(row) for row in audit_rows if row["target_id"] == target_id or row["actor_id"] == target_id]
+        audit_rows = add_audit_names(conn, audit_rows)
         snapshot = json.loads(state["payload"]) if state else {"applications": [], "lead_payouts": []}
         participant = public_user(target)
         attach_reference_usernames(conn, [participant])
@@ -999,7 +1000,20 @@ def audit_events(actor, owner_id):
     with transaction() as conn:
         staff = require_staff(conn, actor, owner_id)
         rows = scoped_audit_rows(conn, staff, 200)
-        return [{key: row[key] for key in ("id", "actor_id", "action", "target_id", "details", "created_at")} for row in rows]
+        return add_audit_names(conn, [{key: row[key] for key in ("id", "actor_id", "action", "target_id", "details", "created_at")} for row in rows])
+
+
+def add_audit_names(conn, rows):
+    """Resolve already-authorized audit participants to display names, never expose new audit rows."""
+    identities = {value for row in rows for value in (row.get("actor_id"), row.get("target_id")) if type(value) is int}
+    names = {}
+    if identities:
+        placeholders = ",".join("?" for _ in identities)
+        for person in conn.execute(f"SELECT id,username,first_name,last_name FROM users WHERE id IN ({placeholders})",tuple(identities)).fetchall():
+            username = (person["username"] or "").strip().lstrip("@")
+            names[person["id"]] = "@"+username if username else (" ".join(filter(None,[person["first_name"],person["last_name"]])).strip() or "Участник без username")
+    return [{**row,"actor_name":names.get(row.get("actor_id"),"Системное действие"),
+             "target_name":names.get(row.get("target_id"),"Участник не указан") if row.get("target_id") else ""} for row in rows]
 
 
 def scoped_audit_rows(conn, staff, limit):

@@ -44,6 +44,8 @@ class AdminAgencyScopeTests(unittest.TestCase):
         status, events = self.as_user('/api/admin/audit', self.admin)
         self.assertEqual(status, 200)
         self.assertNotIn('foreign-secret', json.dumps(events))
+        self.assertTrue(all('actor_name' in event and 'target_name' in event for event in events['events']))
+        self.assertIn('Test', {event['actor_name'] for event in events['events']})
         self.assertEqual(self.as_user('/api/admin/dashboard', OWNER)[0], 200)
         self.assertIn('ref_BBBBBBBB', json.dumps(self.as_user('/api/admin/dashboard', OWNER)[1]))
 

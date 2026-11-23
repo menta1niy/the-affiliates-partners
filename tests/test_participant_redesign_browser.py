@@ -203,7 +203,7 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(amber["filter"],"rgb(228, 163, 74)")
                         self.assertIn("Назначено", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
-                        self.assertEqual(first.locator(".participant-offer-next").inner_text(), "Прочитать условия")
+                        self.assertEqual(first.locator(".participant-offer-next").count(), 0)
                         self.assertEqual(first.locator(".participant-offer-detail-button").inner_text(), "Изучить условия →")
                         self.assertIn("СТАВКА ЗА ДЕЙСТВИЕ", first.inner_text())
                         self.assertIn("ЦЕЛЕВОЕ ДЕЙСТВИЕ", first.inner_text())
