@@ -532,6 +532,17 @@
     row.title=(manualStages[stage]||manualStages.assigned).next;
     return row;
   }
+  function offerCardAction(offer){
+    // This button only opens the authorized details; no task state is changed.
+    if(unavailableReason(offer))return "Посмотреть условия →";
+    return ({
+      assigned:"Изучить условия →",
+      in_progress:"Продолжить →",
+      submitted:"Проверить статус →",
+      completed:"Посмотреть результат →",
+      rejected:"Уточнить причину →"
+    })[offer.stage]||"Подробнее →";
+  }
   function offerPayment(value){
     const amount=Number(value);
     return value!==null&&value!==undefined&&value!==""&&Number.isFinite(amount)&&amount>=0
@@ -727,11 +738,12 @@
       const status=offerStatus(offer.stage);
       top.append(heading,status);
       const summary=document.createElement("div");summary.className="participant-offer-summary";
-      const payment=offerDetail("СТАВКА",offerPayment(offer.payout_rub),"participant-offer-payment");
-      const target=offerDetail("ЦЕЛЬ",offer.target_action||"Уточните условия","participant-offer-target");
+      const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
+      const target=offerDetail("ЦЕЛЕВОЕ ДЕЙСТВИЕ",offer.target_action||"Уточните условия","participant-offer-target");
       summary.append(payment,target);
       const button=document.createElement("button");button.type="button";button.className="btn ghost participant-offer-detail-button";
-      button.textContent="Подробнее →";button.setAttribute("aria-label","Подробнее: "+(offer.name||"Предложение"));
+      button.textContent=offerCardAction(offer);
+      button.setAttribute("aria-label",button.textContent.replace(" →","")+": "+(offer.name||"Предложение"));
       button.addEventListener("click",()=>openOfferDetail(offer));
       item.append(top,summary,nextOfferAction(offer.stage));
       if(offer.latest_event){

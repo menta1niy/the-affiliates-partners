@@ -130,6 +130,29 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
             finally:
                 browser.close()
 
+    def test_offer_card_action_for_rejected_and_unavailable_states(self):
+        fixture = (FIXTURE
+            .replace("stage:'assigned',", "stage:'rejected',")
+            .replace("stage:'in_progress',target_action:", "stage:'in_progress',can_apply:false,unavailable_reason:'identity',target_action:"))
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(viewport={"width": 390, "height": 844})
+                page.add_init_script(fixture)
+                page.goto(self.base + "/partners/#tgWebAppData=ui-fixture&state=active")
+                page.locator('#participant-nav [data-view="offers"]').click()
+                cards = page.locator("#offers .offer-item")
+                cards.first.wait_for()
+                self.assertEqual(cards.nth(0).locator(".participant-offer-detail-button").inner_text(), "Уточнить причину →")
+                self.assertEqual(cards.nth(1).locator(".participant-offer-detail-button").inner_text(), "Посмотреть условия →")
+                self.assertIn("Недоступно", cards.nth(1).inner_text())
+                cards.nth(1).locator(".participant-offer-detail-button").click()
+                self.assertTrue(page.locator("#participant-offer-dialog").is_visible())
+                self.assertFalse(page.locator("#participant-offer-dialog .participant-offer-link").count())
+                page.close()
+            finally:
+                browser.close()
+
     def test_active_cards_kpis_navigation_and_mobile_layout(self):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -179,6 +202,9 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertIn("Назначено", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
                         self.assertEqual(first.locator(".participant-offer-next").inner_text(), "Прочитать условия")
+                        self.assertEqual(first.locator(".participant-offer-detail-button").inner_text(), "Изучить условия →")
+                        self.assertIn("СТАВКА ЗА ДЕЙСТВИЕ", first.inner_text())
+                        self.assertIn("ЦЕЛЕВОЕ ДЕЙСТВИЕ", first.inner_text())
                         self.assertEqual(first.locator("h3").evaluate("el=>getComputedStyle(el).webkitLineClamp"),"2")
                         measurements=first.evaluate("""node=>{
                           const css=getComputedStyle(node);
@@ -209,9 +235,11 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(page.locator("#offers .offer-item").count(), 1)
                         self.assertIn("Третье предложение", page.locator("#offers").inner_text())
                         self.assertIn("Ожидает проверки",page.locator("#offers .participant-offer-next").inner_text())
+                        self.assertEqual(page.locator("#offers .participant-offer-detail-button").first.inner_text(),"Проверить статус →")
                         self.assertEqual(page.locator("#offers .participant-offer-status").get_attribute("data-status"),"submitted")
                         page.locator('[data-offer-filter="completed"]').click()
                         self.assertIn("Отмечено администратором",page.locator("#offers .participant-offer-next").inner_text())
+                        self.assertEqual(page.locator("#offers .participant-offer-detail-button").first.inner_text(),"Посмотреть результат →")
                         page.locator("#offers .participant-offer-detail-button").first.click()
                         self.assertIn("не подтверждение банковского начисления",page.locator(".participant-offer-full-next").inner_text())
                         page.locator("#participant-offer-close").click()
