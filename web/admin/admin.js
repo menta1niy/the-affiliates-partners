@@ -5,6 +5,46 @@
   const state = {users:[],pending:[],invites:[],tab:"pending",section:"overview",role:"",actorId:null,
     pages:{users:1,pending:1},requests:{users:0,pending:0,assignments:0}};
   let actionCenterRequest=0;
+  const actionPriority={pending:null,reviews:null,finance:null,financePending:null,financeConfirmed:null};
+  function updateActionPriority(){
+    const tasks=[
+      {kind:"finance",count:actionPriority.financeConfirmed,
+       title:"Проверьте подтверждённые выплаты",
+       detail:"Подтверждённые заявки ожидают фактического платежа. Отмечайте выплату только после его совершения."},
+      {kind:"finance",count:actionPriority.financePending,
+       title:"Рассмотрите заявки на вывод",
+       detail:"Проверьте новые заявки, прежде чем подтверждать или отклонять их."},
+      {kind:"reviews",count:actionPriority.reviews,
+       title:"Проверьте результаты по офферам",
+       detail:"Ожидают решения отчёты и запросы участников. Подтверждение вручную не начисляет деньги."},
+      {kind:"pending",count:actionPriority.pending,
+       title:"Рассмотрите регистрации",
+       detail:"Новые участники ожидают решения о доступе."}
+    ];
+    for(const kind of ["pending","reviews","finance"]){
+      const indicator=$("admin-action-"+kind+"-priority");
+      const amount=actionPriority[kind];
+      indicator.textContent=amount===null?"Нет данных":amount>0?"Требует внимания":"Нет новых задач";
+      indicator.dataset.state=amount===null?"unknown":amount>0?"attention":"clear";
+    }
+    const next=tasks.find(task=>task.count!==null&&task.count>0);
+    const unknown=Object.values(actionPriority).some(value=>value===null);
+    const heading=$("admin-priority-title"),description=$("admin-priority-description");
+    const button=$("admin-priority-action");
+    if(next){
+      heading.textContent=next.title;
+      description.textContent=next.detail;
+      button.textContent="Перейти к задаче →";
+      button.dataset.targetTab=next.kind==="pending"?"pending":next.kind==="reviews"?"offer_reviews":"finance";
+      button.hidden=false;
+    }else{
+      heading.textContent=unknown?"Не все очереди доступны":"Срочных задач в очередях нет";
+      description.textContent=unknown?
+        "Часть данных не удалось проверить. Откройте соответствующий список или обновите задачи.":
+        "По текущим данным все проверяемые очереди пусты.";
+      button.hidden=true;delete button.dataset.targetTab;
+    }
+  }
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер",manager:"Менеджер"};
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
@@ -375,33 +415,46 @@
     const totals={total:counts.total ?? counts.users ?? counts.total_users ?? Object.values(counts).reduce((sum,value)=>sum+(Number(value)||0),0),pending:counts.pending,active:counts.active,blocked:counts.blocked};
     for(const key of ["total","pending","active","blocked"])$("count-"+key).textContent=number(totals[key]);
     const pendingNumber=counts.pending;
+    actionPriority.pending=Number.isSafeInteger(pendingNumber)&&pendingNumber>=0?pendingNumber:null;
     $("admin-action-pending").textContent=pendingNumber==null?"—":number(pendingNumber);
     $("admin-action-pending-description").textContent=pendingNumber==null?
       "Количество заявок недоступно.":"Участники, ожидающие регистрации";
     renderTable($("pending-list"),pending,"pending");renderTable($("users-list"),users,"users");
     renderInvites();
+    updateActionPriority();
   }
   function setActionCenterResult(kind,result){
     const value=$("admin-action-"+kind);
     const description=$("admin-action-"+kind+"-description");
     if(result.status==="rejected"){
+      actionPriority[kind]=null;
       value.textContent="—";
       description.textContent="Данные недоступны. Откройте список для повторной проверки.";
+      updateActionPriority();
       return;
     }
     const records=result.value;
     if(!Array.isArray(records)){
+      actionPriority[kind]=null;
       value.textContent="—";
       description.textContent="Ответ сервера не содержит списка.";
+      updateActionPriority();
       return;
     }
+    actionPriority[kind]=records.length;
     value.textContent=records.length===100?"100+":number(records.length);
     description.textContent=kind==="reviews"?
       (records.length===100?"Не менее 100 отчётов ожидают проверки":"Отчётов ожидают решения менеджера"):
       (records.length===100?"Не менее 100 заявок ожидают обработки":"На рассмотрении и подтверждены к оплате");
+    updateActionPriority();
   }
   async function loadActionCenter(){
     const request=++actionCenterRequest;
+    actionPriority.reviews=null;
+    actionPriority.finance=null;
+    actionPriority.financePending=null;
+    actionPriority.financeConfirmed=null;
+    updateActionPriority();
     for(const kind of ["reviews","finance"]){
       $("admin-action-"+kind).textContent="—";
       $("admin-action-"+kind+"-description").textContent="Обновляем…";
@@ -422,11 +475,15 @@
       const groups=payments.value;
       if(Array.isArray(groups.pending)&&Array.isArray(groups.confirmed)){
         const combined=[...groups.pending,...groups.confirmed];
+        actionPriority.financePending=groups.pending.length;
+        actionPriority.financeConfirmed=groups.confirmed.length;
         setActionCenterResult("finance",{status:"fulfilled",value:combined});
         $("admin-action-finance").textContent=number(combined.length);
+        $("admin-action-finance-description").textContent=
+          number(groups.pending.length)+" на рассмотрении · "+number(groups.confirmed.length)+" ожидают платежа";
         if(groups.pending.length===100||groups.confirmed.length===100){
           $("admin-action-finance").textContent=number(combined.length)+"+";
-          $("admin-action-finance-description").textContent="Не менее "+number(combined.length)+" заявок в двух очередях";
+          $("admin-action-finance-description").textContent="Не менее "+number(groups.pending.length)+" на рассмотрении · не менее "+number(groups.confirmed.length)+" ожидают платежа";
         }
       }else setActionCenterResult("finance",{status:"fulfilled",value:null});
     }else setActionCenterResult("finance",payments);
@@ -1235,6 +1292,10 @@
   $("reload").addEventListener("click",async()=>{error("");try{await loadDashboard();if(state.tab==="audit")await loadAudit();notice("Данные обновлены.");}catch(e){error(e.message);}});
   $("admin-action-refresh").addEventListener("click",()=>{
     loadDashboard().catch(e=>error(e.message));
+  });
+  $("admin-priority-action").addEventListener("click",event=>{
+    const tab=event.currentTarget.dataset.targetTab;
+    if(["pending","offer_reviews","finance"].includes(tab))navigateTab(tab,true);
   });
   const catalogButton=$("mvp-catalog-anchor");
   catalogButton.id="mvp-catalog-open";

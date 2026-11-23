@@ -177,8 +177,15 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                         self.assertEqual(page.locator('#admin-action-pending').inner_text(),'1')
                         self.assertEqual(page.locator('#admin-action-finance').inner_text(),'2')
                         self.assertEqual(page.locator('.admin-action-card').count(),3)
+                        self.assertEqual(page.locator('#admin-priority-title').inner_text(),
+                                         'Проверьте подтверждённые выплаты')
+                        self.assertIn('1 на рассмотрении',page.locator('#admin-action-finance-description').inner_text())
+                        self.assertEqual(page.locator('#admin-action-finance-priority').get_attribute('data-state'),'attention')
                         self.assertFalse(page.evaluate(
                             'document.documentElement.scrollWidth > document.documentElement.clientWidth + 1'))
+                        page.locator('#admin-priority-action').click()
+                        self.assertTrue(page.locator('[data-panel="finance"]').is_visible())
+                        page.locator('[data-section="overview"]').click()
                         page.locator('[data-action-card="reviews"] button').click()
                         self.assertTrue(page.locator('[data-panel="offer_reviews"]').is_visible())
                         page.locator('[data-section="overview"]').click()
@@ -188,6 +195,42 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                         page.locator('[data-action-card="pending"] button').click()
                         self.assertTrue(page.locator('[data-panel="pending"]').is_visible())
                         self.assertFalse(errors,errors)
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_priority_responds_to_empty_and_unavailable_queues(self):
+        all_empty = (BOOTSTRAP
+            .replace('counts:{total:2,pending:1,active:1,blocked:0}',
+                     'counts:{total:2,pending:0,active:2,blocked:0}')
+            .replace("data={events:[\n      {id:'evt_1',review_status:'pending'},\n      {id:'evt_2',review_status:'pending'}]};",
+                     "data={events:[]};")
+            .replace("status==='pending'?[{id:'wd_a',status:'pending'}]:\n        status==='confirmed'?[{id:'wd_b',status:'confirmed'}]:[]",
+                     "[]"))
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(headless=True)
+            try:
+                for mode in ("empty","unavailable"):
+                    with self.subTest(mode=mode):
+                        page=browser.new_page(viewport={'width':390,'height':844})
+                        source=all_empty if mode=="empty" else BOOTSTRAP.replace(
+                            "if(path==='/admin/finance/withdrawals'){",
+                            "if(path==='/admin/finance/withdrawals')return Promise.reject(new Error('offline'));\n    if(false){")
+                        page.add_init_script(source)
+                        page.goto(self.base+'/partners/admin/#tgWebAppData=visual-fixture&role=owner')
+                        page.locator('#admin-app').wait_for(state='visible')
+                        page.locator('#admin-action-finance-priority').wait_for(state='visible')
+                        page.wait_for_function("""(mode) => {
+                          const title=document.querySelector('#admin-priority-title')?.textContent;
+                          return mode==='empty' ? title==='Срочных задач в очередях нет' :
+                            document.querySelector('#admin-action-finance-priority')?.dataset.state==='unknown';
+                        }""",arg=mode)
+                        if mode=="empty":
+                            self.assertTrue(page.locator('#admin-priority-action').is_hidden())
+                        else:
+                            self.assertIn('Данные недоступны',page.locator('#admin-action-finance-description').inner_text())
+                            self.assertEqual(page.locator('#admin-priority-title').inner_text(),
+                                             'Проверьте результаты по офферам')
                         page.close()
             finally:
                 browser.close()

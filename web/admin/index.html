@@ -100,6 +100,14 @@
             <button type="button" class="btn primary" data-go-section="people" data-go-subtab="pending">Рассмотреть заявки →</button>
             <button type="button" class="btn primary" data-go-section="assignments" data-owner-admin>Назначить офферы →</button>
           </div>
+          <section class="admin-priority panel" aria-labelledby="admin-priority-title" aria-live="polite">
+            <div>
+              <div class="section-kicker">ПЕРВООЧЕРЕДНОЕ ДЕЙСТВИЕ</div>
+              <h3 id="admin-priority-title">Проверяем текущие задачи…</h3>
+              <p id="admin-priority-description" class="muted">Приоритет определится по доступным рабочим очередям.</p>
+            </div>
+            <button id="admin-priority-action" type="button" class="btn primary" hidden>Открыть задачу →</button>
+          </section>
           <section class="admin-action-center" aria-labelledby="admin-action-center-title">
             <div class="admin-action-center-heading">
               <div><div class="section-kicker">ТРЕБУЮТ ВНИМАНИЯ</div><h3 id="admin-action-center-title">Рабочие задачи</h3></div>
@@ -108,18 +116,21 @@
             <p class="admin-action-center-hint">Данные только в пределах ваших прав. Очереди проверок и выплат отображают до 100 последних записей каждого статуса.</p>
             <div class="admin-action-center-grid">
               <article class="admin-action-card" data-action-card="pending">
+                <small id="admin-action-pending-priority" class="admin-action-priority">Проверяем…</small>
                 <span>РЕГИСТРАЦИИ</span>
                 <strong id="admin-action-pending">—</strong>
                 <p id="admin-action-pending-description">Загрузка данных…</p>
                 <button type="button" class="btn ghost" data-go-section="people" data-go-subtab="pending">Открыть заявки →</button>
               </article>
               <article class="admin-action-card" data-action-card="reviews">
+                <small id="admin-action-reviews-priority" class="admin-action-priority">Проверяем…</small>
                 <span>ПРОВЕРКА ОФФЕРОВ</span>
                 <strong id="admin-action-reviews">—</strong>
                 <p id="admin-action-reviews-description">Загрузка данных…</p>
                 <button type="button" class="btn ghost" data-go-section="people" data-go-subtab="offer_reviews">Открыть проверки →</button>
               </article>
               <article class="admin-action-card" data-action-card="finance">
+                <small id="admin-action-finance-priority" class="admin-action-priority">Проверяем…</small>
                 <span>ЗАЯВКИ НА ВЫПЛАТУ</span>
                 <strong id="admin-action-finance">—</strong>
                 <p id="admin-action-finance-description">Загрузка данных…</p>
