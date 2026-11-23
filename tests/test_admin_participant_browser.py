@@ -81,8 +81,15 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                         self.assertIn('browser-synthetic', dialog.inner_text())
                         self.assertIn('Synthetic approved instructions', dialog.inner_text())
                         self.assertIn('Вознаграждение подтверждено CRM', dialog.inner_text())
-                        self.assertEqual(dialog.locator('.status-source[data-source="crm"]').count(),1)
-                        self.assertEqual(dialog.locator('.status-source[data-source="crm"]').first.get_attribute('data-status'),'confirmed')
+                        timeline=dialog.locator('.admin-participant-timeline')
+                        self.assertTrue(timeline.is_visible())
+                        self.assertIn('Снимок CRM:',timeline.inner_text())
+                        self.assertIn('Стадия заявки по снимку CRM',timeline.inner_text())
+                        self.assertIn('Вознаграждение по снимку CRM',timeline.inner_text())
+                        self.assertEqual(timeline.locator('[data-source="ledger"]').count(),0)
+                        crm_in_detail=dialog.locator('.participant-detail-item .status-source[data-source="crm"]')
+                        self.assertEqual(crm_in_detail.count(),1)
+                        self.assertEqual(crm_in_detail.first.get_attribute('data-status'),'confirmed')
                         self.assertEqual(dialog.locator('img').count(), 0)
                         self.assertFalse(errors, errors)
                         self.assertLessEqual(dialog.evaluate('(e) => e.getBoundingClientRect().right'), width + 1)
@@ -113,6 +120,13 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
         from server import finance
         with db.transaction() as conn:
             finance.schema(conn)
+            from server import offer_workflow
+            offer_workflow.schema(conn)
+            conn.execute(
+                "INSERT INTO manual_offer_events(id,telegram_id,offer_id,kind,lead_stage,"
+                "review_status,review_note,created_at,reviewed_at) "
+                "VALUES('evt_timeline_browser',?,?,'stage','application_sent',"
+                "'approved','Проверено менеджером',175,176)", (self.lead_a,offers[0]))
             conn.execute(
                 "INSERT INTO finance_withdrawals(id,telegram_id,amount_rub,status,"
                 "payment_reference,created_at,updated_at) VALUES(?, ?,400,'paid',?,100,101)",
@@ -151,6 +165,17 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                         payout_status=finance.locator('.status-source[data-source="withdrawal"]')
                         self.assertEqual(payout_status.count(),1)
                         self.assertEqual(payout_status.first.get_attribute('data-status'),'paid')
+                        timeline=dialog.locator('.admin-participant-timeline')
+                        self.assertIn('Хронология событий',timeline.inner_text())
+                        self.assertIn('Отчёт по этапу',timeline.inner_text())
+                        self.assertIn('Решение менеджера',timeline.inner_text())
+                        self.assertIn('Проверено менеджером',timeline.inner_text())
+                        self.assertEqual(timeline.locator('.status-source[data-source="review"]').count(),2)
+                        self.assertEqual(timeline.locator('.status-source[data-source="ledger"]').count(),1)
+                        self.assertEqual(timeline.locator('.status-source[data-source="withdrawal"][data-status="paid"]').count(),1)
+                        times=timeline.locator('time[datetime]').evaluate_all(
+                            'items=>items.map(item=>Date.parse(item.dateTime))')
+                        self.assertEqual(times,sorted(times,reverse=True))
                         self.assertFalse(errors, errors)
                         self.assertLessEqual(finance.bounding_box()['x'] + finance.bounding_box()['width'], width+1)
                         page.close()

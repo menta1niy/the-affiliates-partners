@@ -3998,6 +3998,25 @@ dialog select,dialog input { max-width:100%; }
 }
 .admin-control .admin-action-card .btn {min-height:44px;white-space:normal;line-height:1.4;}
 /* Stage 9: show in-flight actions without changing layout or re-enabling siblings. */
+.admin-control .admin-participant-timeline {min-width:0;margin:18px 0;padding:20px;}
+.admin-control .admin-participant-timeline h3 {margin:9px 0;font-size:clamp(18px,2.5vw,23px);}
+.admin-control .admin-participant-timeline > .muted {font-size:12px;line-height:1.55;}
+.admin-control .admin-participant-timeline-list {display:grid;gap:0;margin-top:15px;}
+.admin-control .admin-participant-timeline-item {
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;min-width:0;
+  padding:12px 0;border-bottom:1px solid var(--divider);
+}
+.admin-control .admin-participant-timeline-item .status-source {min-width:0;}
+.admin-control .admin-participant-timeline-item time {
+  margin-left:auto;color:var(--color-secondary);font-size:11px;white-space:normal;
+}
+.admin-control .admin-participant-timeline-item p {
+  flex-basis:100%;margin:0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;
+}
+@media(max-width:540px) {
+  .admin-control .admin-participant-timeline {padding:15px;}
+  .admin-control .admin-participant-timeline-item time {margin-left:0;}
+}
 .admin-control .admin-assignment-filter-actions {
   display:flex;align-items:center;justify-content:space-between;
   gap:10px;flex-wrap:wrap;margin:0 0 12px;

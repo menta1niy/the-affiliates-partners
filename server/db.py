@@ -833,7 +833,12 @@ def admin_participant_detail(actor, owner_id, target_id):
         # Financial details are restricted to the owner and tenant-authorized
         # admins. Staff can still view their existing operational snapshot.
         if staff["role"] in ("owner", "admin") and target["role"] in ("lead", "referrer"):
-            from server import finance, statistics
+            from server import finance, statistics, offer_workflow
+            offer_workflow.schema(conn)
+            result["offer_events"] = [dict(row) for row in conn.execute(
+                "SELECT id,offer_id,kind,lead_stage,review_status,review_note,"
+                "created_at,reviewed_at FROM manual_offer_events WHERE telegram_id=? "
+                "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()]
             result["statistics"] = statistics.participant_snapshot(conn, target_id)
             result["finance"] = {
                 "balances": result["statistics"]["verified"],

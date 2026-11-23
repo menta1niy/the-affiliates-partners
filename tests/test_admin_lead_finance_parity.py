@@ -97,3 +97,26 @@ class AdminLeadFinanceParity(unittest.TestCase):
         self.assertEqual(card['finance']['balances']['paid_rub'], 0)
         self.assertEqual(self.as_user('/api/finance/overview', ALICE)[1]['balances'],
                          card['finance']['balances'])
+
+    def test_admin_history_only_contains_authorized_lead_events(self):
+        self.ready(ALICE)
+        self.ready(BOB)
+        offer=self.offer(ALICE)
+        with db.transaction() as conn:
+            from server import offer_workflow
+            offer_workflow.schema(conn)
+            conn.execute(
+                "INSERT INTO manual_offer_events(id,telegram_id,offer_id,kind,lead_stage,"
+                "review_status,review_note,created_at,reviewed_at) "
+                "VALUES('evt_history_test',?,?,'stage','application_sent','approved','OK',123,124)",
+                (ALICE,offer))
+        status,card=self.as_user('/api/admin/participant', OWNER, user_id=ALICE)
+        self.assertEqual(status,200,card)
+        self.assertEqual(len(card['offer_events']),1)
+        self.assertEqual(card['offer_events'][0]['id'],'evt_history_test')
+        self.assertEqual(card['offer_events'][0]['reviewed_at'],124)
+        self.assertNotIn('evidence_data',card['offer_events'][0])
+        status,other=self.as_user('/api/admin/participant', OWNER, user_id=BOB)
+        self.assertEqual(status,200,other)
+        self.assertEqual(other['offer_events'],[])
+        self.assertEqual(self.as_user('/api/admin/participant', BOB, user_id=ALICE)[0],403)

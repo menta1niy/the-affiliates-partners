@@ -107,7 +107,7 @@
     group.dataset.source=source;
     group.dataset.status=code||"unknown";
     const names={offer:"Оффер",review:"Проверка",crm:"CRM",withdrawal:"Вывод средств",
-      ledger:"Финансовый реестр"};
+      ledger:"Финансовый реестр",audit:"Журнал системы"};
     group.append(make("span",names[source]||"Статус","status-source-name"),
       make("strong",label||"Статус не указан","status-source-value"));
     return group;
@@ -136,6 +136,89 @@
   }
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
+  function participantTimeline(data){
+    const section=make("section",undefined,"panel admin-participant-timeline");
+    section.append(make("span","ИСТОРИЯ УЧАСТНИКА","section-kicker"),
+      make("h3","Хронология событий"));
+    section.append(make("p","Ручные действия, проверки, CRM и финансовый реестр — независимые источники. Дата CRM относится к снимку данных, а не к каждой операции.","muted"));
+    const timeline=[];
+    const time=value=>{
+      const seconds=Number(value);
+      return Number.isSafeInteger(seconds)&&seconds>0&&seconds<8640000000000?seconds:null;
+    };
+    const add=(source,code,label,details,at,kind="event")=>{
+      timeline.push({source,code,label,details:String(details||""),at:time(at),kind});
+    };
+    const offerNames=new Map((data.manual?.offers||[]).map(offer=>[offer.id,offer.name]));
+    for(const offer of data.manual?.offers||[]){
+      add("offer",offer.stage,manualStages[offer.stage]||"Неизвестная стадия",
+        offer.name||offer.id,offer.status_updated_at);
+    }
+    for(const event of data.offer_events||[]){
+      const offer=offerNames.get(event.offer_id)||event.offer_id;
+      const subject=event.kind==="mfo_request"?"Запрос доступа МФО":"Отчёт по этапу";
+      const decision=reviewLabels[event.review_status]||"Неизвестное решение";
+      add("review",event.review_status,subject+": "+decision,
+        offer+(event.lead_stage?" · "+(leadStageOptions[event.lead_stage]||event.lead_stage):""),
+        event.created_at);
+      if(event.reviewed_at&&event.review_status!=="pending"){
+        add("review",event.review_status,"Решение менеджера: "+decision,
+          offer+(event.review_note?" · "+event.review_note:""),event.reviewed_at);
+      }
+    }
+    for(const report of data.reports||[]){
+      add("crm","report","Отчёт участника для CRM",
+        "Оффер: "+String(report.offer_id||"—")+" · "+String(report.action||"—"),report.created_at);
+    }
+    for(const event of data.audit||[]){
+      add("audit",event.action,"Действие в системе: "+String(event.action||"—"),
+        String(event.details||""),event.created_at);
+    }
+    const crmAt=data.status_updated_at;
+    for(const application of data.status?.applications||[]){
+      add("crm",application.stage,"Стадия заявки по снимку CRM",
+        "Оффер: "+String(application.offer_id||"—")+" · "+String(application.stage||"—"),
+        crmAt,"snapshot");
+    }
+    for(const payout of data.status?.lead_payouts||[]){
+      add("crm",payout.reversed?"reversed":payout.status,
+        "Вознаграждение по снимку CRM",
+        "Оффер: "+String(payout.offer_id||"—")+" · статус CRM: "+String(payout.status||"—")+
+        (payout.reversed?" · отменено":"")+" · сумма CRM: "+String(payout.amount??"—"),
+        crmAt,"snapshot");
+    }
+    for(const accrual of data.finance?.accruals||[]){
+      add("ledger","accrued","Подтверждённое начисление",
+        number(accrual.amount_rub)+" ₽ · оффер: "+String(offerNames.get(accrual.offer_id)||accrual.offer_id||"—"),
+        accrual.created_at);
+    }
+    for(const withdrawal of data.finance?.withdrawals||[]){
+      const label=withdrawalLabels[withdrawal.status]||"Неизвестный статус";
+      add("withdrawal",withdrawal.status,"Заявка на вывод: "+label,
+        number(withdrawal.amount_rub)+" ₽",withdrawal.updated_at||withdrawal.created_at);
+    }
+    timeline.sort((a,b)=>(b.at||0)-(a.at||0));
+    const entries=make("div",undefined,"admin-participant-timeline-list");
+    const limit=100;
+    if(!timeline.length)entries.append(make("p","Событий пока нет.","muted"));
+    for(const event of timeline.slice(0,limit)){
+      const item=make("article",undefined,"admin-participant-timeline-item");
+      item.append(statusMark(event.source,event.code,event.label));
+      const date=make("time",event.at?
+        new Date(event.at*1000).toLocaleString("ru-RU",{dateStyle:"medium",timeStyle:"short"}):
+        "Дата не указана","admin-timeline-date");
+      if(event.at)date.dateTime=new Date(event.at*1000).toISOString();
+      if(event.kind==="snapshot")date.textContent="Снимок CRM: "+date.textContent;
+      item.append(date);
+      if(event.details)item.append(make("p",event.details));
+      entries.append(item);
+    }
+    section.append(entries);
+    if(timeline.length>limit)section.append(make("p",
+      "Показаны последние 100 записей из "+timeline.length+" собранных событий. Источники также ограничивают объём истории.","muted"));
+    else section.append(make("p","История объединена из доступных записей; отдельные источники ограничены последними 100 событиями.","muted"));
+    return section;
+  }
   function adminLeadFinance(content,data){
     if(!data.statistics || !data.finance)return;
     const section=make("section",undefined,"panel admin-lead-finance");
@@ -280,6 +363,9 @@
           await api("/admin/decision",{user_id:id,decision:"approve"});notice("Участник одобрен");await loadDashboard();await openParticipant(person);
         }));
         content.append(section);
+      }
+      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+        content.append(participantTimeline(data));
       }
       detailRows(content,"Журнал действий",data.audit,[["Действие","action"],["Кем","actor_id"],["Комментарий","details"],["Время","created_at"]]);
     }catch(e){if(dialog.open && requestId===participantRequestId)content.replaceChildren(make("p",e.message,"message error"));}
