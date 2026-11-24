@@ -203,9 +203,7 @@ def save_offer(actor, owner_id, data):
     now = int(time.time())
     db.initialize()
     with db.transaction() as conn:
-        staff = _admin(conn, actor, owner_id)
-        if staff["role"] != "owner":
-            raise db.Problem(403, "Изменять общий каталог может только владелец")
+        _admin(conn, actor, owner_id)
         schema(conn)
         previous = None
         if offer_id:
@@ -235,9 +233,7 @@ def delete_offer(actor, owner_id, data):
         raise db.Problem(400, "Некорректный оффер")
     db.initialize()
     with db.transaction() as conn:
-        staff = _admin(conn, actor, owner_id)
-        if staff["role"] != "owner":
-            raise db.Problem(403, "Удалять офферы может только владелец")
+        _admin(conn, actor, owner_id)
         schema(conn)
         offer = conn.execute("SELECT id FROM manual_offers WHERE id=? AND deleted_at=0", (offer_id,)).fetchone()
         if not offer:

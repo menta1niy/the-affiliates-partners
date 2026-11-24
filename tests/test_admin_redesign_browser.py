@@ -259,7 +259,7 @@ class AdminRedesignBrowserTests(unittest.TestCase):
             finally:
                 browser.close()
 
-    def test_catalog_owner_can_edit_admin_read_only_and_profile_assignments(self):
+    def test_catalog_owner_and_admin_can_edit_and_profile_assignments(self):
         with sync_playwright() as pw:
             browser=pw.chromium.launch(headless=True)
             try:
@@ -273,9 +273,10 @@ class AdminRedesignBrowserTests(unittest.TestCase):
                         dialog.wait_for(state='visible')
                         dialog.get_by_text('Дебетовая карта Альфа Банк').first.wait_for()
                         self.assertEqual(dialog.locator('.admin-catalog-card').count(),1)
-                        self.assertEqual(dialog.locator('form.admin-catalog-form').count(),1 if role=='owner' else 0)
+                        self.assertEqual(dialog.locator('form.admin-catalog-form').count(),1)
+                        self.assertEqual(dialog.get_by_role('button',name='Удалить',exact=True).count(),1)
                         dialog.get_by_role('button',name='Закрыть').click()
-                        if role=='owner':
+                        if role in ('owner','admin'):
                             page.locator('#admin-offers-list').get_by_role('button',name='Редактировать').first.click()
                             editor=page.locator('#mvp-catalog-dialog form.admin-catalog-form')
                             self.assertEqual(editor.locator('input[name="name"]').input_value(),

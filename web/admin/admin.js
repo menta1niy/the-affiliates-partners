@@ -851,9 +851,9 @@
       if(state.section==="offers")await renderOffersView();
       notice("Оффер сохранён");
     }catch(err){error(err.message);}finally{save.disabled=false;}});
-    const canEdit=state.role==="owner";
+    const canEdit=canManageOffers();
     if(canEdit)dialog.insertBefore(form,list);
-    else dialog.append(make("p","Для вашей роли доступен просмотр каталога. Изменение общего каталога выполняет владелец.","message"));
+    else dialog.append(make("p","Для вашей роли доступен только просмотр каталога.","message"));
     async function reload(){
       list.replaceChildren(make("p","Загрузка…"));
       const data=await api("/admin/mvp/catalog");list.replaceChildren();
@@ -932,8 +932,8 @@
           const cell=make("div");cell.append(make("span",label),make("strong",value));terms.append(cell);
         }
         card.append(head,terms);attachOfferLogo(card,offer);
-        card.append(action(state.role==="owner"?"Редактировать":"Подробнее",
-          ()=>openOfferCatalog(state.role==="owner"?offer.id:null)));
+        card.append(action(canManageOffers()?"Редактировать":"Подробнее",
+          ()=>openOfferCatalog(canManageOffers()?offer.id:null)));
         root.append(card);
       }
     }catch(e){root.replaceChildren(make("p",e.message,"message error"));}

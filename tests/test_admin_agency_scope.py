@@ -104,7 +104,7 @@ class AdminAgencyScopeTests(unittest.TestCase):
     def test_manual_mvp_offer_assignment_is_agency_scoped(self):
         payload={"name":"Банковская карта", "category":"Карты", "target_action":"Активация",
                  "payout_rub":800, "hold_days":14, "instructions":"Инструкция", "referral_url":""}
-        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.admin, **payload)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **payload)[0],403)
         status, created=self.as_user('/api/admin/mvp/offer', OWNER, **payload)
         self.assertEqual(status,200,created)
         offer=created['offer_id']
@@ -114,6 +114,23 @@ class AdminAgencyScopeTests(unittest.TestCase):
                                      user_id=self.lead_a, offer_id=offer, note='')[0],200)
         self.assertEqual(self.as_user('/api/admin/participant',self.admin,user_id=self.lead_a)[1]['manual']['statistics']['total'],1)
         self.assertEqual(self.as_user('/api/admin/participant',self.other_admin,user_id=self.lead_a)[0],403)
+
+    def test_admin_catalog_crud_and_staff_denied(self):
+        payload={"name":"Offer", "category":"Card", "target_action":"Apply", "payout_rub":800, "hold_days":14}
+        status, result = self.as_user('/api/admin/mvp/offer', self.admin, **payload)
+        self.assertEqual(status, 200, result)
+        offer = result['offer_id']
+        edited = dict(payload, offer_id=offer, name='Updated offer')
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **edited)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.admin, **edited)[0],200)
+        offers = self.as_user('/api/admin/mvp/catalog', OWNER)[1]['offers']
+        self.assertEqual(next(x for x in offers if x['id']==offer)['name'], 'Updated offer')
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment',self.admin,user_id=self.lead_a,offer_id=offer)[0],200)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.staff_a,offer_id=offer)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.admin,offer_id=offer)[0],200)
+        self.assertNotIn(offer,[x['id'] for x in self.as_user('/api/admin/mvp/catalog',OWNER)[1]['offers']])
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute('SELECT count(*) FROM manual_assignments WHERE offer_id=?',(offer,)).fetchone()[0],1)
 
     def test_bulk_assignment_filters_tenants_and_rejects_cross_agency_atomically(self):
         payload={"name":"Тестовый оффер","category":"Дебетовые карты","target_action":"Оформить",
