@@ -1037,12 +1037,12 @@
         item.checked=Boolean(registration&&item.value===band);
       }
       const updated=Number(registration?.credit_updated_at);
-      const currentAge=Number(registration?.age);
+      const currentAge=registration?.age;
       const recent=Number.isFinite(updated)&&updated>0&&Date.now()/1000-updated<=30*86400;
       text("participant-credit-updated",Number.isFinite(updated)&&updated>0
         ?"Последнее обновление: "+new Date(updated*1000).toLocaleDateString("ru-RU")+(recent?" · актуально":" · нужно обновить")
         :"Анкета не заполнена");
-      if(Number.isFinite(currentAge)&&currentAge<18){
+      if((Number.isFinite(currentAge)&&currentAge<18) || (registration && currentAge==null && registration.adult_confirmed===false)){
         text("participant-identity-status","Оформление офферов недоступно до 18 лет; приглашать друзей можно.");
       }
     }
@@ -1111,6 +1111,9 @@
       text("registration-message",e.message);
     } finally {button.disabled=false;}
   });
+  $("participant-inn").addEventListener("input",event=>{
+    event.target.value=event.target.value.replace(/\s/g,"");
+  });
   $("participant-identity-form").addEventListener("submit",async event=>{
     event.preventDefault();
     const save=$("participant-identity-save");save.disabled=true;
@@ -1120,7 +1123,7 @@
         surname:$("participant-surname").value.trim(),
         given_name:$("participant-given-name").value.trim(),
         patronymic:$("participant-patronymic").value.trim(),
-        inn:$("participant-inn").value.trim()
+        inn:$("participant-inn").value.replace(/\s/g,"")
       });
       text("participant-identity-message","Реквизиты сохранены.");
       await refresh();

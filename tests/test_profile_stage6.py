@@ -53,15 +53,18 @@ class ProfileStage6Tests(unittest.TestCase):
         return self.as_user("/api/profile/identity",uid,**payload)
 
     def test_adult_without_identity_cannot_get_offer_url_and_can_unlock(self):
-        self.register_active(ALICE)
+        self.assertEqual(self.as_user('/api/register',ALICE,**{**TEST_ONBOARDING,'consent':True,'credit_band':'0','adult_confirmed':True})[0],200)
+        self.assertEqual(self.as_user('/api/admin/decision',OWNER,user_id=ALICE,decision='approve')[0],200)
         offer=self.offer("Дебетовые карты")
         self.assign(ALICE,offer)
         before=self.as_user("/api/mvp/overview",ALICE)[1]["offers"][0]
         self.assertFalse(before["can_apply"])
         self.assertEqual(before["unavailable_reason"],"identity")
         self.assertEqual(before["referral_url"],"")
-        self.assertEqual(self.save_identity(ALICE)[0],200)
+        self.assertEqual(self.save_identity(ALICE,inn='5001 0073\u00a02259')[0],200)
         session=self.as_user("/api/session",ALICE)[1]
+        self.assertIsNone(session['registration']['age'])
+        self.assertTrue(session['registration']['adult_confirmed'])
         self.assertTrue(session["identity"]["complete"])
         self.assertEqual(session["identity"]["inn_masked"],"********2259")
         self.assertNotIn("inn",session["identity"])

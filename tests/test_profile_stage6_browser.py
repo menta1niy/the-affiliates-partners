@@ -11,6 +11,7 @@ FIXTURE = r"""(() => {
   const params=new URLSearchParams(location.hash.slice(1));
   const minor=params.get('minor')==='1';
   const legacy=params.get('legacy')==='1';
+  const simple=params.get('simple')==='1';
   let complete=false;
   let creditFresh=!minor;
   window.__profileActions=[];
@@ -29,7 +30,7 @@ FIXTURE = r"""(() => {
       internal_id:121,display_id:'L-000121',status:'active'};
     if(path==='/session')data={
       source:'telegram',user,role:'lead',status:'active',open_registration:true,
-      registration:legacy&&!creditFresh?null:{birth_date:birth,age:minor?16:26,submitted_at:100,
+      registration:legacy&&!creditFresh?null:{birth_date:simple?null:birth,age:simple?null:minor?16:26,adult_confirmed:!minor,submitted_at:100,
         credit_updated_at:creditFresh?Math.round(Date.now()/1000):100,
         credit_products:{credit_cards:1,installments:0,loans:0,mortgages:0}},
       identity:complete?{complete:true,surname:'Иванов',given_name:'Иван',
@@ -80,10 +81,10 @@ class ProfileStage6BrowserTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=2)
 
-    def open(self,browser,width,minor=False,legacy=False):
+    def open(self,browser,width,minor=False,legacy=False,simple=False):
         page=browser.new_page(viewport={"width":width,"height":844})
         page.add_init_script(FIXTURE)
-        page.goto(self.base+f"/partners/#tgWebAppData=fixture&minor={int(minor)}&legacy={int(legacy)}")
+        page.goto(self.base+f"/partners/#tgWebAppData=fixture&minor={int(minor)}&legacy={int(legacy)}&simple={int(simple)}")
         page.locator("#kpi-total").get_by_text("1",exact=True).wait_for()
         return page
 
@@ -93,7 +94,7 @@ class ProfileStage6BrowserTests(unittest.TestCase):
             try:
                 for width in (320,390):
                     with self.subTest(width=width):
-                        page=self.open(browser,width)
+                        page=self.open(browser,width,simple=True)
                         errors=[]
                         page.on("pageerror",lambda err:errors.append(str(err)))
                         page.locator('#participant-nav [data-view="offers"]').click()
@@ -109,7 +110,8 @@ class ProfileStage6BrowserTests(unittest.TestCase):
                         self.assertEqual(page.locator("#profile-internal-id").inner_text(),"L-000121")
                         page.locator("#participant-surname").fill("Иванов")
                         page.locator("#participant-given-name").fill("Иван")
-                        page.locator("#participant-inn").fill("500100732259")
+                        self.assertNotIn('18 лет',page.locator('#participant-identity-status').inner_text())
+                        page.locator("#participant-inn").fill("5001 0073 2259")
                         page.locator("#participant-identity-save").click()
                         page.locator("#participant-identity-status").get_by_text("Реквизиты сохранены",exact=False).wait_for()
                         page.locator('#participant-nav [data-view="offers"]').click()

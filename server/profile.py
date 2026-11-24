@@ -11,7 +11,7 @@ from server import db
 from server.registration import COUNTS, MAX_CREDIT_PRODUCTS_PER_TYPE, SIMPLE_BANDS, age, normalize
 
 NAME = re.compile(r"^[A-Za-zА-Яа-яЁё]+(?:[ '-][A-Za-zА-Яа-яЁё]+)*$")
-INN = re.compile(r"^\d{12}$")
+INN = re.compile(r"^[0-9]{12}$")
 SURVEY_FRESH_DAYS = 30
 
 
@@ -54,8 +54,12 @@ def save_identity(actor, data):
         raise db.Problem(400, "Некорректное отчество")
     patronymic = _name(patronymic) if patronymic.strip() else ""
     taxpayer_id = data.get("inn")
+    if isinstance(taxpayer_id, str):
+        taxpayer_id = "".join(taxpayer_id.split())
+    if not isinstance(taxpayer_id, str) or not INN.fullmatch(taxpayer_id):
+        raise db.Problem(400, "ИНН физического лица должен содержать ровно 12 цифр")
     if not _inn_valid(taxpayer_id):
-        raise db.Problem(400, "Проверьте ИНН: требуется действительный 12-значный номер")
+        raise db.Problem(400, "Контрольные цифры ИНН не совпадают. Сверьте номер с документом или сервисом ФНС")
     cipher = _cipher()
     encrypted_name = cipher.encrypt(("\x1f".join((surname, given_name, patronymic))).encode("utf-8")).decode("ascii")
     encrypted_inn = cipher.encrypt(taxpayer_id.encode("ascii")).decode("ascii")
