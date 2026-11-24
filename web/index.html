@@ -167,6 +167,12 @@
           </div>
           <a class="btn primary" href="#offers" data-go-view="offers" id="participant-next-action">К офферам →</a>
         </section>
+        <section class="panel participant-support" aria-label="Поддержка">
+          <div class="section-kicker">THE AFFILIATES / ПОДДЕРЖКА</div>
+          <h3>Нужна помощь?</h3>
+          <p>Вопросы по офферам, МФО и выплатам — администратору The Affiliates.</p>
+          <a class="btn ghost" href="https://t.me/AffiliatesAdmin" target="_blank" rel="noopener noreferrer">Написать @AffiliatesAdmin →</a>
+        </section>
         <div class="participant-account-cards" id="participant-access-summary">
           <article class="panel participant-status-card">
             <div class="section-kicker">ВАШ ДОСТУП</div>
@@ -319,13 +325,26 @@
             <div><span>НАЧИСЛЕНО ВСЕГО</span><strong id="finance-accrued">—</strong></div>
           </div>
           <p id="finance-load-status" class="participant-finance-load-status" role="status" aria-live="polite" hidden></p>
-          <form id="participant-finance-request" class="participant-finance-request">
+          <button id="finance-request-open" type="button" class="btn primary" aria-controls="participant-finance-request" aria-expanded="false" disabled>Вывести средства</button>
+          <form id="participant-finance-request" class="participant-finance-request" hidden>
             <label for="finance-request-amount">Сумма запроса в рублях
               <input type="number" inputmode="numeric" min="1" max="10000000" step="1" id="finance-request-amount" required>
             </label>
+            <label for="finance-payout-phone">Телефон для перевода по СБП
+              <input type="tel" id="finance-payout-phone" autocomplete="tel" placeholder="+7 900 000-00-00" maxlength="30" required>
+            </label>
+            <label for="finance-payout-bank">Банк получателя
+              <input type="text" id="finance-payout-bank" maxlength="80" placeholder="Название банка" required>
+            </label>
+            <p class="participant-profile-explain">Укажите свой номер и банк. Проверьте реквизиты перед отправкой. Не передавайте коды из SMS, пароли или CVV.</p>
             <button id="finance-request-submit" type="submit" class="btn primary" disabled>Запросить выплату</button>
             <p id="finance-request-feedback" role="status"></p>
           </form>
+          <div id="finance-request-success" class="participant-finance-request" role="status" hidden>
+            <strong id="finance-request-number"></strong>
+            <p>Заявка сохранена. Сообщите её номер администратору для обработки выплаты.</p>
+            <a id="finance-request-support" class="btn primary" href="https://t.me/AffiliatesAdmin" target="_blank" rel="noopener noreferrer">Связаться с администратором</a>
+          </div>
           <div class="participant-finance-history">
             <h3>История выплат</h3>
             <div id="finance-withdrawals" aria-live="polite"></div>

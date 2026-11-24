@@ -1316,11 +1316,20 @@
       }
       for(const payout of response.withdrawals){
         const card=make("article",undefined,"admin-offer-event-card");
-        card.append(make("span",payout.display_id+" · "+payout.id.slice(-8),"section-kicker"));
+        card.append(make("span",payout.display_id+" · "+payout.id.replace(/^wd_/i,"WD-").toUpperCase(),"section-kicker"));
         card.append(make("h3",number(payout.amount_rub)+" ₽"));
         card.append(statusMark("withdrawal",payout.status,withdrawalLabels[payout.status]||"Неизвестный статус"));
         if(payout.review_note)card.append(make("p","Комментарий: "+payout.review_note,"muted"));
         if(payout.status==="pending"||payout.status==="confirmed"){
+          if(canManageOffers()){
+            if(payout.has_payout_details){
+              const details=make('p','Реквизиты скрыты','muted');
+              card.append(details,action('Показать реквизиты СБП',async()=>{
+                const result=await api('/admin/finance/payout-details',{withdrawal_id:payout.id});
+                details.textContent='Телефон: '+result.details.phone+' · Банк: '+result.details.bank;
+              }));
+            }else card.append(make('p','Реквизиты не указаны. Свяжитесь с участником перед переводом.','muted'));
+          }
           const note=make("textarea");note.maxLength=300;note.rows=2;
           note.placeholder="Причина отказа или комментарий";
           note.setAttribute("aria-label","Комментарий заявки "+payout.display_id);

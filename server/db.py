@@ -849,7 +849,7 @@ def admin_participant_detail(actor, owner_id, target_id):
                 "withdrawals": [finance._public_withdrawal(row) for row in conn.execute(
                     "SELECT * FROM finance_withdrawals WHERE telegram_id=? "
                     "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()],
-                "accrual_by_offer": {row["offer_id"]: row["amount_rub"] for row in conn.execute(
+                "accrual_by_offer": {row["offer_id"]: int(row["amount_rub"]) for row in conn.execute(
                     "SELECT offer_id,SUM(amount_rub) AS amount_rub FROM finance_accruals "
                     "WHERE telegram_id=? GROUP BY offer_id", (target_id,)).fetchall()},
             }

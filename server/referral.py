@@ -102,8 +102,8 @@ def referral_view(conn, actor):
     schema(conn)
     count = conn.execute("SELECT COUNT(*) FROM users WHERE source='referral' AND referrer_id=?",
                          (actor,)).fetchone()[0]
-    total = conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM referral_rewards "
-                         "WHERE referrer_id=?", (actor,)).fetchone()[0]
+    total = int(conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM referral_rewards "
+                         "WHERE referrer_id=?", (actor,)).fetchone()[0])
     rows = conn.execute("SELECT r.amount_kopeks,r.created_at,u.internal_id FROM referral_rewards r "
                         "JOIN users u ON u.id=r.referred_id WHERE r.referrer_id=? "
                         "ORDER BY r.created_at DESC,r.withdrawal_id DESC LIMIT 100", (actor,)).fetchall()
@@ -180,11 +180,11 @@ def blogger_view(actor, owner_id, data):
                               (campaign["blogger_uuid"],)).fetchone()
         invited = conn.execute("SELECT COUNT(*) FROM blogger_attributions WHERE blogger_uuid=?",
                                (campaign["blogger_uuid"],)).fetchone()[0]
-        earned = conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM blogger_rewards "
-                              "WHERE blogger_uuid=?", (campaign["blogger_uuid"],)).fetchone()[0]
-        paid = conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM blogger_rewards "
+        earned = int(conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM blogger_rewards "
+                              "WHERE blogger_uuid=?", (campaign["blogger_uuid"],)).fetchone()[0])
+        paid = int(conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM blogger_rewards "
                             "WHERE blogger_uuid=? AND status='paid'",
-                            (campaign["blogger_uuid"],)).fetchone()[0]
+                            (campaign["blogger_uuid"],)).fetchone()[0])
         rows = conn.execute("SELECT id,kind,amount_kopeks,status,created_at FROM blogger_rewards "
                             "WHERE blogger_uuid=? ORDER BY created_at DESC,id DESC LIMIT 100",
                             (campaign["blogger_uuid"],)).fetchall()

@@ -81,7 +81,7 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
         routes.update({"/api/finance/overview","/api/finance/withdraw",
                        "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
-                       "/api/admin/finance/decision"})
+                       "/api/admin/finance/decision","/api/admin/finance/payout-details"})
         routes.update({"/api/statistics/overview", "/api/blogger/overview","/api/admin/bloggers/create",
                        "/api/admin/bloggers/list","/api/admin/bloggers/fixed",
                        "/api/admin/bloggers/paid","/api/admin/bloggers/update"})
@@ -241,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = finance.queue(user["id"], owner, body)
             elif route == "/api/admin/finance/decision":
                 result = finance.decide(user["id"], owner, body)
+            elif route == "/api/admin/finance/payout-details":
+                result = finance.payout_details(user["id"], owner, body)
             elif route == "/api/blogger/overview":
                 result = referral.blogger_view(user["id"], owner, body)
             elif route == "/api/admin/bloggers/create":

@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS finance_withdrawals (
   reviewed_by BIGINT REFERENCES users(id), created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(telegram_id,created_at);
+ALTER TABLE finance_withdrawals ADD COLUMN IF NOT EXISTS payout_details_encrypted TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
   ON finance_withdrawals(payment_reference) WHERE payment_reference!='';

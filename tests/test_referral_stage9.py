@@ -29,7 +29,7 @@ class Stage9ReferralTests(unittest.TestCase):
 
     def payout(self, person, offer, amount, key):
         self.assertEqual(self.credit(person, offer, amount, key)[0], 200)
-        status, result = self.as_user('/api/finance/withdraw', person, amount_rub=amount)
+        status, result = self.as_user('/api/finance/withdraw', person, amount_rub=amount,payout_phone="+79000000000",payout_bank="Test Bank")
         self.assertEqual(status, 200, result)
         wid = result['withdrawal']['id']
         self.assertEqual(self.as_user('/api/admin/finance/decision', OWNER,
@@ -52,7 +52,7 @@ class Stage9ReferralTests(unittest.TestCase):
         offer = self.offer(BOB)
         self.assertEqual(self.credit(BOB, offer, 101, 'referral.credit.1')[0], 200)
         self.assertEqual(self.as_user('/api/finance/overview', ALICE)[1]['referral']['earned_kopeks'], 0)
-        withdraw = self.as_user('/api/finance/withdraw', BOB, amount_rub=101)[1]['withdrawal']['id']
+        withdraw = self.as_user('/api/finance/withdraw', BOB, amount_rub=101,payout_phone="+79000000000",payout_bank="Test Bank")[1]['withdrawal']['id']
         self.assertEqual(self.as_user('/api/admin/finance/decision', OWNER,
                          withdrawal_id=withdraw, decision='confirm')[0], 200)
         self.assertEqual(self.as_user('/api/finance/overview', ALICE)[1]['referral']['earned_kopeks'], 0)

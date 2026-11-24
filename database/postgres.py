@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS finance_withdrawals (
   reviewed_by BIGINT REFERENCES users(id), created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(telegram_id,created_at);
+ALTER TABLE finance_withdrawals ADD COLUMN IF NOT EXISTS payout_details_encrypted TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref
   ON finance_withdrawals(payment_reference) WHERE payment_reference!='';
@@ -310,7 +311,7 @@ def validate_ready(url):
         "finance_accruals": {"id","telegram_id","offer_id","amount_rub","source_reference","note",
                              "confirmed_by","created_at"},
         "finance_withdrawals": {"id","telegram_id","amount_rub","status","review_note",
-                                "payment_reference","reviewed_by","created_at","updated_at"},
+                                "payment_reference","reviewed_by","created_at","updated_at","payout_details_encrypted"},
         "referral_rewards": {"withdrawal_id","referrer_id","referred_id","amount_kopeks","created_at"},
         "blogger_campaigns": {"blogger_uuid","telegram_id","fixed_rub","percent_bps","active","created_at","updated_at"},
         "blogger_attributions": {"telegram_id","blogger_uuid","created_at"},

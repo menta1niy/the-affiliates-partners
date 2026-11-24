@@ -35,7 +35,7 @@ class Stage11StatisticsTests(unittest.TestCase):
         self.assertEqual(credited["potential"]["hold_rub"], 0)
         self.assertEqual(credited["verified"]["available_rub"], 700)
         self.assertEqual(credited["verified"]["paid_rub"], 0)
-        withdrawal = self.as_user("/api/finance/withdraw", ALICE, amount_rub=400)[1]["withdrawal"]["id"]
+        withdrawal = self.as_user("/api/finance/withdraw", ALICE, amount_rub=400,payout_phone="+79000000000",payout_bank="Test Bank")[1]["withdrawal"]["id"]
         _, reserved = self.as_user("/api/statistics/overview", ALICE)
         self.assertEqual(reserved["verified"]["reserved_rub"], 400)
         self.assertEqual(reserved["verified"]["available_rub"], 300)

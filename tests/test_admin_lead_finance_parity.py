@@ -48,7 +48,7 @@ class AdminLeadFinanceParity(unittest.TestCase):
         credited = parity()
         self.assertEqual(credited['statistics']['potential']['hold_rub'], 0)
         self.assertEqual(credited['finance']['accrual_by_offer'][hold], 700)
-        withdrawal = self.as_user('/api/finance/withdraw', ALICE, amount_rub=400)[1]['withdrawal']['id']
+        withdrawal = self.as_user('/api/finance/withdraw', ALICE, amount_rub=400,payout_phone="+79000000000",payout_bank="Test Bank")[1]['withdrawal']['id']
         reserved = parity()
         self.assertEqual(reserved['finance']['balances']['reserved_rub'], 400)
         self.assertEqual(reserved['finance']['balances']['paid_rub'], 0)

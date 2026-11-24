@@ -46,22 +46,59 @@ class Stage8FinanceTests(unittest.TestCase):
         return self.as_user("/api/admin/finance/accrue",OWNER,user_id=uid,
                             offer_id=offer,amount_rub=amount,source_reference=ref)
 
+    def test_full_lead_journey(self):
+        self.ready(ALICE)
+        offer=self.offer(ALICE)
+        for stage in ('application_sent','meeting_scheduled','product_received'):
+            status,result=self.as_user('/api/mvp/submit',ALICE,kind='stage',offer_id=offer,lead_stage=stage,proof_url='https://example.test/qa')
+            self.assertEqual(status,200,result)
+            self.assertEqual(self.as_user('/api/admin/mvp/review-event',OWNER,event_id=result['event']['id'],decision='approve')[0],200)
+        self.assertEqual(self.as_user('/api/admin/mvp/assignment',OWNER,user_id=ALICE,offer_id=offer,stage='completed')[0],200)
+        self.assertEqual(self.as_user('/api/finance/overview',ALICE)[1]['balances']['available_rub'],0)
+        self.assertEqual(self.credit(ALICE,offer,1200,'qa.lifecycle.accrual')[0],200)
+        self.assertEqual(self.as_user('/api/finance/withdraw',ALICE,amount_rub=700)[0],400)
+        status,result=self.as_user('/api/finance/withdraw',ALICE,amount_rub=700,payout_phone='+79000000000',payout_bank='Test Bank')
+        self.assertEqual(status,200,result)
+        wid=result['withdrawal']['id']
+        self.assertRegex(wid,r'^wd_[0-9a-f]{24}$')
+        self.assertEqual(result['balances']['reserved_rub'],700)
+        with db.transaction() as conn:
+            encrypted=conn.execute('SELECT payout_details_encrypted FROM finance_withdrawals WHERE id=?',(wid,)).fetchone()[0]
+            self.assertTrue(encrypted)
+            self.assertNotIn('Test Bank',encrypted)
+            self.assertNotIn('+79000000000',encrypted)
+        status,queue=self.as_user('/api/admin/finance/withdrawals',OWNER,status='pending')
+        self.assertEqual(status,200,queue)
+        item=next(item for item in queue['withdrawals'] if item['id']==wid)
+        self.assertTrue(item['has_payout_details'])
+        self.assertNotIn('payout_details_encrypted',item)
+        self.assertNotIn('details',item)
+        self.assertEqual(self.as_user('/api/admin/finance/payout-details',ALICE,withdrawal_id=wid)[0],403)
+        self.assertEqual(self.as_user('/api/admin/finance/payout-details',OWNER,withdrawal_id=wid)[1]['details']['bank'],'Test Bank')
+        self.assertEqual(self.as_user('/api/admin/finance/decision',OWNER,withdrawal_id=wid,decision='confirm')[0],200)
+        status,result=self.as_user('/api/admin/finance/decision',OWNER,withdrawal_id=wid,decision='paid',payment_reference='qa.lifecycle.payment')
+        self.assertEqual(status,200,result)
+        self.assertEqual(result['balances'],{'accrued_rub':1200,'paid_rub':700,'reserved_rub':0,'available_rub':500})
+        self.assertEqual(self.as_user('/api/admin/finance/payout-details',OWNER,withdrawal_id=wid)[0],409)
+        with db.transaction() as conn:
+            self.assertEqual(conn.execute('SELECT payout_details_encrypted FROM finance_withdrawals WHERE id=?',(wid,)).fetchone()[0],'')
+
     def test_balance_reservation_refund_and_paid_are_exact(self):
         self.ready(ALICE)
         offer=self.offer(ALICE)
         self.assertEqual(self.as_user("/api/finance/overview",ALICE)[1]["balances"],
             {"accrued_rub":0,"paid_rub":0,"reserved_rub":0,"available_rub":0})
-        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=1)[0],409)
+        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=1,payout_phone="+79000000000",payout_bank="Test Bank")[0],409)
         self.assertEqual(self.credit(ALICE,offer,1200,"bank.accrual.20261120")[0],200)
         self.assertEqual(self.credit(ALICE,offer,1200,"bank.accrual.20261120")[0],409)
         self.assertEqual(self.as_user("/api/finance/overview",ALICE)[1]["balances"]["available_rub"],1200)
-        status,first=self.as_user("/api/finance/withdraw",ALICE,amount_rub=700)
+        status,first=self.as_user("/api/finance/withdraw",ALICE,amount_rub=700,payout_phone="+79000000000",payout_bank="Test Bank")
         self.assertEqual(status,200,first)
         first_id=first["withdrawal"]["id"]
         self.assertEqual(first["balances"]["reserved_rub"],700)
         self.assertEqual(first["balances"]["available_rub"],500)
-        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=501)[0],409)
-        status,second=self.as_user("/api/finance/withdraw",ALICE,amount_rub=500)
+        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=501,payout_phone="+79000000000",payout_bank="Test Bank")[0],409)
+        status,second=self.as_user("/api/finance/withdraw",ALICE,amount_rub=500,payout_phone="+79000000000",payout_bank="Test Bank")
         self.assertEqual(status,200,second)
         self.assertEqual(second["balances"]["available_rub"],0)
         self.assertEqual(self.as_user("/api/admin/finance/decision",OWNER,
@@ -96,7 +133,7 @@ class Stage8FinanceTests(unittest.TestCase):
         self.assertEqual(self.as_user("/api/admin/mvp/assignment",OWNER,
             user_id=ALICE,offer_id=offer,stage="completed")[0],200)
         self.assertEqual(self.as_user("/api/finance/overview",ALICE)[1]["balances"]["accrued_rub"],0)
-        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=1000)[0],409)
+        self.assertEqual(self.as_user("/api/finance/withdraw",ALICE,amount_rub=1000,payout_phone="+79000000000",payout_bank="Test Bank")[0],409)
 
     def test_ids_sources_and_financial_roles_are_guarded(self):
         self.ready(ALICE)
@@ -112,7 +149,7 @@ class Stage8FinanceTests(unittest.TestCase):
         self.assertEqual(self.credit(ALICE,offer,300,"abc.def.2")[0],200)
         self.assertEqual(self.as_user("/api/admin/finance/accrue",OWNER,user_id=BOB,
             offer_id=offer,amount_rub=300,source_reference="abc.def.3")[0],409)
-        self.assertEqual(self.as_user("/api/finance/withdraw",BOB,amount_rub=1)[0],409)
+        self.assertEqual(self.as_user("/api/finance/withdraw",BOB,amount_rub=1,payout_phone="+79000000000",payout_bank="Test Bank")[0],409)
         self.assertEqual(self.post("/api/finance/withdraw",{"initData":"invalid","amount_rub":1})[0],401)
         self.assertEqual(self.as_user("/api/admin/finance/withdrawals",ALICE)[0],403)
         self.assertEqual(self.as_user("/api/admin/finance/decision",ALICE,
@@ -132,7 +169,7 @@ class Stage8FinanceTests(unittest.TestCase):
             conn.execute("UPDATE users SET manager_id=? WHERE id=?", (manager,ALICE))
             conn.execute("UPDATE users SET manager_id=? WHERE id=?", (other_manager,BOB))
         self.assertEqual(self.credit(ALICE,offer,200,"manager.scope.1")[0],200)
-        status,data=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100)
+        status,data=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100,payout_phone="+79000000000",payout_bank="Test Bank")
         self.assertEqual(status,200,data)
         withdraw_id=data["withdrawal"]["id"]
         own=self.as_user("/api/admin/finance/withdrawals",manager)[1]["withdrawals"]
@@ -149,8 +186,8 @@ class Stage8FinanceTests(unittest.TestCase):
         self.ready(ALICE)
         offer=self.offer(ALICE)
         self.assertEqual(self.credit(ALICE,offer,200,"payment.ref.accrual")[0],200)
-        first=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100)[1]["withdrawal"]["id"]
-        second=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100)[1]["withdrawal"]["id"]
+        first=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100,payout_phone="+79000000000",payout_bank="Test Bank")[1]["withdrawal"]["id"]
+        second=self.as_user("/api/finance/withdraw",ALICE,amount_rub=100,payout_phone="+79000000000",payout_bank="Test Bank")[1]["withdrawal"]["id"]
         for withdraw_id in (first,second):
             self.assertEqual(self.as_user("/api/admin/finance/decision",OWNER,
                 withdrawal_id=withdraw_id,decision="confirm")[0],200)

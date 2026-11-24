@@ -96,6 +96,7 @@
     for(const field of fields)text(field,"Загрузка…");
     financeAvailableRub=null;
     $("finance-request-submit").disabled=true;
+    $("finance-request-open").disabled=true;
     $("finance-request-amount").removeAttribute("max");
     text("finance-load-status","Проверяем подтверждённый баланс…");
     show("finance-load-status",true);
@@ -108,13 +109,18 @@
         const title=document.createElement("strong");
         title.textContent=money(entry.amount_rub);
         const detail=document.createElement("small");detail.textContent=kind==="withdrawals"
-          ?(entry.review_note||"Заявка № "+entry.id.slice(-8))
+          ?("Заявка № "+entry.id.replace(/^wd_/i,"WD-").toUpperCase()+(entry.review_note?" · "+entry.review_note:""))
           :"Основание: "+entry.source_reference;
         item.append(title,
           kind==="withdrawals"
             ?statusMark("withdrawal",entry.status,withdrawalLabels[entry.status]||"Неизвестный статус")
             :statusMark("ledger","accrued","Подтверждённое начисление"),
           detail);
+        if(kind==="withdrawals"&&["pending","confirmed"].includes(entry.status)){
+          const link=document.createElement("a");link.className="btn ghost";
+          link.href="https://t.me/AffiliatesAdmin";link.target="_blank";link.rel="noopener noreferrer";
+          link.textContent="Связаться с администратором";item.append(link);
+        }
         root.append(item);
       }
     };
@@ -131,6 +137,7 @@
       financeAvailableRub=data.balances.available_rub;
       $("finance-request-amount").max=String(Math.min(10000000,financeAvailableRub));
       $("finance-request-submit").disabled=financeAvailableRub<1;
+      $("finance-request-open").disabled=financeAvailableRub<1;
       show("finance-load-status",false);
       text("finance-request-feedback",financeAvailableRub<1?"Запрос станет доступен после подтверждённого начисления.":"");
       renderRows("finance-withdrawals",data.withdrawals,"withdrawals");
@@ -706,6 +713,9 @@
       });
       offerDialogContent.append(request);
     }
+    if(offer.requires_request){
+      const support=document.createElement('a');support.className='btn ghost';support.href='https://t.me/AffiliatesAdmin';support.target='_blank';support.rel='noopener noreferrer';support.textContent='По вопросам МФО — @AffiliatesAdmin →';offerDialogContent.append(support);
+    }
     if(offer.can_apply===true && (!offer.requires_request||offer.mfo_approved) &&
        !["completed","rejected"].includes(offer.stage)){
       const section=document.createElement("section");section.className="participant-offer-report";
@@ -1130,6 +1140,12 @@
     }catch(e){text("participant-identity-message",e.message);}
     finally{save.disabled=false;}
   });
+  $("finance-request-open").addEventListener("click",()=>{
+    const open=$("participant-finance-request").hidden;
+    show("participant-finance-request",open);
+    $("finance-request-open").setAttribute("aria-expanded",String(open));
+    if(open)$("finance-request-amount").focus();
+  });
   $("participant-finance-request").addEventListener("submit",async event=>{
     event.preventDefault();
     const submit=$("finance-request-submit");submit.disabled=true;
@@ -1142,9 +1158,13 @@
       if(amount>financeAvailableRub)throw new Error("Сумма превышает доступный баланс.");
       if(!window.confirm("Запросить выплату "+money(amount)+"? Сумма будет зарезервирована до решения."))
         return;
-      await api("/finance/withdraw",{amount_rub:amount});
+      const result=await api("/finance/withdraw",{amount_rub:amount,payout_phone:$("finance-payout-phone").value,payout_bank:$("finance-payout-bank").value.trim()});
       field.value="";
-      text("finance-request-feedback","Заявка отправлена на рассмотрение.");
+      $("finance-payout-phone").value="";$("finance-payout-bank").value="";
+      text("finance-request-number","Заявка № "+result.withdrawal.id.replace(/^wd_/i,"WD-").toUpperCase());
+      show("finance-request-success",true);
+      show("participant-finance-request",false);
+      $("finance-request-open").setAttribute("aria-expanded","false");
       await loadFinance();
     }catch(e){text("finance-request-feedback",e.message);}
     finally{submit.disabled=financeAvailableRub===null || financeAvailableRub<1;}

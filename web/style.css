@@ -3496,6 +3496,9 @@ dialog select,dialog input { max-width:100%; }
   border-radius:var(--float-inner-radius);
   background:rgba(228,163,74,.055);
 }
+.participant-app .participant-finance-request[hidden] {display:none;}
+.participant-app #finance-request-number {overflow-wrap:anywhere;}
+.admin-control .admin-offer-event-card .section-kicker {overflow-wrap:anywhere;}
 .participant-app .participant-finance-request label {
   display:grid;gap:7px;min-width:0;
   font-size:12px;color:var(--color-text);font-weight:650;

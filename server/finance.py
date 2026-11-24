@@ -4,6 +4,7 @@ Offer rates, lead reports, and manual completion NEVER create accruals.
 All money is integral rubles and every mutation is a serialized transaction.
 """
 import re
+import json
 import secrets
 import time
 
@@ -42,6 +43,8 @@ def schema(conn):
         updated_at INTEGER NOT NULL
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_user ON finance_withdrawals(telegram_id,created_at)")
+    if 'payout_details_encrypted' not in {r['name'] for r in conn.execute('PRAGMA table_info(finance_withdrawals)').fetchall()}:
+        conn.execute("ALTER TABLE finance_withdrawals ADD COLUMN payout_details_encrypted TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_finance_withdrawals_status ON finance_withdrawals(status,created_at)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_finance_withdrawals_payment_ref "
                  "ON finance_withdrawals(payment_reference) WHERE payment_reference!=''")
@@ -68,15 +71,15 @@ def _target(conn, staff, target_id):
 def _balances(conn, target_id):
     from server import referral
     referral.schema(conn)
-    total = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_accruals WHERE telegram_id=?",
-                         (target_id,)).fetchone()[0]
-    referral_kopeks = conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM referral_rewards "
-                                  "WHERE referrer_id=?", (target_id,)).fetchone()[0]
-    paid = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
-                        "WHERE telegram_id=? AND status='paid'", (target_id,)).fetchone()[0]
-    reserved = conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
+    total = int(conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_accruals WHERE telegram_id=?",
+                         (target_id,)).fetchone()[0])
+    referral_kopeks = int(conn.execute("SELECT COALESCE(SUM(amount_kopeks),0) FROM referral_rewards "
+                                  "WHERE referrer_id=?", (target_id,)).fetchone()[0])
+    paid = int(conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
+                        "WHERE telegram_id=? AND status='paid'", (target_id,)).fetchone()[0])
+    reserved = int(conn.execute("SELECT COALESCE(SUM(amount_rub),0) FROM finance_withdrawals "
                             "WHERE telegram_id=? AND status IN ('pending','confirmed')",
-                            (target_id,)).fetchone()[0]
+                            (target_id,)).fetchone()[0])
     available_kopeks = total * 100 + referral_kopeks - (paid + reserved) * 100
     available = available_kopeks // 100
     if min(total, paid, reserved, available_kopeks) < 0:
@@ -165,10 +168,21 @@ def request(actor, owner_id, data):
         balances=_balances(conn,actor)
         if amount>balances["available_rub"]:
             raise db.Problem(409,"Недостаточно доступных средств")
+        from server.profile import _cipher
+        phone=data.get('payout_phone')
+        bank=data.get('payout_bank')
+        if not isinstance(phone,str) or not isinstance(bank,str):
+            raise db.Problem(400,'Укажите телефон для СБП и банк получателя')
+        phone=re.sub(r'[\s()+-]','',phone)
+        if len(phone)==11 and phone.startswith('8'):
+            phone='7'+phone[1:]
+        if not re.fullmatch(r'7[0-9]{10}',phone) or not 2<=len(bank.strip())<=80 or any(ord(c)<32 for c in bank):
+            raise db.Problem(400,'Проверьте номер телефона и название банка')
+        encrypted=_cipher().encrypt(json.dumps({'phone':'+'+phone,'bank':bank.strip()},ensure_ascii=False).encode()).decode('ascii')
         now=int(time.time())
         withdrawal_id="wd_"+secrets.token_hex(12)
-        conn.execute("INSERT INTO finance_withdrawals(id,telegram_id,amount_rub,status,created_at,updated_at) "
-                     "VALUES(?,?,?,'pending',?,?)",(withdrawal_id,actor,amount,now,now))
+        conn.execute("INSERT INTO finance_withdrawals(id,telegram_id,amount_rub,status,created_at,updated_at,payout_details_encrypted) "
+                     "VALUES(?,?,?,'pending',?,?,?)",(withdrawal_id,actor,amount,now,now,encrypted))
         db.audit(conn,actor,"finance_withdrawal_requested",actor,"withdrawal="+withdrawal_id)
         recipients={owner_id}
         if user["manager_id"]:
@@ -209,8 +223,35 @@ def queue(actor, owner_id, data):
                           "JOIN users u ON u.id=w.telegram_id "+where+
                           " ORDER BY w.created_at DESC,w.id DESC LIMIT 100",tuple(params)).fetchall()
         return {"withdrawals":[{**_public_withdrawal(row),"user_id":row["telegram_id"],
+                               "has_payout_details":bool(row['payout_details_encrypted']),
                                "display_id":"L-"+str(row["internal_id"]).zfill(6)}
                               for row in rows]}
+
+
+def payout_details(actor, owner_id, data):
+    from server.profile import _cipher
+    from cryptography.fernet import InvalidToken
+    wid=data.get('withdrawal_id')
+    if not isinstance(wid,str) or not WITHDRAWAL_ID.fullmatch(wid):
+        raise db.Problem(400,'Некорректная заявка')
+    db.initialize()
+    with db.transaction() as conn:
+        staff=db.require_staff(conn,actor,owner_id)
+        if staff['role'] not in ('owner','admin'):
+            raise db.Problem(403,'Реквизиты доступны только администрации')
+        schema(conn)
+        row=conn.execute('SELECT * FROM finance_withdrawals WHERE id=?',(wid,)).fetchone()
+        if not row:
+            raise db.Problem(404,'Заявка не найдена')
+        _target(conn,staff,row['telegram_id'])
+        if row['status'] not in ('pending','confirmed') or not row['payout_details_encrypted']:
+            raise db.Problem(409,'Реквизиты недоступны для этой заявки')
+        try:
+            details=json.loads(_cipher().decrypt(row['payout_details_encrypted'].encode('ascii')))
+        except (InvalidToken,ValueError,UnicodeError):
+            raise db.Problem(503,'Не удалось прочитать защищённые реквизиты') from None
+        db.audit(conn,actor,'finance_payout_details_viewed',row['telegram_id'],'withdrawal='+wid)
+        return {'details':details}
 
 
 def decide(actor, owner_id, data):
@@ -249,6 +290,8 @@ def decide(actor, owner_id, data):
                      "payment_reference=?,reviewed_by=?,updated_at=? WHERE id=?",
                      (next_status,note.strip(),payment_ref if decision=="paid" else "",
                       actor,now,withdrawal_id))
+        if next_status in ('paid','rejected'):
+            conn.execute("UPDATE finance_withdrawals SET payout_details_encrypted='' WHERE id=?",(withdrawal_id,))
         if next_status == "paid":
             from server import referral
             referral.on_paid(conn, db.get_user(conn,row["telegram_id"]), row)
