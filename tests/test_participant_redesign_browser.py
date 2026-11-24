@@ -224,6 +224,19 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         dialog = page.locator("#participant-offer-dialog")
                         self.assertTrue(dialog.is_visible())
                         self.assertIn("10 дн.", dialog.inner_text())
+                        metrics=dialog.locator('.participant-offer-details').evaluate('''node=>({
+                          sizes:[...node.querySelectorAll('strong')].map(el=>getComputedStyle(el).fontSize),
+                          weights:[...node.querySelectorAll('strong')].map(el=>getComputedStyle(el).fontWeight),
+                          border:getComputedStyle(node).borderTopStyle,
+                          borderWidth:parseFloat(getComputedStyle(node).borderTopWidth),
+                          color:getComputedStyle(node.querySelector('.participant-offer-payment strong')).color
+                        })''')
+                        self.assertEqual(len(metrics['sizes']),2)
+                        self.assertEqual(*metrics['sizes'])
+                        self.assertEqual(*metrics['weights'])
+                        self.assertEqual(metrics['border'],'solid')
+                        self.assertGreaterEqual(metrics['borderWidth'],1)
+                        self.assertEqual(metrics['color'],'rgb(228, 163, 74)')
                         self.assertIn("Проверить документы", dialog.inner_text())
                         self.assertIn("Следующий шаг", dialog.inner_text())
                         self.assertIn("Изучите условия оффера", dialog.locator(".participant-offer-full-next").inner_text())

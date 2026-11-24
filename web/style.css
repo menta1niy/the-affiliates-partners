@@ -1573,7 +1573,21 @@ dialog select,dialog input { max-width:100%; }
 .participant-app .participant-offer-dialog-head {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;}
 .participant-app .participant-offer-dialog-head .btn {min-height:42px;}
 .participant-app .participant-offer-dialog h2 {margin:8px 0 14px;font-size:clamp(24px,4vw,34px);letter-spacing:-.045em;overflow-wrap:anywhere;}
-.participant-app .participant-offer-dialog .participant-offer-details {margin:22px 0 8px;}
+.participant-app .participant-offer-dialog .participant-offer-details {
+  margin:22px 0 8px;padding:8px;gap:8px;
+  border:1px solid rgba(255,255,255,.19);border-radius:18px;
+  background:linear-gradient(145deg,#202123,#151617);
+  box-shadow:inset 0 1px rgba(255,255,255,.05),0 7px 20px rgba(0,0,0,.18);
+}
+.participant-app .participant-offer-dialog .participant-offer-details .participant-offer-detail {
+  padding:12px 10px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.20);border-radius:12px;
+}
+.participant-app .participant-offer-dialog .participant-offer-details .participant-offer-detail strong {
+  font-size:clamp(19px,4vw,28px);font-weight:700;line-height:1.25;letter-spacing:-.035em;
+  font-variant-numeric:tabular-nums;
+}
+.participant-app .participant-offer-dialog .participant-offer-details .participant-offer-payment strong {color:#e4a34a;}
 .participant-app .participant-offer-dialog .participant-offer-target {margin:12px 0 0;}
 .participant-app .participant-offer-warning {font-size:12px;line-height:1.6;color:#B3B6B7;margin:18px 0;}
 .participant-app .participant-offer-instruction-section {margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.13);}
