@@ -69,17 +69,16 @@
             </div>
             <details class="participant-registration-disclosure">
               <summary>Какие данные используются?</summary>
-              <p>Используются сведения Telegram, подтверждение совершеннолетия и внутренний ID.</p>
+              <p>Используются сведения профиля Telegram, ваш номер телефона, которым вы делитесь через официального бота, подтверждение совершеннолетия и внутренний ID.</p>
             </details>
             <details class="participant-registration-disclosure">
               <summary>Основные правила участия</summary>
               <p>Аккаунт активируется автоматически после принятия условий. Все опубликованные офферы доступны сразу. Для МФО действует отдельный порядок согласования. Вознаграждения начисляются после проверки результата.</p>
             </details>
-            <p class="participant-registration-disclaimer">Документы для ознакомления (проекты до утверждения): <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика обработки данных</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие на обработку</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия участия</a>, <a href="/partners/legal/referrals.html" target="_blank" rel="noopener noreferrer">Реферальная программа</a>. Версия: <span id="register-legal-version">—</span>.</p>
+            <p class="participant-registration-disclaimer">Документы для ознакомления: <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">Политика обработки данных</a>, <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">Согласие на обработку</a>, <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">Условия участия</a>, <a href="/partners/legal/referrals.html" target="_blank" rel="noopener noreferrer">Реферальная программа</a>. Версия: <span id="register-legal-version">—</span>.</p>
             <label class="check participant-registration-check"><input type="checkbox" id="consent" required><span>Даю отдельное согласие на обработку персональных данных для регистрации, модерации и участия в офферах. Ознакомился(-ась) с <a href="/partners/legal/data-consent.html" target="_blank" rel="noopener noreferrer">текстом согласия</a> и <a href="/partners/legal/privacy.html" target="_blank" rel="noopener noreferrer">политикой обработки данных</a>.</span></label>
             <label class="check participant-registration-check"><input type="checkbox" id="register-terms-consent" required><span>Ознакомился(-ась) с <a href="/partners/legal/terms.html" target="_blank" rel="noopener noreferrer">условиями участия</a> и принимаю их. Согласие на рекламные рассылки здесь не запрашивается.</span></label>
             <label class="check participant-registration-check"><input type="checkbox" id="register-adult-confirmed" required><span>Подтверждаю, что мне исполнилось 18 лет.</span></label>
-            <p class="participant-registration-disclaimer">Юридические тексты находятся на утверждении. До публичного релиза необходимо определить оператора данных, реквизиты, сроки хранения и новую версию согласий.</p>
           </div>
           <button id="register-submit" class="btn primary participant-registration-submit" type="submit">Открыть каталог офферов</button>
         </form>
@@ -171,7 +170,7 @@
         <section id="stats-section" class="participant-stats" aria-labelledby="stats-heading" hidden>
           <div class="participant-section-heading"><div class="section-kicker">ПРОГРЕСС</div><h2 id="stats-heading">В цифрах<span class="heading-period">.</span></h2></div>
           <div id="participant-kpis" class="participant-kpi-grid" aria-live="polite">
-            <article class="metric"><span>НАЗНАЧЕНО</span><strong id="kpi-total">—</strong></article>
+            <article class="metric"><span>ДОСТУПНО</span><strong id="kpi-total">—</strong></article>
             <article class="metric"><span>В РАБОТЕ</span><strong id="kpi-in-progress">—</strong></article>
             <article class="metric"><span>НА ПРОВЕРКЕ</span><strong id="kpi-submitted">—</strong></article>
             <article class="metric"><span>ЗАВЕРШЕНО</span><strong id="kpi-completed">—</strong></article>
@@ -194,11 +193,11 @@
           <p id="offers-description" class="visually-hidden">Ваши активные задания и условия.</p>
           <span class="participant-screen-decoration" aria-hidden="true">◎</span>
         </header>
-        <section id="offers-section" class="panel participant-offers" aria-label="Список назначенных офферов">
+        <section id="offers-section" class="panel participant-offers" aria-label="Список доступных офферов">
           <details class="participant-help">
             <summary>Как это работает?</summary>
             <div class="participant-help-body">
-              <p><strong>Оффер</strong> — назначенное вам предложение с условиями выполнения. Откройте «Подробнее», чтобы прочитать инструкцию.</p>
+              <p><strong>Оффер</strong> — опубликованное предложение с условиями выполнения. «Доступно» означает, что вы ещё не взяли его в работу. Откройте карточку, чтобы прочитать инструкцию.</p>
               <p><strong>На проверке</strong> означает, что администратор рассматривает результат, а не что банк его подтвердил.</p>
               <p><strong>Срок проверки (холд)</strong> — указанный в условиях период ожидания. Он не гарантирует дату выплаты.</p>
               <p><strong>Завершено</strong> — ручная отметка администратора, не подтверждение банковского начисления или оплаты.</p>
@@ -212,8 +211,8 @@
               <button type="button" data-offer-filter="completed" aria-pressed="false">Завершены</button>
             </div>
             <label class="participant-offer-sort-label" for="offer-sort" title="Сортировать офферы"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3"/></svg>
-              <select id="offer-sort" aria-label="Сортировка офферов" title="Сортировать: недавно назначенные">
-                <option value="recent">Недавно назначенные</option>
+              <select id="offer-sort" aria-label="Сортировка офферов" title="Сортировать: сначала новые">
+                <option value="recent">Сначала новые</option>
                 <option value="payout_desc">Сначала высокая ставка</option>
                 <option value="name">По названию</option>
               </select>
@@ -221,7 +220,7 @@
           </div>
           <p id="task-notice" role="status" aria-live="polite" hidden></p>
           <p id="offer-filter-count" class="participant-offer-filter-count" role="status" hidden></p>
-          <div id="offers" aria-live="polite"><p class="muted">Проверяем доступность назначений…</p></div>
+          <div id="offers" aria-live="polite"><p class="muted">Загружаем доступные офферы…</p></div>
         </section>
         <section class="panel participant-legacy-section"><div class="section-kicker">ВАШИ ДЕЙСТВИЯ</div><h2>История отчётов</h2><div id="task-history" aria-live="polite"><p class="muted">Загружаем историю…</p></div></section>
         <section class="panel participant-legacy-section"><div class="section-kicker">ПОДТВЕРЖДЕНИЯ CRM</div><h2>Статусы заявок и выплаты</h2><p>Здесь отображаются только подтверждённые CRM сведения. Отчёт участника сам по себе не означает выполнение банковского условия или начисление.</p><div id="crm-state" aria-live="polite"><p class="muted">Загружаем статусы CRM…</p></div></section>

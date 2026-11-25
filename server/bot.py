@@ -19,37 +19,35 @@ def response_for(update, *, has_contact=False):
         if contact.get("user_id") != sender["id"]:
             return {"method": "sendMessage", "chat_id": sender["id"],
                     "text": "Отправьте свой контакт кнопкой «Поделиться номером», а не чужой номер."}
-        url = app_url()
         is_owner = sender["id"] == admin_id()
-        destination = url.rstrip("/") + "/admin/" if is_owner else url
         return {"method": "sendMessage", "chat_id": sender["id"],
-                "text": "Номер сохранён. Откройте личный кабинет:",
-                "reply_markup": {"inline_keyboard": [[{
-                    "text": "Открыть админ-панель" if is_owner else "Открыть личный кабинет",
-                    "web_app": {"url": destination}
-                }]]} if url else {"remove_keyboard": True}}
-    command = (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0]
+                "text": ("Номер сохранён. Откройте админ-панель кнопкой «Админ-панель» "
+                         "слева от поля ввода сообщений." if is_owner else
+                         "Номер сохранён. Откройте приложение кнопкой «Кабинет» "
+                         "слева от поля ввода сообщений."),
+                "reply_markup": {"remove_keyboard": True}}
+    text = message.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return None
+    command = text.split(maxsplit=1)[0].split("@", 1)[0]
     if command in {"/start", "/app"}:
         url = app_url()
         if not url:
             return None
-        if not has_contact:
+        is_owner = sender["id"] == admin_id()
+        if not has_contact and not is_owner:
             return {"method": "sendMessage", "chat_id": sender["id"],
                     "text": "Для доступа к кабинету поделитесь своим номером телефона кнопкой ниже.",
                     "reply_markup": {"keyboard": [[{"text": "Поделиться контактом", "request_contact": True}]],
                                      "resize_keyboard": True, "one_time_keyboard": True}}
-        is_owner = sender["id"] == admin_id()
-        destination = url.rstrip("/") + "/admin/" if is_owner else url
         return {
             "method": "sendMessage",
             "chat_id": sender["id"],
-            "text": "The Affiliates Partners. Откройте административную панель:" if is_owner else "The Affiliates Partners. Откройте личный кабинет:",
-            # Inline Web App buttons provide signed initData on supported Telegram
-            # clients; reply-keyboard Web Apps may open without signed credentials.
-            "reply_markup": {"inline_keyboard": [[{
-                "text": "Открыть админ-панель" if is_owner else "Открыть личный кабинет",
-                "web_app": {"url": destination}
-            }]]},
+            "text": ("Откройте админ-панель кнопкой «Админ-панель» "
+                     "слева от поля ввода сообщений." if is_owner else
+                     "Откройте приложение кнопкой «Кабинет» "
+                     "слева от поля ввода сообщений."),
+            "reply_markup": {"remove_keyboard": True},
         }
     if command == "/help":
         return {

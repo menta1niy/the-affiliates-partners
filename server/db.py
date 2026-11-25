@@ -307,9 +307,11 @@ def enqueue(conn, event_key, recipient, message):
 
 
 def notify_registration_submitted(conn, identity, owner_id, internal_id, *, agency_id=None, manager_id=None):
+    # Both invitation and open registration activate the lead immediately.
+    # These messages must never imply that an administrator must approve them.
     display_id = "L-" + str(internal_id).zfill(6)
     enqueue(conn, "registration:received:" + str(identity["id"]), identity["id"],
-            "The Affiliates Partners\nВаша заявка отправлена и ожидает рассмотрения.\n"
+            "The Affiliates Partners\nРегистрация завершена. Доступ к опубликованным офферам открыт.\n"
             "Ваш внутренний ID: " + display_id + ".")
     recipients = {owner_id}
     reviewers = conn.execute("SELECT id,role,agency_id FROM users WHERE status='active' "
@@ -325,7 +327,7 @@ def notify_registration_submitted(conn, identity, owner_id, internal_id, *, agen
         event_key = ("register:" + str(identity["id"]) if recipient == owner_id else
                      "registration:review:" + str(identity["id"]) + ":" + str(recipient))
         enqueue(conn, event_key, recipient,
-                "The Affiliates Partners\nНовая заявка на рассмотрение.\n"
+                "The Affiliates Partners\nНовый участник зарегистрирован и активирован автоматически.\n"
                 "Внутренний ID: " + display_id + ".")
 
 
@@ -481,7 +483,12 @@ def register_open(identity, owner_id, registration_data=None):
             return public_user(existing)
         pending = check.execute("SELECT code FROM pending_starts WHERE telegram_id=?", (identity["id"],)).fetchone()
         linked = bool(pending and valid_invitation_source(check, identity["id"], pending["code"]))
-    if linked or identity.get("start_param"):
+        # An invalid or revoked *signed* deep link must not permanently block
+        # open registration. Valid invitations still win and retain attribution.
+        signed_code = identity.get("start_param")
+        if signed_code and valid_invitation_source(check, identity["id"], signed_code):
+            linked = True
+    if linked:
         return register(identity, owner_id, None, registration_data, standalone=True)
     with transaction() as conn:
         ensure_owner(conn, owner_id)

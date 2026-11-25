@@ -201,7 +201,7 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                         self.assertIn("rgb",amber["button"])
                         self.assertEqual(amber["ink"],"rgb(24, 17, 10)")
                         self.assertEqual(amber["filter"],"rgb(228, 163, 74)")
-                        self.assertIn("Назначено", page.locator("#offers").inner_text())
+                        self.assertIn("Не начато", page.locator("#offers").inner_text())
                         first = page.locator("#offers .offer-item").first
                         self.assertEqual(first.locator(".participant-offer-next").count(), 0)
                         self.assertEqual(first.locator(".participant-offer-detail-button").inner_text(), "Изучить условия →")
@@ -231,9 +231,11 @@ class ParticipantRedesignBrowserTests(unittest.TestCase):
                           borderWidth:parseFloat(getComputedStyle(node).borderTopWidth),
                           color:getComputedStyle(node.querySelector('.participant-offer-payment strong')).color
                         })''')
-                        self.assertEqual(len(metrics['sizes']),2)
-                        self.assertEqual(*metrics['sizes'])
-                        self.assertEqual(*metrics['weights'])
+                        self.assertEqual(len(metrics['sizes']),3)
+                        # Rate and review period share typography; the target
+                        # action has its own responsive text treatment.
+                        self.assertEqual(metrics['sizes'][0],metrics['sizes'][1])
+                        self.assertEqual(metrics['weights'][0],metrics['weights'][1])
                         self.assertEqual(metrics['border'],'solid')
                         self.assertGreaterEqual(metrics['borderWidth'],1)
                         self.assertEqual(metrics['color'],'rgb(228, 163, 74)')

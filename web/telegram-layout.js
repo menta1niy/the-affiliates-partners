@@ -38,7 +38,8 @@
     if (!event.target.closest('label')) document.activeElement.blur();
   }, {capture:true});
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' || (event.key === 'Enter' && editable(document.activeElement) && document.activeElement.tagName !== 'TEXTAREA')) {
+    if ((event.key === 'Escape' && editable(document.activeElement)) ||
+        (event.key === 'Enter' && editable(document.activeElement) && document.activeElement.tagName !== 'TEXTAREA')) {
       if (event.key === 'Escape') event.preventDefault();
       document.activeElement?.blur?.();
     }

@@ -251,7 +251,10 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                 users.get_by_text('Страница 2 · всего', exact=False).wait_for()
                 page.locator('#user-query').fill('910000')
                 users.get_by_text('Страница 1 · всего', exact=False).wait_for()
-                self.assertIn('910000', users.inner_text())
+                # Telegram ID remains searchable by administrators internally,
+                # but must not be displayed in place of a human-readable name.
+                self.assertEqual(users.locator('tbody tr').count(), 1)
+                self.assertNotIn('910000', users.inner_text())
                 self.assertNotIn('910001', users.inner_text())
                 page.locator('#user-query').fill('nonexistent')
                 users.get_by_text('Страница 1 · всего 0').wait_for()

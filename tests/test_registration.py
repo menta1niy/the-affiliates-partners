@@ -32,11 +32,10 @@ ALICE = 721001
 BOB = 721002
 CAROL = 721003
 TEST_ONBOARDING = {
-    "birth_date": "2004-10-19",
-    "credit_cards": 0,
-    "installments": 0,
-    "loans": 0,
-    "mortgages": 0,
+    # The old FIO/INN/credit questionnaire no longer exists. A signed
+    # Telegram identity, explicit consent and adult confirmation are enough.
+    "adult_confirmed": True,
+    "consent": True,
     "privacy_accepted": True,
     "terms_accepted": True,
 }
@@ -315,7 +314,9 @@ class HttpHarness(unittest.TestCase):
         keys = [row[0] for row in rows]
         self.assertEqual(len(keys), len(set(keys)))
         self.assertEqual(sum(key == f"register:{ALICE}" for key in keys), 1)
-        self.assertEqual(sum(key.startswith(f"decision:{ALICE}:active:") for key in keys), 1)
+        # Registration is already active; approving it again is a no-op and
+        # must not queue a fictitious moderation decision.
+        self.assertEqual(sum(key.startswith(f"decision:{ALICE}:active:") for key in keys), 0)
 
     def test_sqlite_failure_returns_503_over_http(self):
         with patch("server.db.initialize", side_effect=sqlite3.OperationalError("synthetic disk failure")):
@@ -327,12 +328,13 @@ class HttpHarness(unittest.TestCase):
 
     def test_owner_start_routes_to_admin_only(self):
         with patch.object(bot, "admin_id", return_value=OWNER), patch.object(bot, "app_url", return_value="https://example.org/partners/"):
-            for uid, expected in ((OWNER, "https://example.org/partners/admin/"), (ALICE, "https://example.org/partners/")):
+            for uid in (OWNER, ALICE):
                 with self.subTest(uid=uid):
                     update = {"message": {"from": {"id": uid}, "chat": {"id": uid, "type": "private"}, "text": "/start"}}
                     reply = bot.response_for(update)
                     self.assertEqual(reply["chat_id"], uid)
-                    self.assertEqual(reply["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"], expected)
+                    self.assertNotIn("inline_keyboard", reply["reply_markup"])
+                    self.assertNotIn("web_app", repr(reply["reply_markup"]))
 
     def test_source_consent_persist_and_agency_invitation_single_use(self):
         invitation = self.owner_invite()

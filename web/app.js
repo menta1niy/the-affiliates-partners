@@ -74,7 +74,7 @@
         Number.isSafeInteger(value)&&value>=0?money(value):"—");
       const counts=$("statistics-counts");counts.replaceChildren();
       const stages=result.stages||{};
-      for(const [label,key] of [["Назначено","assigned"],["В работе","in_progress"],
+      for(const [label,key] of [["Не начато","assigned"],["В работе","in_progress"],
         ["На проверке","submitted"],["Завершено","completed"],["Отклонено","rejected"]]){
         const item=document.createElement("div");
         const caption=document.createElement("span");caption.textContent=label;
@@ -505,7 +505,8 @@
     });
   }
   const manualStages={
-    assigned:{label:"Назначено",symbol:"○",next:"Изучите условия оффера и инструкцию перед выполнением действия."},
+    available:{label:"Доступен",symbol:"○",next:"Изучите условия и возьмите оффер в работу, чтобы начать выполнение."},
+    assigned:{label:"Не начато",symbol:"○",next:"Изучите условия оффера и инструкцию перед выполнением действия."},
     in_progress:{label:"В работе",symbol:"◷",next:"Продолжайте выполнять условия оффера. Если возник вопрос, уточните его у администратора."},
     submitted:{label:"На проверке",symbol:"↻",next:"Ожидайте проверки администратором. Это не подтверждение результата банком."},
     completed:{label:"Завершено",symbol:"✓",next:"Администратор отметил задание завершённым. Это не подтверждение банковского начисления или выплаты."},
@@ -534,6 +535,9 @@
   let manualOffers=[];
   let manualFilter="all";
   let manualSort="recent";
+  function offerDisplayStage(offer){
+    return offer?.is_assigned===false && offer.stage==="assigned" ? "available" : offer?.stage;
+  }
   function stageLabel(stage){
     return (manualStages[stage]||manualStages.assigned).label;
   }
@@ -652,7 +656,8 @@
     value.textContent=label||"Статус не указан";
     group.append(name,value);return group;
   }
-  function offerStatus(stage){
+  function offerStatus(offer){
+    const stage=offerDisplayStage(offer);
     const info=manualStages[stage]||manualStages.assigned;
     const status=document.createElement("span");status.className="pill participant-offer-status";
     status.dataset.status=stage||"assigned";
@@ -665,6 +670,7 @@
   function nextOfferAction(stage){
     const row=document.createElement("p");row.className="participant-offer-next";
     const descriptions={
+      available:"Выбрать предложение",
       assigned:"Прочитать условия",
       in_progress:"Продолжить выполнение",
       submitted:"Ожидает проверки",
@@ -681,12 +687,13 @@
     // This button only opens the authorized details; no task state is changed.
     if(unavailableReason(offer))return "Посмотреть условия →";
     return ({
+      available:"Изучить условия →",
       assigned:"Изучить условия →",
       in_progress:"Продолжить →",
       submitted:"Проверить статус →",
       completed:"Посмотреть результат →",
       rejected:"Уточнить причину →"
-    })[offer.stage]||"Подробнее →";
+    })[offerDisplayStage(offer)]||"Подробнее →";
   }
   function offerPayment(value){
     const amount=Number(value);
@@ -833,7 +840,7 @@
     title.id="participant-offer-dialog-title";title.textContent=offer.name||"Предложение";
     const category=document.createElement("p");category.className="participant-offer-category";
     category.textContent=offer.category||"Банковское предложение";
-    const status=offerStatus(offer.stage);
+    const status=offerStatus(offer);
     const values=document.createElement("div");values.className="participant-offer-details";
     values.append(offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment"),
       offerDetail("СРОК ПРОВЕРКИ",offer.hold_days==null?"Не указан":String(offer.hold_days)+" дн."));
@@ -843,7 +850,7 @@
     notice.textContent="Указанная ставка — условие предложения, а не подтверждение начисления или выплаты. Статусы отмечает администратор.";
     const fullNext=document.createElement("p");fullNext.className="participant-offer-full-next";
     const fullNextTitle=document.createElement("strong");fullNextTitle.textContent="Следующий шаг";
-    const fullNextText=document.createElement("span");fullNextText.textContent=(manualStages[offer.stage]||manualStages.assigned).next;
+    const fullNextText=document.createElement("span");fullNextText.textContent=(manualStages[offerDisplayStage(offer)]||manualStages.assigned).next;
     fullNext.append(fullNextTitle,fullNextText);
     offerDialogContent.append(category,title,status,fullNext,values,notice);
     if(offer.instructions){
@@ -1016,7 +1023,7 @@
   }
   function renderManualOffers(){
     const root=$("offers");root.replaceChildren();
-    let offers=manualOffers.filter(offer=>manualFilter==="all"||offer.stage===manualFilter);
+    let offers=manualOffers.filter(offer=>manualFilter==="all"||offerDisplayStage(offer)===manualFilter);
     offers=[...offers];
     if(manualSort==="payout_desc")offers.sort((a,b)=>(Number(b.payout_rub)||0)-(Number(a.payout_rub)||0));
     else if(manualSort==="name")offers.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ru"));
@@ -1042,7 +1049,7 @@
       const title=document.createElement("h3");title.textContent=offer.name||"Предложение";
       title.title=offer.name||"Предложение";
       heading.append(category,title);
-      const status=offerStatus(offer.stage);
+      const status=offerStatus(offer);
       top.append(heading,status);
       const summary=document.createElement("div");summary.className="participant-offer-summary";
       const payment=offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment");
@@ -1092,17 +1099,15 @@
     for(const offer of assignedOffers){
       if(offer && Object.prototype.hasOwnProperty.call(stages,offer.stage))stages[offer.stage]++;
     }
-    // The catalogue also includes unassigned offers; do not count those as
-    // personal assignments or suggest that work has already started.
-    const total=Number(stats?.total);
-    const assigned=assignedOffers.length;
-    text("kpi-total",assigned);
+    // The first card describes the public catalogue, while the remaining
+    // cards describe this participant's own progress only.
+    text("kpi-total",offers.length);
     text("kpi-in-progress",stages.in_progress);
     text("kpi-submitted",stages.submitted);
     text("kpi-completed",stages.completed);
     if(!offers.length)nextStep("Пока нет офферов","Новые предложения появятся здесь после публикации.","К офферам →");
     else if(stages.in_progress>0)nextStep("Продолжить работу",stages.in_progress+" в работе","Открыть →");
-    else if(assignedOffers.some(offer=>offer?.stage==="assigned"))nextStep("Новые задания","Посмотрите условия перед началом.","Открыть →");
+    else if(assignedOffers.some(offer=>offer?.stage==="assigned"))nextStep("Готово к старту","Посмотрите условия перед началом.","Открыть →");
     else if(stages.submitted>0)nextStep("На проверке",stages.submitted+" ожидают решения администратора.","Посмотреть →");
     else nextStep("Выберите оффер","Все опубликованные предложения доступны в каталоге.","К офферам →");
     updateHomeOverview(offers);
@@ -1122,7 +1127,7 @@
     const request=++offersRequest;
     resetParticipantKpis();
     show("offer-controls",false);show("offer-filter-count",false);
-    nextStep("Загружаем офферы","Получаем назначения.");
+    nextStep("Загружаем офферы","Получаем общий каталог.");
     offerLoading();
     try{
       const result=await api("/mvp/overview");
@@ -1182,7 +1187,7 @@
     current = session;
     for(const id of ["register-legal-version","legacy-legal-version"]){
       const element=$(id);
-      if(element)element.textContent=session.legal_version||"Черновик — на утверждении";
+      if(element)element.textContent=session.legal_version||"Версия не указана";
     }
     window.renderOwnerLeadPreview?.(session);
     taskNotice("");
@@ -1262,8 +1267,12 @@
     error("");
     try {
       if (!initData()) {
+        current=null;
+        ++financeRequestId;++statisticsRequestId;++participantEventsRequest;++bloggerRequestId;
+        setParticipantTabsEnabled(false);
+        closeOfferDialog();
         text("connect-heading","Откройте Mini App через бота");
-        text("connect-description","Напишите /start официальному боту, поделитесь контактом, затем откройте кабинет кнопкой в сообщении бота.");
+        text("connect-description","Напишите /start официальному боту, поделитесь контактом, затем откройте приложение кнопкой «Кабинет» слева от поля ввода сообщений в боте.");
         show("hero-cta",false);
         taskNotice("");
         ++offersRequest;++crmStatusRequest;
@@ -1276,18 +1285,28 @@
       const session = await api("/session");
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
       if(session.contact_required){
+        current=null;
+        ++offersRequest;++crmStatusRequest;++referralRequest;++financeRequestId;++statisticsRequestId;
+        ++participantEventsRequest;++bloggerRequestId;
+        setParticipantTabsEnabled(false);
+        closeOfferDialog();
         text("connect-heading","Поделитесь контактом");
-        text("connect-description","Отправьте /start боту и нажмите «Поделиться контактом». Затем откройте кабинет через кнопку в сообщении.");
+        text("connect-description","Отправьте /start боту и нажмите «Поделиться контактом». Затем откройте приложение кнопкой «Кабинет» слева от поля ввода сообщений в боте.");
         text("hero-status","Требуется контакт Telegram");
         show("connect",true);show("account",false);show("register-panel",false);
+        show("pending-panel",false);show("rejected-panel",false);
+        show("blogger-panel",false);show("referral-panel",false);
         return;
       }
       render(session);
     } catch(e) {
+      current=null;
+      setParticipantTabsEnabled(false);
+      closeOfferDialog();
       show("hero-cta",false);
       taskNotice("");
-      ++offersRequest;++crmStatusRequest;
-      ++referralRequest;
+      ++offersRequest;++crmStatusRequest;++referralRequest;++financeRequestId;++statisticsRequestId;
+      ++participantEventsRequest;++bloggerRequestId;
       show("account",false);show("register-panel",false);show("pending-panel",false);show("rejected-panel",false);show("referral-panel",false);
       show("blogger-panel",false);
       show("connect",true);

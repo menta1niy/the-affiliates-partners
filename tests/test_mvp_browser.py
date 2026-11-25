@@ -52,6 +52,6 @@ class MvpBrowserSmoke(AdminDetailBrowserSmoke):
                 user.locator('#offers .participant-offer-detail-button').first.click()
                 self.assertIn('10 дн.', user.locator('#participant-offer-dialog').inner_text())
                 self.assertIn('Дебетовая карта', user.locator('#offers').inner_text())
-                self.assertIn('Назначено', user.locator('#offers').inner_text())
+                self.assertIn('Не начато', user.locator('#offers').inner_text())
             finally:
                 browser.close()

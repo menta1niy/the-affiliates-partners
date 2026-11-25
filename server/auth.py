@@ -7,7 +7,9 @@ import time
 from urllib.parse import parse_qsl
 
 MAX_AGE = 86400
-START_CODE_PATTERN = re.compile(r"^(?:ag|ref)_[A-Za-z0-9_-]{8,48}$")
+# Signed Mini App deep links must accept the same formats as /start webhook.
+# The six-character code is now the primary invite format; keep old links.
+START_CODE_PATTERN = re.compile(r"^(?:[A-Z0-9]{6}|(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})$")
 
 
 def verify_init_data(data, token, now=None):

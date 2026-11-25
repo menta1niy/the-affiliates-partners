@@ -106,7 +106,7 @@ class ApiTests(unittest.TestCase):
 
 
 class BotTests(unittest.TestCase):
-    def test_private_start_requests_contact_then_inline_webapp(self):
+    def test_private_start_requests_contact_then_uses_menu_button(self):
         with patch.object(bot, "app_url", return_value="https://example.org/partners/"):
             response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/start"}})
         self.assertEqual(response["method"], "sendMessage")
@@ -114,7 +114,30 @@ class BotTests(unittest.TestCase):
         self.assertTrue(response["reply_markup"]["keyboard"][0][0]["request_contact"])
         with patch.object(bot, "app_url", return_value="https://example.org/partners/"):
             opened = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/app"}}, has_contact=True)
-        self.assertIn("web_app", opened["reply_markup"]["inline_keyboard"][0][0])
+        self.assertIn("«Кабинет»", opened["text"])
+        self.assertEqual(opened["reply_markup"], {"remove_keyboard": True})
+
+    def test_contact_success_removes_keyboard_and_uses_persistent_menu(self):
+        update = {"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"},
+                              "contact": {"user_id": 42, "phone_number": "+79000000000"}}}
+        with patch.object(bot, "admin_id", return_value=99):
+            reply = bot.response_for(update, has_contact=True)
+        self.assertEqual(reply["reply_markup"], {"remove_keyboard": True})
+        self.assertIn("«Кабинет»", reply["text"])
+        self.assertNotIn("inline_keyboard", reply["reply_markup"])
+
+    def test_owner_bypasses_contact_and_uses_admin_menu(self):
+        update = {"message": {"from": {"id": 99}, "chat": {"id": 99, "type": "private"}, "text": "/start"}}
+        with patch.object(bot, "admin_id", return_value=99), patch.object(bot, "app_url", return_value="https://example.org/partners/"):
+            reply = bot.response_for(update, has_contact=False)
+        self.assertEqual(reply["reply_markup"], {"remove_keyboard": True})
+        self.assertIn("«Админ-панель»", reply["text"])
+
+    def test_non_text_updates_do_not_crash(self):
+        for content in ({"photo": [{"file_id": "demo"}]}, {"text": ""}, {"text": "   "}, {"text": None}):
+            with self.subTest(content=content):
+                self.assertIsNone(bot.response_for({"message": {"from": {"id": 42},
+                    "chat": {"id": 42, "type": "private"}, **content}}))
 
     def test_ignore_group_messages(self):
         response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": -4, "type": "group"}, "text": "/start"}})

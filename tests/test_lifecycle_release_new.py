@@ -41,7 +41,8 @@ class ReleaseLifecycle(unittest.TestCase):
         # Role change also creates a notification in the stage 10 outbox.
         self.assertEqual(len(before), 6)
         messages = [item[2] for item in before]
-        self.assertTrue(any('ожидает рассмотрения' in message for message in messages))
+        self.assertTrue(any('Регистрация завершена' in message for message in messages))
+        self.assertTrue(any('зарегистрирован и активирован автоматически' in message for message in messages))
         self.assertTrue(any('Заявка одобрена' in message for message in messages))
         self.assertTrue(any('Заявка отклонена' in message for message in messages))
         self.assertTrue(any('аккаунт заблокирован' in message for message in messages))
@@ -83,7 +84,7 @@ class ReleaseLifecycle(unittest.TestCase):
         self.assertEqual(self.as_user('/api/admin/decision', h.ALICE, user_id=h.OWNER,
                                       decision='block', reason='malicious')[0], 403)
 
-    def test_demoted_agency_issuer_invalidates_captured_source_without_side_effects(self):
+    def test_demoted_agency_issuer_invalidates_source_without_blocking_open_access(self):
         # ALICE creates the invite while staff; OWNER remains the active assignee.
         self.assertEqual(self.register(h.ALICE, self.owner_invite())[0], 200)
         self.assertEqual(self.as_user('/api/admin/decision', h.OWNER, user_id=h.ALICE,
@@ -118,20 +119,20 @@ class ReleaseLifecycle(unittest.TestCase):
         self.assertEqual(status, 200, dashboard)
         invitation = next(item for item in dashboard['invites'] if item['code'] == stale_code)
         self.assertEqual((invitation['active'], invitation['usable']), (1, False))
-        audit_before = self._count('audit')
-        outbox_before = self.outbox()
-        status, failure = self.as_user('/api/register', h.BOB, consent=True)
-        self.assertEqual(status, 409, failure)
-        self.assertEqual(self._count('users', 'WHERE id=?', (h.BOB,)), 0)
-        self.assertEqual(self._count('audit'), audit_before)
-        self.assertEqual(self.outbox(), outbox_before)
-        # New eligible source replaces the now-invalid pending start.
+        # A revoked invitation cannot attribute traffic to a demoted manager,
+        # but it must not block the newly open, consented registration.
+        status, registered = self.as_user('/api/register', h.BOB, consent=True)
+        self.assertEqual(status, 200, registered)
+        self.assertIsNone(registered['user']['source'])
+        self.assertIsNone(registered['user']['introduced_by_id'])
+        self.assertEqual(registered['user']['agency_id'], h.OWNER)
+        self.assertEqual(self._count('users', 'WHERE id=?', (h.BOB,)), 1)
+        # Later eligible invitations must not silently rewrite attribution.
         replacement = self.owner_invite()
         self.assertEqual(self.webhook_start(867002, h.BOB, replacement)[0], 200)
         status, registered = self.as_user('/api/register', h.BOB, consent=True)
         self.assertEqual(status, 200, registered)
-        self.assertEqual(registered['user']['introduced_by_id'], h.OWNER)
-        self.assertEqual(registered['user']['agency_id'], h.OWNER)
+        self.assertIsNone(registered['user']['introduced_by_id'])
         self.assertEqual(self._count('users', 'WHERE id=?', (h.BOB,)), 1)
 
     def _count(self, table, where='', params=()):
