@@ -12,7 +12,7 @@ import secrets
 import time
 
 from server import db, mvp
-from server.profile import access_reason, _cipher
+from server.profile import _cipher
 
 EVENT_ID = re.compile(r"^evt_[0-9a-f]{24}$")
 IMAGE_DATA = re.compile(r"^data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
@@ -105,12 +105,6 @@ def _assignment(conn, actor, offer_id):
         raise db.Problem(404, "Оффер не назначен")
     if not row["active"]:
         raise db.Problem(409, "Оффер отключён")
-    registration = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (actor,)).fetchone()
-    has_identity = conn.execute("SELECT 1 FROM participant_identities WHERE telegram_id=?",
-                                (actor,)).fetchone() is not None
-    reason = access_reason(registration, has_identity, row["category"])
-    if reason:
-        raise db.Problem(403, "Оформление недоступно: " + reason)
     if row["stage"] in ("completed", "rejected"):
         raise db.Problem(409, "Назначение закрыто администратором")
     return row, user

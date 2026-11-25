@@ -171,23 +171,9 @@ def initialize():
         CREATE TABLE IF NOT EXISTS internal_id_sequence (
           singleton INTEGER PRIMARY KEY CHECK(singleton=1), next_id INTEGER NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS registration_profiles (
-          telegram_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          birth_date TEXT NOT NULL,
-          credit_band TEXT NOT NULL DEFAULT '',
-          adult_confirmed INTEGER NOT NULL DEFAULT 0,
-          credit_cards INTEGER NOT NULL DEFAULT 0,
-          installments INTEGER NOT NULL DEFAULT 0,
-          loans INTEGER NOT NULL DEFAULT 0,
-          mortgages INTEGER NOT NULL DEFAULT 0,
-          consent_version TEXT NOT NULL,
-          submitted_at INTEGER NOT NULL,
-          credit_updated_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS participant_identities (
-          telegram_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-          full_name_encrypted TEXT NOT NULL,
-          inn_encrypted TEXT NOT NULL,
+        CREATE TABLE IF NOT EXISTS telegram_contacts (
+          telegram_id INTEGER PRIMARY KEY,
+          phone_number TEXT NOT NULL,
           updated_at INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS crm_events (event_id TEXT PRIMARY KEY, event_hash TEXT NOT NULL,
@@ -226,11 +212,8 @@ def initialize():
         if "internal_id" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN internal_id INTEGER")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_internal_id ON users(internal_id)")
-        survey_columns = {item[1] for item in conn.execute("PRAGMA table_info(registration_profiles)")}
-        if "credit_band" not in survey_columns:
-            conn.execute("ALTER TABLE registration_profiles ADD COLUMN credit_band TEXT NOT NULL DEFAULT ''")
-        if "adult_confirmed" not in survey_columns:
-            conn.execute("ALTER TABLE registration_profiles ADD COLUMN adult_confirmed INTEGER NOT NULL DEFAULT 0")
+        conn.execute("DROP TABLE IF EXISTS participant_identities")
+        conn.execute("DROP TABLE IF EXISTS registration_profiles")
         # Migrate existing users deterministically: owner #100, then earlier
         # registrations first. Never renumber existing internal IDs.
         conn.execute("INSERT OR IGNORE INTO internal_id_sequence(singleton,next_id) VALUES(1,100)")
@@ -279,6 +262,15 @@ def public_user(row):
     return result
 
 
+def contact_phone(telegram_id):
+    """A verified private-chat contact; absent contacts are never guessed."""
+    initialize()
+    with transaction() as conn:
+        row = conn.execute("SELECT phone_number FROM telegram_contacts WHERE telegram_id=?",
+                           (telegram_id,)).fetchone()
+        return row["phone_number"] if row else None
+
+
 def attach_reference_usernames(conn, users, invitations=()):
     """Add display-only Telegram usernames to already-authorized admin records."""
     fields = ("manager", "agency", "referrer", "introduced_by")
@@ -312,26 +304,6 @@ def audit(conn, actor, action, target=None, details=""):
 def enqueue(conn, event_key, recipient, message):
     conn.execute("INSERT OR IGNORE INTO notifications_outbox(event_key,chat_id,text,created_at) VALUES(?,?,?,?)",
                  (event_key, recipient, message[:1000], int(time.time())))
-
-
-def save_registration_profile(conn, telegram_id, details, now):
-    conn.execute(
-        "INSERT INTO registration_profiles(telegram_id,birth_date,credit_cards,installments,loans,mortgages,"
-        "credit_band,adult_confirmed,consent_version,submitted_at,credit_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (telegram_id, details["birth_date"], details["credit_cards"], details["installments"],
-         details["loans"], details["mortgages"], details["credit_band"], int(details["adult_confirmed"]),
-         details["consent_version"], now, now),
-    )
-
-
-def registration_profile(telegram_id):
-    """Return registration survey only to the authenticated owner of the session."""
-    from server.registration import public_view
-
-    initialize()
-    with transaction() as conn:
-        row = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (telegram_id,)).fetchone()
-        return public_view(row)
 
 
 def notify_registration_submitted(conn, identity, owner_id, internal_id, *, agency_id=None, manager_id=None):
@@ -457,7 +429,6 @@ def register(identity, owner_id, invitation_code, registration_data=None, *, sta
             # Agency introductions are individual, while referral links are reusable.
             conn.execute("UPDATE invitations SET active=0 WHERE code=?", (code,))
         conn.execute("DELETE FROM pending_starts WHERE telegram_id=?", (identity["id"],))
-        save_registration_profile(conn, identity["id"], details, now)
         if invite["kind"] == "blogger":
             from server import referral
             referral.schema(conn)
@@ -523,7 +494,6 @@ def register_open(identity, owner_id, registration_data=None):
                      "VALUES(?,?,?,?,?,'lead','pending',?,?,?,?,?)",
                      (identity["id"], internal_id, identity["first_name"], identity["last_name"],
                       identity["username"], owner_id, owner_id, now, now, now))
-        save_registration_profile(conn, identity["id"], details, now)
         audit(conn, identity["id"], "mvp_registration", identity["id"])
         notify_registration_submitted(conn, identity, owner_id, internal_id,
                                       agency_id=owner_id, manager_id=owner_id)
@@ -691,6 +661,34 @@ def record_start(update_id, sender_id, code):
         return True
 
 
+def record_contact(update_id, sender_id, contact):
+    """Store only an explicitly shared contact owned by the sender."""
+    import re
+    if (not isinstance(contact, dict) or type(contact.get("user_id")) is not int
+            or contact["user_id"] != sender_id):
+        return False
+    phone = contact.get("phone_number")
+    if not isinstance(phone, str):
+        return False
+    normalized = re.sub(r"[\s()+-]", "", phone)
+    if len(normalized) == 11 and normalized.startswith("8"):
+        normalized = "7" + normalized[1:]
+    if not re.fullmatch(r"[1-9][0-9]{9,14}", normalized):
+        return False
+    initialize()
+    with transaction() as conn:
+        inserted = conn.execute(
+            "INSERT OR IGNORE INTO telegram_updates(update_id,received_at) VALUES(?,?)",
+            (update_id, int(time.time())))
+        if inserted.rowcount == 0:
+            return False
+        conn.execute("INSERT INTO telegram_contacts(telegram_id,phone_number,updated_at) VALUES(?,?,?) "
+                     "ON CONFLICT(telegram_id) DO UPDATE SET phone_number=excluded.phone_number,"
+                     "updated_at=excluded.updated_at",
+                     (sender_id, "+" + normalized, int(time.time())))
+        return True
+
+
 def require_staff(conn, actor, owner_id):
     ensure_owner(conn, owner_id)
     user = get_user(conn, actor)
@@ -824,6 +822,9 @@ def admin_participant_detail(actor, owner_id, target_id):
         audit_rows = add_audit_names(conn, audit_rows)
         snapshot = json.loads(state["payload"]) if state else {"applications": [], "lead_payouts": []}
         participant = public_user(target)
+        phone = conn.execute("SELECT phone_number FROM telegram_contacts WHERE telegram_id=?",
+                             (target_id,)).fetchone()
+        participant["phone"] = phone["phone_number"] if phone else None
         attach_reference_usernames(conn, [participant])
         result = {"user": participant, "crm_lead_id": crm_id,
                 "bound_at": binding["bound_at"] if binding else None,

@@ -163,8 +163,6 @@ def request(actor, owner_id, data):
         user=db.get_user(conn,actor)
         if not user or user["status"]!="active" or user["role"] not in ("lead","referrer"):
             raise db.Problem(403,"Заявки доступны только подтверждённым участникам")
-        if not conn.execute("SELECT 1 FROM participant_identities WHERE telegram_id=?",(actor,)).fetchone():
-            raise db.Problem(409,"Сначала заполните ФИО и ИНН в профиле")
         balances=_balances(conn,actor)
         if amount>balances["available_rub"]:
             raise db.Problem(409,"Недостаточно доступных средств")

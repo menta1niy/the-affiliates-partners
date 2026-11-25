@@ -13,7 +13,6 @@ from server import db
 from server import integration
 from server import tasks
 from server import mvp
-from server import profile as participant_profile
 from server import offer_workflow
 from server import finance
 from server import referral
@@ -76,7 +75,6 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
                   "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/offer/delete", "/api/admin/mvp/assignment",
                   "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
-                  "/api/profile/identity", "/api/profile/credit-survey", "/api/profile/onboarding",
                   "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
                   "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
         routes.update({"/api/finance/overview","/api/finance/withdraw",
@@ -146,6 +144,13 @@ class Handler(BaseHTTPRequestHandler):
         chat = message.get("chat") if isinstance(message, dict) else None
         if isinstance(sender, dict) and isinstance(chat, dict) and type(sender.get("id")) is int and sender["id"] > 0 and sender["id"] == chat.get("id") and chat.get("type") == "private":
             import re
+            contact = message.get("contact")
+            if isinstance(contact, dict):
+                if type(contact.get("user_id")) is not int or contact["user_id"] != sender["id"]:
+                    fresh = db.record_start(body["update_id"], sender["id"], None)
+                else:
+                    fresh = db.record_contact(body["update_id"], sender["id"], contact)
+                return self.send_json(200, (response_for(body) or {"ok": True}) if fresh else {"ok": True})
             text = message.get("text", "")
             match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+([A-Z0-9]{6}|(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
             fresh = db.record_start(body["update_id"], sender["id"], match.group(1) if match else None)
@@ -166,8 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                 profile = db.session(user, owner)
                 pending_source = profile.pop("pending_source_info", None)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
-                result["registration"] = db.registration_profile(user["id"])
-                result["identity"] = participant_profile.profile_view(user["id"])
+                result["phone"] = db.contact_phone(user["id"])
                 if pending_source:
                     result["source_info"] = pending_source
                 result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
@@ -255,12 +259,6 @@ class Handler(BaseHTTPRequestHandler):
                 result = referral.reward_paid(user["id"], owner, body)
             elif route == "/api/admin/bloggers/update":
                 result = referral.blogger_update(user["id"], owner, body)
-            elif route == "/api/profile/identity":
-                result = participant_profile.save_identity(user["id"], body)
-            elif route == "/api/profile/credit-survey":
-                result = participant_profile.update_credit(user["id"], body)
-            elif route == "/api/profile/onboarding":
-                result = participant_profile.complete_legacy_onboarding(user["id"], body)
             elif route == "/api/offers":
                 get_offers = getattr(db, "list_assigned_offers", None)
                 if get_offers is None:

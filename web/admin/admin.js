@@ -318,7 +318,7 @@
       statusBadge.dataset.status=person.status||"pending";
       profileHeader.append(identity,statusBadge);content.append(profileHeader);
       const meta=make("div",undefined,"admin-profile-meta");
-      [["Username",telegramName(person.username,person.id)],["Внутренний номер",person.internal_id],["Роль",roles[person.role]||person.role],["Статус",statuses[person.status]||person.status],["Источник",person.source==="agency"?"Агентство":person.source==="referral"?"Реферал":"Не указан"],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)]].forEach(([key,value])=>detailLine(meta,key,value));
+      [["Username",telegramName(person.username,person.id)],["Телефон Telegram",person.phone||"Не предоставлен"],["Внутренний номер",person.internal_id],["Роль",roles[person.role]||person.role],["Статус",statuses[person.status]||person.status],["Источник",person.source==="agency"?"Агентство":person.source==="referral"?"Реферал":"Не указан"],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)]].forEach(([key,value])=>detailLine(meta,key,value));
       content.append(meta);
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
         adminLeadFinance(content,data);

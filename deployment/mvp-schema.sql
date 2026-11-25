@@ -22,25 +22,9 @@ ALTER TABLE manual_offers ADD COLUMN IF NOT EXISTS lead_stages TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS offer_logos (
   logo_hash TEXT PRIMARY KEY, image_data BYTEA NOT NULL, created_at BIGINT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS registration_profiles (
-  telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  birth_date TEXT NOT NULL,
-  credit_band TEXT NOT NULL DEFAULT '',
-  adult_confirmed INTEGER NOT NULL DEFAULT 0,
-  credit_cards INTEGER NOT NULL DEFAULT 0,
-  installments INTEGER NOT NULL DEFAULT 0,
-  loans INTEGER NOT NULL DEFAULT 0,
-  mortgages INTEGER NOT NULL DEFAULT 0,
-  consent_version TEXT NOT NULL,
-  submitted_at BIGINT NOT NULL,
-  credit_updated_at BIGINT NOT NULL
-);
-ALTER TABLE partners.registration_profiles ADD COLUMN IF NOT EXISTS credit_band TEXT NOT NULL DEFAULT '';
-ALTER TABLE partners.registration_profiles ADD COLUMN IF NOT EXISTS adult_confirmed INTEGER NOT NULL DEFAULT 0;
-CREATE TABLE IF NOT EXISTS participant_identities (
-  telegram_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  full_name_encrypted TEXT NOT NULL,
-  inn_encrypted TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS telegram_contacts (
+  telegram_id BIGINT PRIMARY KEY,
+  phone_number TEXT NOT NULL,
   updated_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS manual_assignments (
@@ -115,8 +99,7 @@ CREATE INDEX IF NOT EXISTS ix_blogger_rewards_uuid ON blogger_rewards(blogger_uu
 CREATE UNIQUE INDEX IF NOT EXISTS ix_blogger_rewards_payment_ref
   ON blogger_rewards(payment_reference) WHERE payment_reference!='';
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offers, partners.manual_assignments, partners.offer_logos TO "ta-partners";
-GRANT SELECT, INSERT, UPDATE, DELETE ON partners.registration_profiles TO "ta-partners";
-GRANT SELECT, INSERT, UPDATE, DELETE ON partners.participant_identities TO "ta-partners";
+GRANT SELECT, INSERT, UPDATE, DELETE ON partners.telegram_contacts TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.manual_offer_events TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.finance_accruals, partners.finance_withdrawals TO "ta-partners";
 GRANT SELECT, INSERT, UPDATE, DELETE ON partners.referral_rewards, partners.blogger_campaigns,

@@ -14,7 +14,7 @@ TABLES = ("users", "invitations", "pending_starts", "telegram_updates",
           "audit", "notifications_outbox", "internal_id_sequence", "crm_events",
           "crm_registration_outbox", "crm_lead_bindings", "crm_assigned_offers", "crm_offer_snapshot_versions",
           "crm_participant_states", "crm_bloggers", "participant_task_reports", "participant_task_report_outbox",
-          "manual_offers", "manual_assignments", "offer_logos", "registration_profiles", "participant_identities",
+          "manual_offers", "manual_assignments", "offer_logos", "telegram_contacts",
           "manual_offer_events", "finance_accruals", "finance_withdrawals",
           "referral_rewards", "blogger_campaigns", "blogger_attributions", "blogger_rewards")
 USER_REFS = ("agency_id", "referrer_id", "manager_id", "introduced_by_id")
@@ -27,6 +27,9 @@ def validate_source_schema(src, dst):
     source_tables = [row[0] for row in src.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
     for table in source_tables:
+        if table in ("registration_profiles", "participant_identities"):
+            # Explicitly discarded by the data-minimization migration.
+            continue
         if table not in TABLES:
             if src.execute("SELECT 1 FROM '" + table.replace("'", "''") + "' LIMIT 1").fetchone():
                 raise ValueError("Nonempty unsupported SQLite table: " + table)

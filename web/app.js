@@ -169,8 +169,6 @@
   }
   const gateReasons={
     underage:"Оформление недоступно до 18 лет. Реферальные приглашения остаются доступны.",
-    identity:"Сначала заполните ФИО и ИНН в профиле.",
-    credit_review:"Перед оформлением обновите кредитную анкету в профиле.",
     registration:"Завершите регистрацию и дождитесь одобрения.",
     mfo_request:"Для оформления МФО сначала запросите оффер и дождитесь решения менеджера."
   };
@@ -322,11 +320,6 @@
     return ["lead","referrer"].includes(user?.role)
       ?"L-"+String(numeric).padStart(6,"0")
       :String(numeric);
-  }
-  function selectedCreditBand(formName){
-    const band=document.querySelector(`input[name="${formName}"]:checked`)?.value;
-    if(!["0","1-3","3+"].includes(band))throw new Error("Выберите количество кредитных продуктов.");
-    return band;
   }
   function referralUrl(response) {
     // Invite codes come from the authorized server endpoint. Never copy
@@ -1003,7 +996,7 @@
     text("rejected-reason",rejectedReason);show("rejected-reason",state.key==="rejected"&&Boolean(rejectedReason));
     const verifiedInvite = Boolean(session.source_info?.inviter_id);
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
-    text("registration-instructions",session.open_registration===true ? "Заполните короткую анкету прямо здесь. После отправки вы получите постоянный внутренний ID, а заявку рассмотрит администратор." : verifiedInvite ? "Вы вошли по приглашению. Заполните анкету в Mini App и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
+    text("registration-instructions",session.open_registration===true ? "Подтвердите условия участия. ФИО, ИНН и кредитная анкета не требуются. Администратор рассмотрит заявку." : verifiedInvite ? "Вы вошли по приглашению. Подтвердите условия и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
     nextStep("Загружаем офферы","Получаем назначения…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
@@ -1015,47 +1008,11 @@
     text("profile-name",displayName);
     text("profile-avatar",displayName.trim().slice(0,1).toUpperCase());
     text("profile-username",user.username?"@"+user.username:"Telegram");
+    text("profile-phone",session.phone||"Не предоставлен · /start в боте");
     text("profile-id",user.id);text("profile-internal-id",user.internal_id == null ? "После регистрации" : displayRegistrationId(user));text("profile-role",roleLabels[role] || role);text("profile-status",state.label);
     const canEditProfile=active && ["lead","referrer"].includes(role) && session.open_registration===true;
     show("participant-finance-panel",canEditProfile);
     if(canEditProfile)loadFinance();else ++financeRequestId;
-    show("participant-identity-panel",canEditProfile);
-    show("participant-credit-panel",canEditProfile);
-    show("profile-age-row",Boolean(session.registration?.age!==undefined&&session.registration?.age!==null));
-    if(session.registration?.age!==undefined)text("profile-age",session.registration.age+" лет");
-    if(canEditProfile){
-      const identity=session.identity||{complete:false};
-      const legacyOnboarding=!session.registration;
-      show("participant-legacy-onboarding",legacyOnboarding);
-      $("participant-legacy-privacy").required=legacyOnboarding;
-      $("participant-legacy-terms").required=legacyOnboarding;
-      $("participant-legacy-adult").required=legacyOnboarding;
-      $("participant-identity-save").disabled=legacyOnboarding;
-      $("participant-credit-save").textContent=legacyOnboarding?"Завершить анкету":"Обновить анкету";
-      text("participant-identity-status",identity.complete
-        ?"Реквизиты сохранены · ИНН "+identity.inn_masked
-        :legacyOnboarding?"Сначала завершите анкету ниже. Ваш ID сохранится."
-        :"Реквизиты не заполнены · оформление недоступно");
-      $("participant-surname").value=identity.surname||"";
-      $("participant-given-name").value=identity.given_name||"";
-      $("participant-patronymic").value=identity.patronymic||"";
-      $("participant-inn").value="";
-      const registration=session.registration;
-      const band=registration?.credit_band || (registration?.credit_products_total===0?"0":
-        registration?.credit_products_total<=3?"1-3":"3+");
-      for(const item of document.querySelectorAll('input[name="participant-credit-band"]')){
-        item.checked=Boolean(registration&&item.value===band);
-      }
-      const updated=Number(registration?.credit_updated_at);
-      const currentAge=registration?.age;
-      const recent=Number.isFinite(updated)&&updated>0&&Date.now()/1000-updated<=30*86400;
-      text("participant-credit-updated",Number.isFinite(updated)&&updated>0
-        ?"Последнее обновление: "+new Date(updated*1000).toLocaleDateString("ru-RU")+(recent?" · актуально":" · нужно обновить")
-        :"Анкета не заполнена");
-      if((Number.isFinite(currentAge)&&currentAge<18) || (registration && currentAge==null && registration.adult_confirmed===false)){
-        text("participant-identity-status","Оформление офферов недоступно до 18 лет; приглашать друзей можно.");
-      }
-    }
     const source = session.source_info || session.attribution || session.invitation || (user.source==="referral" ? {description:"Реферальное приглашение"} : user.source==="agency" ? {description:"Приглашение от агентства"} : {});
     const sourceLabel = typeof source === "object" ? (source.name || source.label || source.inviter_name || source.description || source.code) : source;
     text("source-title",sourceLabel || session.invited_by_name || "Не указан");
@@ -1107,8 +1064,7 @@
     const button=$("register-submit");button.disabled=true;
     text("registration-message","Отправляем заявку…");
     try {
-      const values={credit_band:selectedCreditBand("register-credit-band"),
-        adult_confirmed:$("register-adult-confirmed").checked,consent:$("consent").checked,
+      const values={adult_confirmed:$("register-adult-confirmed").checked,consent:$("consent").checked,
         legal_version:current?.legal_version,
         privacy_accepted:$("consent").checked,
         terms_accepted:$("register-terms-consent").checked};
@@ -1120,25 +1076,6 @@
     } catch(e) {
       text("registration-message",e.message);
     } finally {button.disabled=false;}
-  });
-  $("participant-inn").addEventListener("input",event=>{
-    event.target.value=event.target.value.replace(/\s/g,"");
-  });
-  $("participant-identity-form").addEventListener("submit",async event=>{
-    event.preventDefault();
-    const save=$("participant-identity-save");save.disabled=true;
-    text("participant-identity-message","Сохраняем реквизиты…");
-    try{
-      await api("/profile/identity",{
-        surname:$("participant-surname").value.trim(),
-        given_name:$("participant-given-name").value.trim(),
-        patronymic:$("participant-patronymic").value.trim(),
-        inn:$("participant-inn").value.replace(/\s/g,"")
-      });
-      text("participant-identity-message","Реквизиты сохранены.");
-      await refresh();
-    }catch(e){text("participant-identity-message",e.message);}
-    finally{save.disabled=false;}
   });
   $("finance-request-open").addEventListener("click",()=>{
     const open=$("participant-finance-request").hidden;
@@ -1168,28 +1105,6 @@
       await loadFinance();
     }catch(e){text("finance-request-feedback",e.message);}
     finally{submit.disabled=financeAvailableRub===null || financeAvailableRub<1;}
-  });
-  $("participant-credit-form").addEventListener("submit",async event=>{
-    event.preventDefault();
-    const save=$("participant-credit-save");save.disabled=true;
-    text("participant-credit-message","Сохраняем обновления…");
-    try{
-      const values={credit_band:selectedCreditBand("participant-credit-band")};
-      const legacy=!current?.registration;
-      if(legacy){
-        values.adult_confirmed=$("participant-legacy-adult").checked;
-        values.consent=true;
-        values.legal_version=current?.legal_version;
-        values.privacy_accepted=$("participant-legacy-privacy").checked;
-        values.terms_accepted=$("participant-legacy-terms").checked;
-        if(!values.privacy_accepted||!values.terms_accepted||!values.adult_confirmed)
-          throw new Error("Подтвердите согласия и совершеннолетие.");
-      }
-      await api(legacy?"/profile/onboarding":"/profile/credit-survey",values);
-      text("participant-credit-message","Анкета актуализирована.");
-      await refresh();
-    }catch(e){text("participant-credit-message",e.message);}
-    finally{save.disabled=false;}
   });
   $("copy-referral").addEventListener("click",async () => {
     const link=$("referral-link").value;

@@ -404,16 +404,12 @@ def overview(user_id, owner_id, *, for_admin=None):
             _participant(conn, staff, user_id)
         else:
             user = db.get_user(conn, user_id)
-            if not user or user["status"] != "active" or (user["consent_at"] is None and user["role"] != "owner"):
+            if not user or user["status"] != "active":
                 return {"offers": [], "statistics": {"total": 0, "completed": 0, "in_progress": 0}}
         rows = conn.execute("SELECT o.*,a.stage,a.note,a.updated_at AS status_updated_at FROM manual_assignments a "
                             "JOIN manual_offers o ON o.id=a.offer_id WHERE a.telegram_id=? "
                             "ORDER BY a.updated_at DESC,o.id", (user_id,)).fetchall()
-        from server.profile import access_reason
         from server import offer_workflow
-        registration = conn.execute("SELECT * FROM registration_profiles WHERE telegram_id=?", (user_id,)).fetchone()
-        identity_present = conn.execute(
-            "SELECT 1 FROM participant_identities WHERE telegram_id=?", (user_id,)).fetchone() is not None
         offers = []
         for row in rows:
             if for_admin is None and not row["active"]:
@@ -421,9 +417,8 @@ def overview(user_id, owner_id, *, for_admin=None):
             offer = {**_offer(row), "stage": row["stage"], "note": row["note"],
                      "status_updated_at": row["status_updated_at"]}
             if for_admin is None:
-                reason = access_reason(registration, identity_present, row["category"])
-                offer["can_apply"] = not bool(reason)
-                offer["unavailable_reason"] = reason
+                offer["can_apply"] = True
+                offer["unavailable_reason"] = ""
                 is_mfo = offer_workflow.is_mfo(row["category"])
                 offer["requires_request"] = is_mfo
                 approved = offer_workflow.mfo_approved(conn, user_id, row["id"]) if is_mfo else False
@@ -432,7 +427,7 @@ def overview(user_id, owner_id, *, for_admin=None):
                                       "WHERE telegram_id=? AND offer_id=? ORDER BY created_at DESC,id DESC LIMIT 1",
                                       (user_id, row["id"])).fetchone()
                 offer["latest_event"] = dict(latest) if latest else None
-                if not reason and is_mfo and not approved:
+                if is_mfo and not approved:
                     offer["unavailable_reason"] = "mfo_request"
                     offer["can_apply"] = False
                 if not offer["can_apply"]:

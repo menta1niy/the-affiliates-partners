@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from server import db
 from tests.test_registration import HttpHarness, OWNER, ALICE, BOB, TEST_ONBOARDING
-from tests.test_profile_stage6 import TEST_FERNET_KEY, VALID_INN
+from tests.test_profile_stage6 import TEST_FERNET_KEY
 
 
 class Stage8FinanceTests(unittest.TestCase):
@@ -27,11 +27,9 @@ class Stage8FinanceTests(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def ready(self, uid):
-        status,_=self.as_user("/api/register",uid,**{**TEST_ONBOARDING,"consent":True})
+        status,_=self.as_user("/api/register",uid,**{**TEST_ONBOARDING,"consent":True,"adult_confirmed":True})
         self.assertEqual(status,200)
         self.assertEqual(self.as_user("/api/admin/decision",OWNER,user_id=uid,decision="approve")[0],200)
-        self.assertEqual(self.as_user("/api/profile/identity",uid,
-            surname="Иванов",given_name="Иван",inn=VALID_INN)[0],200)
 
     def offer(self,uid):
         status,record=self.as_user("/api/admin/mvp/offer",OWNER,name="Карта",
