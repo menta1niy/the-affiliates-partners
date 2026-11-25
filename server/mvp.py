@@ -473,6 +473,15 @@ def overview(user_id, owner_id, *, for_admin=None):
                                       "WHERE telegram_id=? AND offer_id=? ORDER BY created_at DESC,id DESC LIMIT 1",
                                       (user_id, row["id"])).fetchone()
                 offer["latest_event"] = dict(latest) if latest else None
+                if not is_mfo:
+                    confirmed = {item["lead_stage"] for item in conn.execute(
+                        "SELECT lead_stage FROM manual_offer_events WHERE telegram_id=? AND offer_id=? "
+                        "AND kind='stage' AND review_status='approved'",
+                        (user_id, row["id"])).fetchall()}
+                    offer["next_stage"] = next(
+                        (code for code in offer["lead_stages"] if code not in confirmed), None)
+                else:
+                    offer["next_stage"] = None
                 if is_mfo and not approved:
                     offer["unavailable_reason"] = "mfo_request"
                     offer["can_apply"] = False

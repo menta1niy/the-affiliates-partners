@@ -638,13 +638,14 @@
     values.append(offerDetail("СТАВКА ЗА ДЕЙСТВИЕ",offerPayment(offer.payout_rub),"participant-offer-payment"),
       offerDetail("СРОК ПРОВЕРКИ",offer.hold_days==null?"Не указан":String(offer.hold_days)+" дн."));
     const target=offerDetail("ЧТО НУЖНО СДЕЛАТЬ",offer.target_action||"Уточните у администратора","participant-offer-target");
+    values.append(target);
     const notice=document.createElement("p");notice.className="participant-offer-warning";
     notice.textContent="Указанная ставка — условие предложения, а не подтверждение начисления или выплаты. Статусы отмечает администратор.";
     const fullNext=document.createElement("p");fullNext.className="participant-offer-full-next";
     const fullNextTitle=document.createElement("strong");fullNextTitle.textContent="Следующий шаг";
     const fullNextText=document.createElement("span");fullNextText.textContent=(manualStages[offer.stage]||manualStages.assigned).next;
     fullNext.append(fullNextTitle,fullNextText);
-    offerDialogContent.append(category,title,status,fullNext,values,target,notice);
+    offerDialogContent.append(category,title,status,fullNext,values,notice);
     if(offer.instructions){
       const section=document.createElement("section");section.className="participant-offer-instruction-section";
       const heading=document.createElement("h3");heading.textContent="Инструкция";
@@ -731,28 +732,31 @@
       const section=document.createElement("section");section.className="participant-offer-report";
       section.append(document.createElement("hr"));
       const title=document.createElement("h3");title.textContent="Отметить этап";
-      const hint=document.createElement("p");hint.textContent="Выберите действие и добавьте ссылку, скриншот или оба подтверждения. Отчёт проверит менеджер.";
+      const hint=document.createElement("p");hint.textContent="Этапы выполняются по порядку. Приложите подтверждающий файл размером до 10 МБ. Отчёт проверит менеджер.";
       section.append(title,hint);
       const form=document.createElement("form");form.className="participant-offer-report-form";
       const stageLabel=document.createElement("label");stageLabel.textContent="Этап выполнения";
       const stages=document.createElement("select");stages.required=true;
+      const pendingStage=offer.latest_event?.kind==="stage"&&offer.latest_event?.review_status==="pending";
       for(const code of offer.lead_stages||[]){
+        if(!offer.requires_request && code!==offer.next_stage)continue;
         if(!Object.hasOwn(leadStageLabels,code))continue;
         const option=document.createElement("option");option.value=code;option.textContent=leadStageLabels[code];stages.append(option);
       }
       stageLabel.append(stages);
-      const urlLabel=document.createElement("label");urlLabel.textContent="Ссылка на подтверждение (HTTPS)";
-      const url=document.createElement("input");url.type="url";url.maxLength=2048;
-      url.placeholder="https://";url.inputMode="url";urlLabel.append(url);
-      const fileLabel=document.createElement("label");fileLabel.textContent="Скриншот (PNG, JPG, WebP)";
-      const file=document.createElement("input");file.type="file";file.accept="image/png,image/jpeg,image/webp";
+      const fileLabel=document.createElement("label");fileLabel.textContent="Файл подтверждения (любой формат, до 10 МБ)";
+      const file=document.createElement("input");file.type="file";file.required=true;
       fileLabel.append(file);
       const note=document.createElement("p");note.className="participant-offer-report-hint";
-      note.textContent="Фото будет уменьшено. Без банковского подтверждения выплаты не начисляются.";
+      note.textContent="Файл сохранится в защищённом хранилище без изменения формата. Без подтверждения банка выплаты не начисляются.";
       const submit=document.createElement("button");submit.type="submit";submit.className="btn primary";
       submit.textContent="Отправить этап на проверку";
       const message=document.createElement("p");message.className="participant-form-feedback";message.setAttribute("role","status");
-      form.append(stageLabel,urlLabel,fileLabel,note,submit,message);
+      if(!stages.options.length||pendingStage){
+        submit.disabled=true;file.disabled=true;stages.disabled=true;
+        message.textContent=pendingStage?"Предыдущий этап ожидает проверки менеджера.":"Все этапы уже подтверждены.";
+      }
+      form.append(stageLabel,fileLabel,note,submit,message);
       let sending=false;
       form.addEventListener("submit",async event=>{
         event.preventDefault();if(sending)return;
@@ -761,23 +765,17 @@
         submit.textContent="Проверяем и отправляем…";
         message.textContent="Проверяем подтверждение и отправляем отчёт менеджеру…";
         try{
-          const values={kind:"stage",offer_id:offer.id,lead_stage:stages.value,proof_url:url.value.trim()};
-          if(file.files?.[0]){
-            const uploaded=file.files[0];
-            if(!["image/png","image/jpeg","image/webp"].includes(uploaded.type)||uploaded.size>5_000_000)
-              throw new Error("Выберите PNG, JPG или WebP размером до 5 МБ.");
-            const bitmap=await createImageBitmap(uploaded);
-            try{
-              const scale=Math.min(1,1280/Math.max(bitmap.width,bitmap.height));
-              const canvas=document.createElement("canvas");
-              canvas.width=Math.max(1,Math.round(bitmap.width*scale));
-              canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-              canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);
-              values.screenshot=canvas.toDataURL("image/webp",.70);
-              if(values.screenshot.length>735000)throw new Error("Слишком большой скриншот, выберите другой.");
-            }finally{bitmap.close();}
-          }
-          if(!values.screenshot&&!values.proof_url)throw new Error("Добавьте ссылку или скриншот.");
+          const values={kind:"stage",offer_id:offer.id,lead_stage:stages.value};
+          const uploaded=file.files?.[0];
+          if(!uploaded)throw new Error("Приложите файл подтверждения.");
+          if(uploaded.size<1||uploaded.size>10_000_000)throw new Error("Размер файла должен быть от 1 байта до 10 МБ.");
+          const encoded=await new Promise((resolve,reject)=>{
+            const reader=new FileReader();
+            reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");
+            reader.onerror=()=>reject(new Error("Не удалось прочитать файл"));
+            reader.readAsDataURL(uploaded);
+          });
+          values.file={name:uploaded.name,data:encoded};
           await api("/mvp/submit",values);
           message.textContent="Отчёт отправлен. Ожидайте решения менеджера.";
           closeOfferDialog();await loadManualOverview();
@@ -1053,6 +1051,8 @@
     error("");
     try {
       if (!initData()) {
+        text("connect-heading","Откройте Mini App через бота");
+        text("connect-description","Напишите /start официальному боту, поделитесь контактом, затем откройте кабинет кнопкой в сообщении бота.");
         show("hero-cta",false);
         taskNotice("");
         ++offersRequest;++crmStatusRequest;
@@ -1064,6 +1064,13 @@
       text("hero-status","Проверяем доступ…");
       const session = await api("/session");
       if (!session.user || session.source !== "telegram") throw new Error("Сессия не подтверждена сервером");
+      if(session.contact_required){
+        text("connect-heading","Поделитесь контактом");
+        text("connect-description","Отправьте /start боту и нажмите «Поделиться контактом». Затем откройте кабинет через кнопку в сообщении.");
+        text("hero-status","Требуется контакт Telegram");
+        show("connect",true);show("account",false);show("register-panel",false);
+        return;
+      }
       render(session);
     } catch(e) {
       show("hero-cta",false);

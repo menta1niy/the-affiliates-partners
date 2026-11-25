@@ -1390,17 +1390,26 @@
           link.href=event.proof_url;link.target="_blank";link.rel="noopener noreferrer";
           link.referrerPolicy="no-referrer";card.append(link);
         }
-        if(event.has_screenshot)card.append(action("Посмотреть скриншот",async()=>{
+        if(event.has_screenshot)card.append(action("Открыть файл: "+(event.file_name||"подтверждение"),async()=>{
           const result=await api("/admin/mvp/evidence",{event_id:event.id});
-          if(result.mime!=="image/webp"||typeof result.data!=="string")throw new Error("Неверный формат файла");
+          if(typeof result.data!=="string")throw new Error("Неверный формат файла");
           const bytes=Uint8Array.from(atob(result.data),character=>character.charCodeAt(0));
-          const blob=new Blob([bytes],{type:"image/webp"});
+          const mime=/^image\/(?:png|jpeg|webp|gif)$/.test(result.mime)?result.mime:"application/octet-stream";
+          const blob=new Blob([bytes],{type:mime});
           const objectUrl=URL.createObjectURL(blob);
           const preview=make("dialog");preview.className="admin-offer-evidence-dialog";
-          const image=make("img");image.alt="Скриншот, присланный участником";image.src=objectUrl;
+          const download=make("a","Скачать: "+(result.name||"подтверждение"),"btn primary");
+          download.href=objectUrl;download.download=result.name||"evidence.bin";
+          preview.append(download);
+          if(mime.startsWith("image/")){
+            const image=make("img");image.alt="Изображение, присланное участником";image.src=objectUrl;
+            preview.append(image);
+          }else{
+            preview.append(make("p","Просмотр этого формата не предусмотрен. Скачайте файл для проверки.","muted"));
+          }
           const close=make("button","Закрыть","btn ghost");close.type="button";
           close.addEventListener("click",()=>preview.close());
-          preview.append(close,image);document.body.append(preview);
+          preview.append(close);document.body.append(preview);
           preview.addEventListener("close",()=>{URL.revokeObjectURL(objectUrl);preview.remove();},{once:true});
           preview.showModal();
         }));

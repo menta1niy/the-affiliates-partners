@@ -92,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(403, {"error": "Недостаточно прав"})
         try:
             size = int(self.headers.get("Content-Length", "0"))
-            size_limit = 1_500_000 if route == "/api/admin/mvp/offer" else 800_000 if route == "/api/mvp/submit" else 24000
+            size_limit = 1_500_000 if route == "/api/admin/mvp/offer" else 13_500_000 if route == "/api/mvp/submit" else 24000
             if not 1 <= size <= size_limit:
                 return self.send_json(400, {"error": "Неверный размер запроса"})
             body = json.loads(self.rfile.read(size))
@@ -150,13 +150,15 @@ class Handler(BaseHTTPRequestHandler):
                     fresh = db.record_start(body["update_id"], sender["id"], None)
                 else:
                     fresh = db.record_contact(body["update_id"], sender["id"], contact)
-                return self.send_json(200, (response_for(body) or {"ok": True}) if fresh else {"ok": True})
+                return self.send_json(200, (response_for(body, has_contact=fresh and
+                                        db.contact_phone(sender["id"]) is not None) or {"ok": True}) if fresh else {"ok": True})
             text = message.get("text", "")
             match = re.fullmatch(r"/start(?:@[A-Za-z0-9_]{3,32})?\s+([A-Z0-9]{6}|(?:ag|ref|blog)_[A-Za-z0-9_-]{8,48})\s*", text) if isinstance(text, str) else None
             fresh = db.record_start(body["update_id"], sender["id"], match.group(1) if match else None)
         else:
             fresh = db.record_start(body["update_id"], 0, None)
-        return self.send_json(200, (response_for(body) or {"ok": True}) if fresh else {"ok": True})
+        return self.send_json(200, (response_for(body, has_contact=
+                                bool(sender and db.contact_phone(sender["id"]))) or {"ok": True}) if fresh else {"ok": True})
 
     def handle_authorized(self, route, body):
         token = bot_token()
@@ -167,17 +169,26 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(401, {"error": "Telegram не подтвердил данные входа"})
         try:
             owner = admin_id()
+            if (route not in ("/api/session", "/api/register")
+                    and os.environ.get("PARTNERS_REQUIRE_TELEGRAM_CONTACT", "").lower() == "true"
+                    and user["id"] != owner and db.contact_phone(user["id"]) is None):
+                return self.send_json(403, {"error": "Для продолжения поделитесь контактом через Telegram-бота"})
             if route == "/api/session":
                 profile = db.session(user, owner)
                 pending_source = profile.pop("pending_source_info", None)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"], "source": "telegram"}
                 result["phone"] = db.contact_phone(user["id"])
+                result["contact_required"] = (os.environ.get("PARTNERS_REQUIRE_TELEGRAM_CONTACT", "").lower() == "true"
+                                              and user["id"] != owner and result["phone"] is None)
                 if pending_source:
                     result["source_info"] = pending_source
                 result["open_registration"] = True
                 from server.registration import CONSENT_VERSION
                 result["legal_version"] = os.environ.get("PARTNERS_LEGAL_APPROVED_VERSION", "").strip() or CONSENT_VERSION
             elif route == "/api/register":
+                if (os.environ.get("PARTNERS_REQUIRE_TELEGRAM_CONTACT", "").lower() == "true"
+                        and user["id"] != owner and db.contact_phone(user["id"]) is None):
+                    return self.send_json(409, {"error": "Поделитесь своим контактом через Telegram-бота"})
                 if body.get("consent") is not True:
                     return self.send_json(400, {"error": "Необходимо согласие"})
                 code = body.get("invite_code")
@@ -189,6 +200,9 @@ class Handler(BaseHTTPRequestHandler):
                     profile = db.register(user, owner, code, body)
                 result = {"user": profile, "role": profile["role"], "status": profile["status"]}
             elif route == "/api/invitations/referral":
+                if (os.environ.get("PARTNERS_REQUIRE_TELEGRAM_CONTACT", "").lower() == "true"
+                        and user["id"] != owner and db.contact_phone(user["id"]) is None):
+                    return self.send_json(403, {"error": "Сначала отправьте контакт Telegram-боту"})
                 result = db.invite(user["id"], owner, "referral")
             elif route == "/api/invitations/revoke":
                 result = db.revoke_invitation(user["id"], owner, body.get("code"))

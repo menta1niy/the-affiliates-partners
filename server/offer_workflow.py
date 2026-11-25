@@ -16,8 +16,7 @@ from server.profile import _cipher
 
 EVENT_ID = re.compile(r"^evt_[0-9a-f]{24}$")
 IMAGE_DATA = re.compile(r"^data:image/(?:png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$")
-MAX_IMAGE_BYTES = 550_000
-MAX_PIXELS = 8_000_000
+MAX_FILE_BYTES = 10_000_000
 MAX_EVENTS_PAGE = 100
 
 
@@ -49,47 +48,59 @@ def schema(conn):
 
 
 def _screenshot(data):
+    """Decode binary evidence, keeping legacy screenshots backward compatible."""
     if data is None:
-        return None
-    if not isinstance(data, str) or len(data) > MAX_IMAGE_BYTES * 4 // 3 + 128:
-        raise db.Problem(400, "Скриншот слишком большой")
-    match = IMAGE_DATA.fullmatch(data)
-    if not match:
-        raise db.Problem(400, "Поддерживаются только изображения PNG, JPG или WebP")
+        return None, ""
+    if isinstance(data, str):
+        match = IMAGE_DATA.fullmatch(data)
+        if not match:
+            raise db.Problem(400, "Некорректный скриншот")
+        encoded, name = match.group(1), "screenshot.webp"
+    elif isinstance(data, dict):
+        encoded, name = data.get("data"), data.get("name")
+        if not isinstance(name, str) or not 1 <= len(name) <= 160 or any(
+            ch in name for ch in "\\/:\x00\r\n"
+        ):
+            raise db.Problem(400, "Некорректное имя файла")
+    else:
+        raise db.Problem(400, "Некорректный файл")
+    if not isinstance(encoded, str) or not 4 <= len(encoded) <= (MAX_FILE_BYTES + 2) // 3 * 4:
+        raise db.Problem(400, "Максимальный размер файла — 10 МБ")
     try:
-        raw = base64.b64decode(match.group(1), validate=True)
+        raw = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise db.Problem(400, "Некорректный файл") from None
-    if not 1 <= len(raw) <= MAX_IMAGE_BYTES:
-        raise db.Problem(400, "Файл превышает допустимый размер")
-    try:
-        from PIL import Image, ImageOps, UnidentifiedImageError
-        with Image.open(io.BytesIO(raw)) as image:
-            if image.format not in ("PNG", "JPEG", "WEBP") or getattr(image, "n_frames", 1) != 1:
-                raise ValueError
-            if not 1 <= image.width * image.height <= MAX_PIXELS:
-                raise ValueError
-            image.load()
-            safe = ImageOps.exif_transpose(image).convert("RGB")
-            safe.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
-            out = io.BytesIO()
-            safe.save(out, format="WEBP", quality=72, method=4)
-            blob = out.getvalue()
-            if len(blob) > MAX_IMAGE_BYTES:
-                raise ValueError
-            return blob
-    except ImportError:
-        raise db.Problem(503, "Обработка изображений не установлена") from None
-    except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError):
-        raise db.Problem(400, "Повреждённый или слишком большой скриншот") from None
+    if not 1 <= len(raw) <= MAX_FILE_BYTES:
+        raise db.Problem(400, "Максимальный размер файла — 10 МБ")
+    # MIME is derived from bytes, never trusted from a client-supplied filename.
+    mime = ("image/png" if raw.startswith(b"\x89PNG\r\n\x1a\n") else
+            "image/jpeg" if raw.startswith(b"\xff\xd8\xff") else
+            "image/webp" if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP" else
+            "image/gif" if raw.startswith((b"GIF87a", b"GIF89a")) else
+            "application/pdf" if raw.startswith(b"%PDF-") else
+            "application/octet-stream")
+    return raw, json.dumps({"name": name, "mime": mime}, ensure_ascii=False)
 
 
 def _public(row):
+    info = _file_info(row["evidence_type"])
     return {"id": row["id"], "offer_id": row["offer_id"], "kind": row["kind"],
             "lead_stage": row["lead_stage"], "proof_url": row["proof_url"],
             "has_screenshot": row["evidence_data"] is not None,
+            "file_name": info["name"] if row["evidence_data"] is not None else "",
+            "file_mime": info["mime"] if row["evidence_data"] is not None else "",
             "review_status": row["review_status"], "review_note": row["review_note"],
             "created_at": row["created_at"], "reviewed_at": row["reviewed_at"]}
+
+
+def _file_info(value):
+    try:
+        info = json.loads(value)
+        if isinstance(info, dict) and isinstance(info.get("name"), str):
+            return {"name": info["name"], "mime": info.get("mime", "application/octet-stream")}
+    except (ValueError, TypeError):
+        pass
+    return {"name": "screenshot.webp", "mime": "image/webp"}
 
 
 def _assignment(conn, actor, offer_id):
@@ -133,11 +144,11 @@ def send(actor, owner_id, data):
         raise db.Problem(400, "Некорректный тип отправки")
     stage = data.get("lead_stage", "")
     if kind == "mfo_request":
-        if stage not in ("", None) or data.get("screenshot") or data.get("proof_url"):
+        if stage not in ("", None) or data.get("screenshot") or data.get("file") or data.get("proof_url"):
             raise db.Problem(400, "Запрос МФО не требует подтверждений")
         stage = ""
         link = ""
-        screenshot = None
+        screenshot, evidence_type = None, ""
     else:
         if not isinstance(stage, str) or stage not in mvp.LEAD_STAGE_LABELS:
             raise db.Problem(400, "Некорректный этап")
@@ -145,9 +156,9 @@ def send(actor, owner_id, data):
         if not isinstance(raw_url, str):
             raise db.Problem(400, "Некорректная ссылка подтверждения")
         link = mvp._url(raw_url)
-        screenshot = _screenshot(data.get("screenshot"))
+        screenshot, evidence_type = _screenshot(data.get("file", data.get("screenshot")))
         if not link and screenshot is None:
-            raise db.Problem(400, "Добавьте ссылку или скриншот подтверждения")
+            raise db.Problem(400, "Приложите файл с подтверждением")
         if screenshot is not None:
             screenshot = _cipher().encrypt(screenshot)
     db.initialize()
@@ -164,6 +175,14 @@ def send(actor, owner_id, data):
                 raise db.Problem(400, "Этот этап не включён для оффера")
             if mfo and not mfo_approved(conn, actor, offer_id):
                 raise db.Problem(403, "Сначала запросите и получите одобрение МФО")
+            if not mfo:
+                completed = {r["lead_stage"] for r in conn.execute(
+                    "SELECT lead_stage FROM manual_offer_events WHERE telegram_id=? AND offer_id=? "
+                    "AND kind='stage' AND review_status='approved'",
+                    (actor, offer_id)).fetchall()}
+                next_stage = next((code for code in allowed if code not in completed), None)
+                if stage != next_stage:
+                    raise db.Problem(409, "Этапы выполняются по порядку. Дождитесь подтверждения предыдущего.")
         if kind == "mfo_request" and mfo_approved(conn, actor, offer_id):
             raise db.Problem(409, "МФО уже согласован")
         pending = conn.execute("SELECT 1 FROM manual_offer_events WHERE telegram_id=? AND offer_id=? "
@@ -180,8 +199,8 @@ def send(actor, owner_id, data):
         event_id = "evt_" + secrets.token_hex(12)
         now = int(time.time())
         conn.execute("INSERT INTO manual_offer_events(id,telegram_id,offer_id,kind,lead_stage,proof_url,"
-                     "evidence_data,evidence_type,review_status,created_at) VALUES(?,?,?,?,?,?,?,'image/webp','pending',?)",
-                     (event_id, actor, offer_id, kind, stage, link, screenshot, now))
+                     "evidence_data,evidence_type,review_status,created_at) VALUES(?,?,?,?,?,?,?,?,'pending',?)",
+                     (event_id, actor, offer_id, kind, stage, link, screenshot, evidence_type, now))
         db.audit(conn, actor, "manual_offer_event_submitted", actor,
                  "offer=" + offer_id + ";type=" + kind + ";stage=" + stage)
         recipients = {owner_id}
@@ -306,7 +325,7 @@ def evidence(actor, owner_id, data):
     with db.transaction() as conn:
         staff = db.require_staff(conn, actor, owner_id)
         schema(conn)
-        row = conn.execute("SELECT telegram_id,evidence_data FROM manual_offer_events WHERE id=?",
+        row = conn.execute("SELECT telegram_id,evidence_data,evidence_type FROM manual_offer_events WHERE id=?",
                            (event_id,)).fetchone()
         if row is None or row["evidence_data"] is None:
             raise db.Problem(404, "Скриншот отсутствует")
@@ -316,4 +335,4 @@ def evidence(actor, owner_id, data):
             raw = _cipher().decrypt(bytes(row["evidence_data"]))
         except InvalidToken:
             raise db.Problem(503, "Не удалось расшифровать подтверждение") from None
-        return {"mime": "image/webp", "data": base64.b64encode(raw).decode("ascii")}
+        return {**_file_info(row["evidence_type"]), "data": base64.b64encode(raw).decode("ascii")}

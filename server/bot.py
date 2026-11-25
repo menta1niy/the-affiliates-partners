@@ -2,7 +2,7 @@
 from server.settings import admin_id, app_url
 
 
-def response_for(update):
+def response_for(update, *, has_contact=False):
     if not isinstance(update, dict):
         return None
     message = update.get("message")
@@ -19,24 +19,37 @@ def response_for(update):
         if contact.get("user_id") != sender["id"]:
             return {"method": "sendMessage", "chat_id": sender["id"],
                     "text": "Отправьте свой контакт кнопкой «Поделиться номером», а не чужой номер."}
+        url = app_url()
+        is_owner = sender["id"] == admin_id()
+        destination = url.rstrip("/") + "/admin/" if is_owner else url
         return {"method": "sendMessage", "chat_id": sender["id"],
-                "text": "Номер сохранён. Откройте кабинет через /app.",
-                "reply_markup": {"remove_keyboard": True}}
+                "text": "Номер сохранён. Откройте личный кабинет:",
+                "reply_markup": {"inline_keyboard": [[{
+                    "text": "Открыть админ-панель" if is_owner else "Открыть личный кабинет",
+                    "web_app": {"url": destination}
+                }]]} if url else {"remove_keyboard": True}}
     command = (message.get("text") or "").split(maxsplit=1)[0].split("@", 1)[0]
     if command in {"/start", "/app"}:
         url = app_url()
         if not url:
             return None
+        if not has_contact:
+            return {"method": "sendMessage", "chat_id": sender["id"],
+                    "text": "Для доступа к кабинету поделитесь своим номером телефона кнопкой ниже.",
+                    "reply_markup": {"keyboard": [[{"text": "Поделиться контактом", "request_contact": True}]],
+                                     "resize_keyboard": True, "one_time_keyboard": True}}
         is_owner = sender["id"] == admin_id()
         destination = url.rstrip("/") + "/admin/" if is_owner else url
         return {
             "method": "sendMessage",
             "chat_id": sender["id"],
             "text": "The Affiliates Partners. Откройте административную панель:" if is_owner else "The Affiliates Partners. Откройте личный кабинет:",
-            "reply_markup": {"keyboard": [
-                [{"text": "Открыть кабинет", "web_app": {"url": destination}}],
-                [{"text": "Поделиться номером", "request_contact": True}]
-            ], "resize_keyboard": True},
+            # Inline Web App buttons provide signed initData on supported Telegram
+            # clients; reply-keyboard Web Apps may open without signed credentials.
+            "reply_markup": {"inline_keyboard": [[{
+                "text": "Открыть админ-панель" if is_owner else "Открыть личный кабинет",
+                "web_app": {"url": destination}
+            }]]},
         }
     if command == "/help":
         return {

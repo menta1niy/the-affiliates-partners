@@ -27,7 +27,7 @@ LEAD_BOOT = r"""(() => {
       offers:[
         {id:'manual_c',name:'Дебетовая карта',category:'Дебетовые карты',payout_rub:1000,
          hold_days:7,stage:'assigned',target_action:'Оформить',can_apply:true,
-         unavailable_reason:'',lead_stages:['application_sent','meeting_scheduled'],
+         unavailable_reason:'',lead_stages:['application_sent','meeting_scheduled'],next_stage:'application_sent',
          referral_url:'https://bank.test/debit',
          latest_event:pendingStage?{id:'evt_a',kind:'stage',lead_stage:'application_sent',
            review_status:'pending',review_note:''}:null},
@@ -97,7 +97,17 @@ class Stage7BrowserTests(unittest.TestCase):
                         cards=page.locator(".participant-offers .offer-item")
                         self.assertEqual(cards.count(),2)
                         cards.first.locator(".participant-offer-detail-button").click()
+                        details=page.locator("#participant-offer-dialog .participant-offer-details")
+                        self.assertEqual(details.locator(".participant-offer-detail").count(),3)
+                        self.assertEqual(details.locator(".participant-offer-target").count(),1)
+                        self.assertTrue(page.locator(".participant-offer-start").is_visible())
                         guide=page.locator("#participant-offer-dialog .participant-offer-workflow")
+                        gap=page.evaluate("""() => {
+                          const guide=document.querySelector('.participant-offer-workflow').getBoundingClientRect();
+                          const start=document.querySelector('.participant-offer-start').getBoundingClientRect();
+                          return start.top-guide.bottom;
+                        }""")
+                        self.assertGreaterEqual(gap,18)
                         self.assertEqual(guide.locator("li").count(),4)
                         self.assertEqual(guide.locator("li strong").all_inner_texts(),
                             ["Изучите условия","Выполните действие",
@@ -105,14 +115,13 @@ class Stage7BrowserTests(unittest.TestCase):
                         self.assertIn("Порядок выполнения",guide.inner_text())
                         form=page.locator(".participant-offer-report-form")
                         form.wait_for(state="visible")
-                        self.assertEqual(form.locator("select option").count(),2)
-                        form.locator("select").select_option("meeting_scheduled")
-                        form.locator('input[type="url"]').fill("https://example.test/proof")
-                        if width==320:
-                            raw=io.BytesIO()
-                            Image.new("RGB",(180,90),(20,80,130)).save(raw,format="PNG")
-                            form.locator('input[type="file"]').set_input_files({
-                                "name":"proof.png","mimeType":"image/png","buffer":raw.getvalue()})
+                        self.assertEqual(form.locator("select option").count(),1)
+                        self.assertEqual(form.locator("select").input_value(),"application_sent")
+                        self.assertEqual(form.locator('input[type="url"]').count(),0)
+                        raw=io.BytesIO()
+                        Image.new("RGB",(180,90),(20,80,130)).save(raw,format="PNG")
+                        form.locator('input[type="file"]').set_input_files({
+                            "name":"proof.png","mimeType":"image/png","buffer":raw.getvalue()})
                         form.locator('button[type="submit"]').click()
                         page.locator("#participant-offer-dialog").wait_for(state="hidden")
                         cards.last.locator(".participant-offer-detail-button").click()
@@ -125,10 +134,9 @@ class Stage7BrowserTests(unittest.TestCase):
                         page.locator("#participant-offer-dialog").wait_for(state="hidden")
                         actions=page.evaluate("window.__stage7Calls")
                         self.assertEqual([item["kind"] for item in actions],["stage","mfo_request"])
-                        self.assertEqual(actions[0]["lead_stage"],"meeting_scheduled")
-                        self.assertEqual(actions[0]["proof_url"],"https://example.test/proof")
-                        if width==320:
-                            self.assertTrue(actions[0]["screenshot"].startswith("data:image/webp;base64,"))
+                        self.assertEqual(actions[0]["lead_stage"],"application_sent")
+                        self.assertEqual(actions[0]["file"]["name"],"proof.png")
+                        self.assertTrue(actions[0]["file"]["data"].startswith("iVBOR"))
                         self.assertEqual(page.evaluate("document.documentElement.scrollWidth"),width)
                         self.assertFalse(errors,errors)
                         page.close()
@@ -153,7 +161,8 @@ class Stage7BrowserTests(unittest.TestCase):
                 page.locator('#participant-nav [data-view="offers"]').click()
                 page.locator(".participant-offers .offer-item").first.locator(".participant-offer-detail-button").click()
                 form=page.locator(".participant-offer-report-form")
-                form.locator('input[type="url"]').fill("https://example.test/proof")
+                form.locator('input[type="file"]').set_input_files({
+                    "name":"proof.txt","mimeType":"text/plain","buffer":b"test proof"})
                 form.locator('button[type="submit"]').click()
                 self.assertTrue(form.locator('button[type="submit"]').is_disabled())
                 self.assertEqual(form.locator('button[type="submit"]').get_attribute("aria-busy"),"true")

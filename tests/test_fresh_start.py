@@ -102,16 +102,19 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(body["method"], "sendMessage")
             self.assertEqual(body["chat_id"], 42)
-            self.assertIn("web_app", body["reply_markup"]["inline_keyboard"][0][0])
+            self.assertTrue(body["reply_markup"]["keyboard"][0][0]["request_contact"])
 
 
 class BotTests(unittest.TestCase):
-    def test_private_start_sends_app_button(self):
+    def test_private_start_requests_contact_then_inline_webapp(self):
         with patch.object(bot, "app_url", return_value="https://example.org/partners/"):
             response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/start"}})
         self.assertEqual(response["method"], "sendMessage")
         self.assertEqual(response["chat_id"], 42)
-        self.assertIn("web_app", response["reply_markup"]["inline_keyboard"][0][0])
+        self.assertTrue(response["reply_markup"]["keyboard"][0][0]["request_contact"])
+        with patch.object(bot, "app_url", return_value="https://example.org/partners/"):
+            opened = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": 42, "type": "private"}, "text": "/app"}}, has_contact=True)
+        self.assertIn("web_app", opened["reply_markup"]["inline_keyboard"][0][0])
 
     def test_ignore_group_messages(self):
         response = bot.response_for({"message": {"from": {"id": 42}, "chat": {"id": -4, "type": "group"}, "text": "/start"}})
