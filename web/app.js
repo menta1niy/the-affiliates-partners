@@ -310,7 +310,7 @@
   function text(id,value) { $(id).textContent = value == null || value === "" ? "—" : String(value); }
   function statusInfo(status) {
     const key = String(status || "unregistered").toLowerCase();
-    const descriptions = {pending:"Заявка ожидает решения модератора. Доступ к предложениям пока закрыт.",approved:"Аккаунт подтверждён. Доступ зависит от действующих предложений и вашей роли.",active:"Ваш аккаунт активен.",rejected:"Заявка отклонена. Для уточнения причины обратитесь к команде.",blocked:"Доступ к аккаунту приостановлен.",invited:"Откройте ссылку приглашения через Telegram и отправьте заявку.",unregistered:"Откройте ссылку приглашения через Telegram и отправьте заявку."};
+    const descriptions = {pending:"Вход обновляется. Повторно откройте кабинет.",approved:"Аккаунт активен. Все опубликованные офферы доступны в каталоге.",active:"Аккаунт активен. Вы можете выбрать любой опубликованный оффер.",rejected:"Доступ отклонён. Для уточнения причины обратитесь к команде.",blocked:"Доступ к аккаунту приостановлен.",invited:"Примите условия для моментального доступа к каталогу.",unregistered:"Примите условия для моментального доступа к каталогу."};
     return {key,label:statusLabels[key] || key,description:descriptions[key] || "Для уточнения статуса обратитесь к администратору."};
   }
   function displayRegistrationId(user){
@@ -671,6 +671,23 @@
       section.append(hint);offerDialogContent.append(section);
     }
     offerDialogContent.append(offerWorkflowGuide(offer));
+    if(offer.can_apply===true && !offer.requires_request && !offer.is_assigned &&
+       !["completed","rejected"].includes(offer.stage)){
+      const start=document.createElement("button");start.type="button";
+      start.className="btn primary participant-offer-start";
+      start.textContent="Взять оффер в работу";
+      start.addEventListener("click",async()=>{
+        start.disabled=true;start.textContent="Открываем доступ…";
+        try{
+          await api("/mvp/start",{offer_id:offer.id});
+          closeOfferDialog();await loadManualOverview();
+        }catch(e){
+          start.disabled=false;start.textContent="Повторить";
+          error("Не удалось взять оффер в работу: "+e.message);
+        }
+      });
+      offerDialogContent.append(start);
+    }
     if(offer.latest_event){
       const event=offer.latest_event;
       const section=document.createElement("section");section.className="participant-offer-activity";
@@ -800,7 +817,7 @@
     text("offer-filter-count","Показано "+offers.length+" из "+manualOffers.length);
     show("offer-filter-count",true);
     if(!offers.length){
-      offerMessage(manualOffers.length?"Попробуйте другой статус или посмотрите все назначенные предложения.":"Администратор ещё не назначил вам предложения. Когда они появятся, вы увидите здесь условия и инструкцию.",manualOffers.length?"filtered":"empty",manualOffers.length?()=>{
+      offerMessage(manualOffers.length?"Попробуйте другой статус или посмотрите все предложения.":"В каталоге пока нет опубликованных офферов.",manualOffers.length?"filtered":"empty",manualOffers.length?()=>{
         manualFilter="all";
         document.querySelectorAll("[data-offer-filter]").forEach(tab=>tab.setAttribute("aria-pressed",String(tab.dataset.offerFilter==="all")));
         renderManualOffers();
@@ -996,12 +1013,12 @@
     text("rejected-reason",rejectedReason);show("rejected-reason",state.key==="rejected"&&Boolean(rejectedReason));
     const verifiedInvite = Boolean(session.source_info?.inviter_id);
     show("register-form",unregistered && (verifiedInvite || session.open_registration===true));
-    text("registration-instructions",session.open_registration===true ? "Подтвердите условия участия. ФИО, ИНН и кредитная анкета не требуются. Администратор рассмотрит заявку." : verifiedInvite ? "Вы вошли по приглашению. Подтвердите условия и отправьте заявку на рассмотрение." : "Откройте персональную ссылку приглашения через Telegram, затем вернитесь в кабинет и обновите данные.");
+    text("registration-instructions","Подтвердите условия участия — доступ ко всем опубликованным офферам откроется сразу, без одобрения администратора.");
     text("welcome",user.first_name ? "Здравствуйте, " + user.first_name : "Личный кабинет");
-    nextStep("Загружаем офферы","Получаем назначения…");
+    nextStep("Загружаем офферы","Получаем общий каталог…");
     text("hero-status",state.label);text("status-pill",state.label);text("status-title",state.label);
     text("status-description",unregistered && session.open_registration===true
-      ? "Вы можете подать заявку через Telegram. Администратор рассмотрит её перед открытием доступа к офферам."
+      ? "Примите условия, чтобы сразу открыть каталог офферов."
       : state.description);
     $("status-pill").dataset.status=state.key;
     const displayName=[user.first_name,user.last_name].filter(Boolean).join(" ") || user.username || "Участник";
@@ -1019,12 +1036,12 @@
     text("source-details",typeof source === "object" ? source.description || (source.inviter_id || user.introduced_by_id ? "Приглашение подтверждено." : "Дополнительная информация не указана.") : "Информация о приглашении");
     show("admin-link",["owner","admin","staff"].includes(role) && ["approved","active"].includes(state.key));
     if (["approved","active"].includes(state.key) && session.open_registration===true){
-      text("offers-description","Ваши задания и условия.");
+      text("offers-description","Все опубликованные офферы и ваши личные статусы.");
       $("task-history").closest("section").hidden=true;
       $("crm-state").closest("section").hidden=true;
       loadManualOverview();
     }else if (["approved","active"].includes(state.key)){resetParticipantKpis();loadTasks();loadCrmStatus();}
-    else {++offersRequest;++crmStatusRequest;resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);offerMessage("Предложения станут доступны после одобрения заявки и назначения офферов.");$("task-history").textContent="История недоступна до подтверждения регистрации.";$("crm-state").textContent="Статусы CRM недоступны до подтверждения регистрации.";}
+    else {++offersRequest;++crmStatusRequest;resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);offerMessage("Примите условия участия для доступа к каталогу.");$("task-history").textContent="История доступна после входа.";$("crm-state").textContent="Статусы CRM недоступны до входа.";}
     if (["approved","active"].includes(state.key)) loadReferral(); else {++referralRequest;show("referral-panel",false);}
   }
   function unregisteredStatus(key){return ["invited","unregistered","new","not_registered"].includes(key);}
@@ -1071,7 +1088,7 @@
       if(!values.privacy_accepted||!values.terms_accepted||!values.adult_confirmed)
         throw new Error("Подтвердите согласия и совершеннолетие.");
       const result=await api("/register",values);
-      text("registration-message","Заявка отправлена. Ваш ID: "+displayRegistrationId(result.user)+".");
+      text("registration-message","Доступ открыт. Ваш ID: "+displayRegistrationId(result.user)+".");
       await refresh();
     } catch(e) {
       text("registration-message",e.message);

@@ -360,6 +360,12 @@ def session(identity, owner_id):
                 pending_code = None
             pending = conn.execute("SELECT kind,issuer_id FROM invitations WHERE code=?", (pending_code["code"],)).fetchone() if pending_code else None
         if row is not None:
+            # Legacy awaiting-review accounts become usable on their next
+            # authenticated visit. Never reinstate rejected/blocked users.
+            if row["status"] == "pending" and row["role"] in ("lead", "referrer") and row["consent_at"] is not None:
+                conn.execute("UPDATE users SET status='active',updated_at=? WHERE id=?",
+                             (int(time.time()), identity["id"]))
+                audit(conn, identity["id"], "automatic_activation", identity["id"])
             conn.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?",
                          (identity["first_name"], identity["last_name"], identity["username"], identity["id"]))
             row = get_user(conn, identity["id"])
@@ -422,8 +428,8 @@ def register(identity, owner_id, invitation_code, registration_data=None, *, sta
         referrer = issuer["id"] if invite["kind"] == "referral" else None
         now = int(time.time())
         internal_id = allocate_internal_id(conn)
-        conn.execute("""INSERT INTO users(id,internal_id,first_name,last_name,username,role,agency_id,referrer_id,manager_id,registered_at,updated_at,source,consent_at,introduced_by_id)
-                     VALUES(?,?,?,?,?,'lead',?,?,?,?,?,?,?,?)""", (identity["id"], internal_id, identity["first_name"], identity["last_name"],
+        conn.execute("""INSERT INTO users(id,internal_id,first_name,last_name,username,role,status,agency_id,referrer_id,manager_id,registered_at,updated_at,source,consent_at,introduced_by_id)
+                     VALUES(?,?,?,?,?,'lead','active',?,?,?,?,?,?,?,?)""", (identity["id"], internal_id, identity["first_name"], identity["last_name"],
                                                identity["username"], agency, referrer, manager, now, now, invite["kind"], now, issuer["id"]))
         if invite["kind"] == "agency":
             # Agency introductions are individual, while referral links are reusable.
@@ -439,7 +445,7 @@ def register(identity, owner_id, invitation_code, registration_data=None, *, sta
         if invite["kind"] == "referral" and issuer["role"] in ("lead", "referrer"):
             enqueue(conn, "referral:new:" + str(identity["id"]), issuer["id"],
                     "The Affiliates Partners\nПо вашей ссылке зарегистрирован новый участник. "
-                    "Его ID: L-" + str(internal_id).zfill(6) + ". Заявка ожидает рассмотрения.")
+                    "Его ID: L-" + str(internal_id).zfill(6) + ". Участник активирован автоматически.")
         if standalone:
             return public_user(get_user(conn, identity["id"]))
         source_type = {"referral": "referrer", "agency": "agency", "blogger": "blogger"}[invite["kind"]]
@@ -466,7 +472,7 @@ def register_open(identity, owner_id, registration_data=None):
     """Opt-in standalone MVP onboarding; still requires verified Telegram initData.
 
     Unlike the existing referral workflow, no attribution is invented and no
-    CRM registration event is sent. A human admin must approve the new lead.
+    CRM registration event is sent. The participant is active immediately.
     """
     initialize()
     with transaction() as check:
@@ -491,7 +497,7 @@ def register_open(identity, owner_id, registration_data=None):
         now = int(time.time())
         internal_id = allocate_internal_id(conn)
         conn.execute("INSERT INTO users(id,internal_id,first_name,last_name,username,role,status,agency_id,manager_id,registered_at,updated_at,consent_at) "
-                     "VALUES(?,?,?,?,?,'lead','pending',?,?,?,?,?)",
+                     "VALUES(?,?,?,?,?,'lead','active',?,?,?,?,?)",
                      (identity["id"], internal_id, identity["first_name"], identity["last_name"],
                       identity["username"], owner_id, owner_id, now, now, now))
         audit(conn, identity["id"], "mvp_registration", identity["id"])

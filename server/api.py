@@ -75,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
                   "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/offer/delete", "/api/admin/mvp/assignment",
                   "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
-                  "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
+                  "/api/mvp/start", "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
                   "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
         routes.update({"/api/finance/overview","/api/finance/withdraw",
                        "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
@@ -174,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
                 result["phone"] = db.contact_phone(user["id"])
                 if pending_source:
                     result["source_info"] = pending_source
-                result["open_registration"] = os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true"
+                result["open_registration"] = True
                 from server.registration import CONSENT_VERSION
                 result["legal_version"] = os.environ.get("PARTNERS_LEGAL_APPROVED_VERSION", "").strip() or CONSENT_VERSION
             elif route == "/api/register":
@@ -183,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
                 code = body.get("invite_code")
                 if code is not None and not isinstance(code, str):
                     return self.send_json(400, {"error": "Некорректный код"})
-                if os.environ.get("PARTNERS_MVP_OPEN_REGISTRATION", "").lower() == "true" and code is None:
+                if code is None:
                     profile = db.register_open(user, owner, body)
                 else:
                     profile = db.register(user, owner, code, body)
@@ -223,6 +223,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = mvp.bulk_assignment(user["id"], owner, body)
             elif route == "/api/mvp/overview":
                 result = mvp.overview(user["id"], owner)
+            elif route == "/api/mvp/start":
+                result = mvp.start_offer(user["id"], owner, body)
             elif route == "/api/mvp/submit":
                 result = offer_workflow.send(user["id"], owner, body)
             elif route == "/api/mvp/my-events":

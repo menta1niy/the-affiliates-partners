@@ -102,8 +102,17 @@ def _assignment(conn, actor, offer_id):
                        "JOIN manual_offers o ON o.id=a.offer_id "
                        "WHERE a.telegram_id=? AND a.offer_id=?", (actor, offer_id)).fetchone()
     if row is None:
-        raise db.Problem(404, "Оффер не назначен")
-    if not row["active"]:
+        published = conn.execute("SELECT id FROM manual_offers WHERE id=? AND active=1 AND deleted_at=0",
+                                 (offer_id,)).fetchone()
+        if not published:
+            raise db.Problem(404, "Оффер недоступен")
+        conn.execute("INSERT INTO manual_assignments(telegram_id,offer_id,stage,note,updated_at) "
+                     "VALUES(?,?,'in_progress','',?) ON CONFLICT(telegram_id,offer_id) DO NOTHING",
+                     (actor, offer_id, int(time.time())))
+        row = conn.execute("SELECT o.*,a.stage FROM manual_assignments a "
+                           "JOIN manual_offers o ON o.id=a.offer_id "
+                           "WHERE a.telegram_id=? AND a.offer_id=?", (actor, offer_id)).fetchone()
+    if not row["active"] or row["deleted_at"]:
         raise db.Problem(409, "Оффер отключён")
     if row["stage"] in ("completed", "rejected"):
         raise db.Problem(409, "Назначение закрыто администратором")

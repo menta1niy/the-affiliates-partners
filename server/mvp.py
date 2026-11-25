@@ -288,6 +288,39 @@ def assignment(actor, owner_id, data):
         return {"changed": True}
 
 
+def start_offer(actor, owner_id, data):
+    """An active lead can start any published non-MFO offer without approval."""
+    offer_id = data.get("offer_id")
+    if not isinstance(offer_id, str) or not OFFER_ID.fullmatch(offer_id):
+        raise db.Problem(400, "Некорректный оффер")
+    db.initialize()
+    with db.transaction() as conn:
+        schema(conn)
+        user = db.get_user(conn, actor)
+        if not user or user["status"] != "active" or user["role"] not in ("lead", "referrer"):
+            raise db.Problem(403, "Для работы с офферами требуется активный участник")
+        offer = conn.execute("SELECT category FROM manual_offers WHERE id=? AND active=1 AND deleted_at=0",
+                             (offer_id,)).fetchone()
+        if not offer:
+            raise db.Problem(404, "Оффер недоступен")
+        from server.offer_workflow import is_mfo
+        if is_mfo(offer["category"]):
+            raise db.Problem(409, "Для МФО сохраняется запрос менеджеру")
+        now = int(time.time())
+        conn.execute("INSERT INTO manual_assignments(telegram_id,offer_id,stage,note,updated_at) "
+                     "VALUES(?,?,'in_progress','',?) ON CONFLICT(telegram_id,offer_id) DO NOTHING",
+                     (actor, offer_id, now))
+        row = conn.execute("SELECT stage FROM manual_assignments WHERE telegram_id=? AND offer_id=?",
+                           (actor, offer_id)).fetchone()
+        if row["stage"] == "assigned":
+            conn.execute("UPDATE manual_assignments SET stage='in_progress',updated_at=? "
+                         "WHERE telegram_id=? AND offer_id=?", (now, actor, offer_id))
+            stage = "in_progress"
+        else:
+            stage = row["stage"]
+        return {"offer_id": offer_id, "stage": stage, "started": stage == "in_progress"}
+
+
 def assignment_candidates(actor, owner_id, data):
     """Page through eligible participants without leaking other agencies' leads."""
     page = data.get("page", 1)
@@ -406,9 +439,21 @@ def overview(user_id, owner_id, *, for_admin=None):
             user = db.get_user(conn, user_id)
             if not user or user["status"] != "active":
                 return {"offers": [], "statistics": {"total": 0, "completed": 0, "in_progress": 0}}
-        rows = conn.execute("SELECT o.*,a.stage,a.note,a.updated_at AS status_updated_at FROM manual_assignments a "
-                            "JOIN manual_offers o ON o.id=a.offer_id WHERE a.telegram_id=? "
-                            "ORDER BY a.updated_at DESC,o.id", (user_id,)).fetchall()
+        if for_admin is not None:
+            rows = conn.execute("SELECT o.*,a.stage,a.note,a.updated_at AS status_updated_at FROM manual_assignments a "
+                                "JOIN manual_offers o ON o.id=a.offer_id WHERE a.telegram_id=? "
+                                "ORDER BY a.updated_at DESC,o.id", (user_id,)).fetchall()
+        else:
+            # Public catalogue for all active leads; personal progress stays
+            # scoped by their Telegram ID and is not fabricated on browsing.
+            rows = conn.execute("SELECT o.*,COALESCE(a.stage,'assigned') AS stage,"
+                                "COALESCE(a.note,'') AS note,"
+                                "COALESCE(a.updated_at,o.created_at) AS status_updated_at,"
+                                "CASE WHEN a.offer_id IS NULL THEN 0 ELSE 1 END AS is_assigned "
+                                "FROM manual_offers o LEFT JOIN manual_assignments a "
+                                "ON a.offer_id=o.id AND a.telegram_id=? "
+                                "WHERE o.active=1 AND o.deleted_at=0 "
+                                "ORDER BY o.created_at DESC,o.id", (user_id,)).fetchall()
         from server import offer_workflow
         offers = []
         for row in rows:
@@ -417,6 +462,7 @@ def overview(user_id, owner_id, *, for_admin=None):
             offer = {**_offer(row), "stage": row["stage"], "note": row["note"],
                      "status_updated_at": row["status_updated_at"]}
             if for_admin is None:
+                offer["is_assigned"] = bool(row["is_assigned"])
                 offer["can_apply"] = True
                 offer["unavailable_reason"] = ""
                 is_mfo = offer_workflow.is_mfo(row["category"])
