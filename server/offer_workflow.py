@@ -201,6 +201,12 @@ def send(actor, owner_id, data):
         conn.execute("INSERT INTO manual_offer_events(id,telegram_id,offer_id,kind,lead_stage,proof_url,"
                      "evidence_data,evidence_type,review_status,created_at) VALUES(?,?,?,?,?,?,?,?,'pending',?)",
                      (event_id, actor, offer_id, kind, stage, link, screenshot, evidence_type, now))
+        if kind == "stage" and not mfo:
+            # A submitted milestone is really awaiting review now, not still
+            # 'assigned'. Keep bank attribution/finance entirely separate.
+            conn.execute("UPDATE manual_assignments SET stage='submitted',updated_at=? "
+                         "WHERE telegram_id=? AND offer_id=?",
+                         (now, actor, offer_id))
         db.audit(conn, actor, "manual_offer_event_submitted", actor,
                  "offer=" + offer_id + ";type=" + kind + ";stage=" + stage)
         recipients = {owner_id}
@@ -221,15 +227,22 @@ def send(actor, owner_id, data):
 
 
 def my_events(actor, owner_id, data):
+    offer_id = data.get("offer_id")
+    if offer_id is not None and (not isinstance(offer_id, str) or not mvp.OFFER_ID.fullmatch(offer_id)):
+        raise db.Problem(400, "Некорректный оффер")
     db.initialize()
     with db.transaction() as conn:
         schema(conn)
         user = db.get_user(conn, actor)
         if not user or user["status"] != "active":
             raise db.Problem(403, "Нет доступа")
-        rows = conn.execute("SELECT * FROM manual_offer_events WHERE telegram_id=? "
-                            "ORDER BY created_at DESC,id DESC LIMIT ?", (actor, MAX_EVENTS_PAGE)).fetchall()
-        return {"events": [_public(row) for row in rows]}
+        condition = "AND e.offer_id=? " if offer_id else ""
+        params = (actor, offer_id, MAX_EVENTS_PAGE) if offer_id else (actor, MAX_EVENTS_PAGE)
+        rows = conn.execute("SELECT e.*,o.name AS offer_name FROM manual_offer_events e "
+                            "JOIN manual_offers o ON o.id=e.offer_id "
+                            "WHERE e.telegram_id=? " + condition +
+                            "ORDER BY e.created_at DESC,e.id DESC LIMIT ?", params).fetchall()
+        return {"events": [{**_public(row), "offer_name": row["offer_name"]} for row in rows]}
 
 
 def admin_queue(actor, owner_id, data):
@@ -304,9 +317,28 @@ def review(actor, owner_id, data):
         if outcome == "approved":
             # A lead's evidence is NOT bank confirmation; never set completed.
             next_stage = "in_progress" if event["kind"] == "mfo_request" else "submitted"
+            if event["kind"] == "stage":
+                category_and_stages = conn.execute(
+                    "SELECT category,lead_stages FROM manual_offers WHERE id=?",
+                    (event["offer_id"],)).fetchone()
+                if category_and_stages and not is_mfo(category_and_stages["category"]):
+                    steps = json.loads(category_and_stages["lead_stages"])
+                    passed = {r["lead_stage"] for r in conn.execute(
+                        "SELECT lead_stage FROM manual_offer_events "
+                        "WHERE telegram_id=? AND offer_id=? AND kind='stage' "
+                        "AND review_status='approved'",
+                        (event["telegram_id"], event["offer_id"])).fetchall()}
+                    next_stage = "submitted" if all(step in passed for step in steps) else "in_progress"
             conn.execute("UPDATE manual_assignments SET stage=?,updated_at=? "
                          "WHERE telegram_id=? AND offer_id=?",
                          (next_stage, now, event["telegram_id"], event["offer_id"]))
+        elif event["kind"] == "stage":
+            category = conn.execute("SELECT category FROM manual_offers WHERE id=?",
+                                    (event["offer_id"],)).fetchone()
+            if category and not is_mfo(category["category"]):
+                conn.execute("UPDATE manual_assignments SET stage='in_progress',updated_at=? "
+                             "WHERE telegram_id=? AND offer_id=?",
+                             (now, event["telegram_id"], event["offer_id"]))
         db.audit(conn, actor, "manual_offer_event_reviewed", event["telegram_id"],
                  "offer=" + event["offer_id"] + ";outcome=" + outcome + ";event=" + event_id)
         db.enqueue(conn, "offer_event_review:" + event_id, event["telegram_id"],
@@ -330,9 +362,31 @@ def evidence(actor, owner_id, data):
         if row is None or row["evidence_data"] is None:
             raise db.Problem(404, "Скриншот отсутствует")
         db.permitted_target(conn, staff, db.get_user(conn, row["telegram_id"]))
-        try:
-            from cryptography.fernet import InvalidToken
-            raw = _cipher().decrypt(bytes(row["evidence_data"]))
-        except InvalidToken:
-            raise db.Problem(503, "Не удалось расшифровать подтверждение") from None
-        return {**_file_info(row["evidence_type"]), "data": base64.b64encode(raw).decode("ascii")}
+        return _evidence_payload(row)
+
+
+def own_evidence(actor, owner_id, data):
+    """Only the submitting active participant can retrieve their own file."""
+    event_id = data.get("event_id")
+    if not isinstance(event_id, str) or not EVENT_ID.fullmatch(event_id):
+        raise db.Problem(400, "Некорректный файл")
+    db.initialize()
+    with db.transaction() as conn:
+        user = db.get_user(conn, actor)
+        if not user or user["status"] != "active" or user["role"] not in ("lead", "referrer"):
+            raise db.Problem(403, "Нет доступа")
+        row = conn.execute(
+            "SELECT evidence_data,evidence_type FROM manual_offer_events "
+            "WHERE id=? AND telegram_id=?", (event_id, actor)).fetchone()
+        if row is None or row["evidence_data"] is None:
+            raise db.Problem(404, "Файл недоступен")
+        return _evidence_payload(row)
+
+
+def _evidence_payload(row):
+    try:
+        from cryptography.fernet import InvalidToken
+        raw = _cipher().decrypt(bytes(row["evidence_data"]))
+    except InvalidToken:
+        raise db.Problem(503, "Не удалось расшифровать подтверждение") from None
+    return {**_file_info(row["evidence_type"]), "data": base64.b64encode(raw).decode("ascii")}

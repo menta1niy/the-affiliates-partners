@@ -234,10 +234,10 @@
           </header>
           <section class="panel participant-statistics-panel" aria-labelledby="statistics-potential-title">
             <div class="section-kicker">ПОТЕНЦИАЛЬНО / НЕ БАЛАНС</div>
-            <h2 id="statistics-potential-title">По назначенным офферам</h2>
-            <p>Суммы рассчитаны по текущим ставкам назначенных офферов. Это ориентир, а не подтверждённый доход или гарантия выплаты.</p>
+            <h2 id="statistics-potential-title">По доступным и назначенным офферам</h2>
+            <p>Учитываются все доступные опубликованные предложения, включая ещё не взятые в работу: например, девять предложений по 1 000 ₽ дают потенциал до 9 000 ₽. Офферы в работе и завершённые учитываются отдельно. Это ориентир, а не подтверждённый доход или гарантия выплаты.</p>
             <div class="participant-statistics-grid">
-              <article><span>ЕЩЁ НЕ В РАБОТЕ</span><strong id="statistics-not-started">—</strong></article>
+              <article><span>ДОСТУПНЫЕ ПРЕДЛОЖЕНИЯ ДО</span><strong id="statistics-not-started">—</strong></article>
               <article><span>В РАБОТЕ / НА ПРОВЕРКЕ</span><strong id="statistics-in-work">—</strong></article>
               <article><span>ЗАВЕРШЕНО / ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ</span><strong id="statistics-hold">—</strong></article>
             </div>
@@ -259,6 +259,11 @@
             <div class="section-kicker">МОЙ ПРОГРЕСС</div>
             <h2 id="statistics-stages-title">Статусы офферов</h2>
             <div class="participant-statistics-counts" id="statistics-counts" aria-live="polite"></div>
+          </section>
+          <section class="panel participant-statistics-panel" aria-labelledby="participant-activity-timeline-title">
+            <div class="section-kicker">АКТИВНОСТЬ</div>
+            <h2 id="participant-activity-timeline-title">История действий</h2>
+            <div id="participant-activity-timeline" aria-live="polite"></div>
           </section>
           <p id="statistics-feedback" role="status" aria-live="polite" class="muted"></p>
         </div>

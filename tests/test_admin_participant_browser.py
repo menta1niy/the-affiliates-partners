@@ -160,6 +160,22 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
                         self.assertIn('Подтверждённые начисления: 600', dialog.inner_text())
                         offer_statuses=dialog.locator('.admin-assignment .status-source[data-source="offer"]')
                         self.assertEqual(offer_statuses.count(),3)
+                        offer_picker=dialog.locator('.admin-participant-offers')
+                        self.assertEqual(offer_picker.locator('.admin-participant-offer-choice').count(),4)
+                        self.assertIn('Офферы участника',offer_picker.inner_text())
+                        choices=offer_picker.locator('.admin-participant-offer-choice')
+                        for index in range(choices.count()):
+                            choices.nth(index).click()
+                            self.assertEqual(choices.nth(index).get_attribute('aria-pressed'),'true')
+                            if 'Решение менеджера' in offer_picker.inner_text():
+                                break
+                        self.assertIn('Оффер назначен',offer_picker.inner_text())
+                        self.assertIn('отправлено на проверку',offer_picker.inner_text())
+                        self.assertIn('Решение менеджера',offer_picker.inner_text())
+                        progress_times=offer_picker.locator('.admin-offer-progress-event time[datetime]').evaluate_all(
+                            'items=>items.map(item=>Date.parse(item.dateTime))')
+                        self.assertEqual(progress_times,sorted(progress_times))
+                        self.assertLessEqual(offer_picker.bounding_box()['x'] + offer_picker.bounding_box()['width'], width+1)
                         self.assertTrue(any('В работе' in text for text in offer_statuses.all_inner_texts()))
                         self.assertTrue(any('Завершено' in text for text in offer_statuses.all_inner_texts()))
                         payout_status=finance.locator('.status-source[data-source="withdrawal"]')

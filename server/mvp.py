@@ -433,7 +433,9 @@ def overview(user_id, owner_id, *, for_admin=None):
     with db.transaction() as conn:
         schema(conn)
         if for_admin is not None:
-            staff = _admin(conn, for_admin, owner_id)
+            # This is a read-only operational snapshot. Scoped managers may
+            # inspect their own leads, but catalogue CRUD still uses _admin.
+            staff = db.require_staff(conn, for_admin, owner_id)
             _participant(conn, staff, user_id)
         else:
             user = db.get_user(conn, user_id)

@@ -181,6 +181,144 @@
   }
   function detailLine(root,label,value){const p=make("p");p.append(make("strong",label+": "),make("span",value===null || value===undefined || value===""?"—":value));root.append(p);}
   function detailRows(root,title,items,fields){root.append(make("h3",title));if(!items?.length){root.append(make("p","Нет данных","muted"));return;}items.forEach(item=>{const card=make("div",undefined,"participant-detail-item");fields.forEach(([label,key])=>detailLine(card,label,item[key]));root.append(card);});}
+  function eventDate(value){
+    const seconds=Number(value);
+    if(!Number.isSafeInteger(seconds)||seconds<=0)return null;
+    const date=new Date(seconds*1000);
+    return Number.isNaN(date.getTime())?null:date;
+  }
+  function datedMilestone(label,value,detail){
+    const entry=make("li",undefined,"admin-offer-progress-event");
+    entry.append(make("strong",label));
+    const date=eventDate(value),stamp=make("time",date?date.toLocaleString("ru-RU",{dateStyle:"medium",timeStyle:"short"}):"Время не указано");
+    if(date)stamp.dateTime=date.toISOString();
+    entry.append(stamp);
+    if(detail)entry.append(make("p",detail));
+    return entry;
+  }
+  async function previewParticipantEvidence(event){
+    const file=await api("/admin/mvp/evidence",{event_id:event.id});
+    if(typeof file.data!=="string")throw new Error("Файл подтверждения недоступен");
+    const bytes=Uint8Array.from(atob(file.data),character=>character.charCodeAt(0));
+    const mime=/^(?:image\/(?:png|jpeg|webp|gif)|application\/pdf)$/.test(file.mime)?file.mime:"application/octet-stream";
+    const url=URL.createObjectURL(new Blob([bytes],{type:mime}));
+    const preview=make("dialog");preview.className="admin-offer-evidence-dialog";
+    const toolbar=make("div",undefined,"admin-dialog-toolbar");
+    const title=make("strong",file.name||"Подтверждение");
+    const close=make("button","Закрыть","btn ghost");close.type="button";
+    close.addEventListener("click",()=>preview.close());
+    toolbar.append(title,close);preview.append(toolbar);
+    if(mime.startsWith("image/")){
+      const img=make("img");img.alt="Файл подтверждения участника";img.src=url;preview.append(img);
+    }else preview.append(make("p","Для PDF и других форматов доступно безопасное скачивание без исполнения содержимого внутри панели.","muted"));
+    const download=make("a","Скачать файл","btn primary");
+    download.href=url;download.download=file.name||"evidence.bin";preview.append(download);
+    document.body.append(preview);
+    preview.addEventListener("close",()=>{URL.revokeObjectURL(url);preview.remove();},{once:true});
+    preview.showModal();
+  }
+  function participantOfferProgress(data,person,refresh){
+    const manual=Array.isArray(data.manual?.offers)?data.manual.offers:[];
+    const crm=Array.isArray(data.offers)?data.offers:[];
+    const events=Array.isArray(data.offer_events)?data.offer_events:[];
+    const reports=Array.isArray(data.reports)?data.reports:[];
+    const offers=new Map();
+    for(const offer of crm){
+      const key=String(offer.id||offer.offer_id||"");
+      if(key)offers.set(key,{...offer,crm:true});
+    }
+    for(const offer of manual){
+      const key=String(offer.id||offer.offer_id||"");
+      if(key)offers.set(key,{...offers.get(key),...offer,manual:true});
+    }
+    for(const event of events){
+      const key=String(event.offer_id||"");
+      if(key&&!offers.has(key))offers.set(key,{id:key,name:"Оффер из истории"});
+    }
+    const section=make("section",undefined,"panel admin-participant-offers");
+    section.append(make("span","ПРОГРЕСС ПО ОФФЕРАМ","section-kicker"),make("h3","Офферы участника"));
+    if(!offers.size){section.append(make("p","Назначенных офферов и событий пока нет.","muted"));return section;}
+    const list=make("div",undefined,"admin-participant-offer-list");
+    const detail=make("div",undefined,"admin-participant-offer-detail");
+    detail.setAttribute("aria-live","polite");
+    const controls=new Map();
+    const render=key=>{
+      const offer=offers.get(key);
+      for(const [id,button] of controls)button.setAttribute("aria-pressed",String(id===key));
+      detail.replaceChildren();
+      detail.append(make("h4",offer.name||"Оффер"));
+      if(offer.target_action)detail.append(make("p","Целевое действие: "+offer.target_action,"muted"));
+      if(offer.stage)detail.append(statusMark("offer",offer.stage,manualStages[offer.stage]||"Неизвестная стадия"));
+      const milestones=[];
+      const add=(at,label,description,renderAction)=>{
+        milestones.push({at:eventDate(at)?.getTime()||0,label,description,renderAction});
+      };
+      if(offer.manual){
+        add(offer.assigned_at||offer.created_at||offer.updated_at,"Оффер назначен","");
+        if(offer.status_updated_at)add(offer.status_updated_at,
+          "Текущая стадия: "+(manualStages[offer.stage]||offer.stage||"—"),offer.note||"");
+      }
+      for(const event of events.filter(row=>String(row.offer_id)===key)){
+        const step=event.kind==="mfo_request"?"Запрос доступа к МФО":
+          (leadStageOptions[event.lead_stage]||event.lead_stage||"Отчёт по этапу");
+        add(event.created_at,step+" · отправлено на проверку",
+          "Решение: "+(reviewLabels[event.review_status]||"Статус не указан"),event);
+        if(event.reviewed_at&&event.review_status!=="pending")
+          add(event.reviewed_at,"Решение менеджера: "+(reviewLabels[event.review_status]||event.review_status),
+            event.review_note||"");
+      }
+      for(const report of reports.filter(row=>String(row.offer_id)===key))
+        add(report.created_at,"Отчёт участника для CRM",report.note||report.action||"");
+      for(const row of data.status?.applications||[])
+        if(String(row.offer_id)===key)add(data.status_updated_at,
+          "Снимок CRM: "+(applicationStageLabels[row.stage]||"Стадия заявки"),"Дата события CRM не предоставлена");
+      milestones.sort((a,b)=>a.at-b.at);
+      const timeline=make("ol",undefined,"admin-offer-progress-list");
+      if(!milestones.length)detail.append(make("p","История этапов пока отсутствует.","muted"));
+      for(const point of milestones){
+        const item=datedMilestone(point.label,point.at?point.at/1000:null,point.description);
+        if(point.renderAction){
+          const event=point.renderAction,actions=make("div",undefined,"admin-offer-event-actions");
+          if(event.proof_url&&/^https?:\/\//i.test(event.proof_url)){
+            const link=make("a","Открыть ссылку подтверждения","btn ghost");
+            link.href=event.proof_url;link.target="_blank";link.rel="noopener noreferrer";link.referrerPolicy="no-referrer";
+            actions.append(link);
+          }
+          if(event.has_screenshot)actions.append(action("Просмотреть файл"+(event.file_name?": "+event.file_name:""),
+            ()=>previewParticipantEvidence(event)));
+          if(event.review_status==="pending"){
+            const note=make("textarea");note.rows=2;note.maxLength=300;
+            note.placeholder="Комментарий к решению (при отклонении обязателен)";
+            note.setAttribute("aria-label","Комментарий для этапа "+point.label);
+            item.append(note);
+            actions.append(action("Подтвердить",async()=>{
+              if(!window.confirm("Подтвердить этап? Это не подтверждение банковского начисления."))return;
+              await api("/admin/mvp/review-event",{event_id:event.id,decision:"approve",note:note.value});
+              notice("Результат подтверждён");await refresh();
+            },"primary"),action("Отклонить",async()=>{
+              if(!note.value.trim())throw new Error("Укажите причину отклонения.");
+              await api("/admin/mvp/review-event",{event_id:event.id,decision:"reject",note:note.value});
+              notice("Результат отклонён");await refresh();
+            }));
+          }
+          if(actions.childElementCount)item.append(actions);
+        }
+        timeline.append(item);
+      }
+      detail.append(timeline);
+    };
+    for(const [key,offer] of offers){
+      const button=make("button",undefined,"admin-participant-offer-choice");
+      button.type="button";button.setAttribute("aria-pressed","false");
+      button.append(make("strong",offer.name||"Оффер"));
+      button.append(make("span",manualStages[offer.stage]||"История оффера"));
+      button.addEventListener("click",()=>render(key));
+      controls.set(key,button);list.append(button);
+    }
+    section.append(list,detail);
+    render(offers.keys().next().value);
+    return section;
+  }
   function participantTimeline(data){
     const section=make("section",undefined,"panel admin-participant-timeline");
     section.append(make("span","ИСТОРИЯ УЧАСТНИКА","section-kicker"),
@@ -320,6 +458,8 @@
       const meta=make("div",undefined,"admin-profile-meta");
       [["Username",telegramName(person.username,person.id)],["Телефон Telegram",person.phone||"Не предоставлен"],["Внутренний номер",person.internal_id],["Роль",roles[person.role]||person.role],["Статус",statuses[person.status]||person.status],["Источник",person.source==="agency"?"Агентство":person.source==="referral"?"Реферал":"Не указан"],["Агентство",telegramName(person.agency_username,person.agency_id)],["Реферер",telegramName(person.referrer_username,person.referrer_id)],["Пригласил",telegramName(person.introduced_by_username,person.introduced_by_id)],["Менеджер",telegramName(person.manager_username,person.manager_id)]].forEach(([key,value])=>detailLine(meta,key,value));
       content.append(meta);
+      if(["lead","referrer"].includes(person.role))
+        content.append(participantOfferProgress(data,person,()=>openParticipant(person)));
       if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
         adminLeadFinance(content,data);
       }

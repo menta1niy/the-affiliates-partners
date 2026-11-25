@@ -72,9 +72,11 @@ class AdminLeadFinanceParity(unittest.TestCase):
             conn.execute("UPDATE users SET role='staff',manager_id=NULL WHERE id=?", (BOB,))
             conn.execute("UPDATE users SET manager_id=? WHERE id=?", (BOB, ALICE))
         status, admin = self.as_user('/api/admin/participant', BOB, user_id=ALICE)
-        # Existing /api/admin/participant also fetches admin-only manual
-        # assignments; staff remains forbidden from the whole endpoint.
-        self.assertEqual(status, 403, admin)
+        # Staff now inspect operational progress for their assigned leads,
+        # while the verified finance ledger is still owner/admin only.
+        self.assertEqual(status, 200, admin)
+        self.assertIn('manual', admin)
+        self.assertIn('offer_events', admin)
         self.assertNotIn('finance', admin)
         self.assertNotIn('statistics', admin)
 

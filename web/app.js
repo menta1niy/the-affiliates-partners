@@ -82,7 +82,7 @@
         value.textContent=Number.isSafeInteger(stages[key])&&stages[key]>=0?String(stages[key]):"—";
         item.append(caption,value);counts.append(item);
       }
-      text("statistics-feedback","Показатели рассчитаны по текущему состоянию назначений и финансов.");
+      text("statistics-feedback","Потенциал рассчитан по активным опубликованным офферам и личным назначениям; фактические выплаты — только по финансовому реестру.");
     }catch(e){
       if(id!==statisticsRequestId)return;
       for(const field of fields)text(field,"—");
@@ -195,7 +195,7 @@
     }
     participantView = view;
     for (const [name,id] of Object.entries(participantViews)) show(id,name===view);
-    if(view==="statistics")loadStatistics();
+    if(view==="statistics"){loadStatistics();loadParticipantEvents();}
     document.querySelectorAll("#participant-nav [data-view]").forEach(link=>{
       if(link.dataset.view===view)link.setAttribute("aria-current","page");
       else link.removeAttribute("aria-current");
@@ -255,7 +255,8 @@
   function updateHomeOverview(offers){
     offers=offers.filter(offer=>offer&&typeof offer==="object");
     const prioritized=["in_progress","assigned","rejected","submitted"];
-    homeSelectedOffer=prioritized.map(stage=>offers.find(offer=>offer.stage===stage)).find(Boolean)||null;
+    const ownOffers=offers.filter(offer=>offer.is_assigned!==false);
+    homeSelectedOffer=prioritized.map(stage=>ownOffers.find(offer=>offer.stage===stage)).find(Boolean)||null;
     const chosen=homeSelectedOffer;
     show("participant-current-offer",Boolean(chosen));
     if(chosen){
@@ -269,12 +270,12 @@
         text("participant-next-action",chosen.stage==="submitted"?"Посмотреть статус →":"Открыть оффер →");
       }
     }
-    const activity=offers.filter(offer=>Number.isSafeInteger(Number(offer.status_updated_at))&&Number(offer.status_updated_at)>0&&Number(offer.status_updated_at)<8640000000000)
+    const activity=ownOffers.filter(offer=>Number.isSafeInteger(Number(offer.status_updated_at))&&Number(offer.status_updated_at)>0&&Number(offer.status_updated_at)<8640000000000)
       .sort((a,b)=>Number(b.status_updated_at)-Number(a.status_updated_at)).slice(0,3);
     const list=$("participant-home-activity-list");list.replaceChildren();
     if(!activity.length){
       const empty=document.createElement("p");empty.className="muted";
-      empty.textContent=offers.length?"История изменений пока недоступна.":"Изменений пока нет — назначения появятся здесь.";
+      empty.textContent="Пока нет изменений по взятым в работу офферам.";
       list.append(empty);
     }
     for(const offer of activity){
@@ -288,6 +289,7 @@
       entry.append(details,date);list.append(entry);
     }
     show("participant-home-activity",true);
+    renderParticipantActivity();
   }
   const actions={opened:"Открыл предложение",started:"Приступил к заданию",submitted:"Отправил заявку"};
   const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Получено",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
@@ -325,20 +327,31 @@
     // Invite codes come from the authorized server endpoint. Never copy
     // arbitrary remote URLs into a participant's referral invitation.
     const code=response?.code || response?.invite_code;
-    if (typeof code === "string" && /^ref_[a-zA-Z0-9_-]{8,48}$/.test(code)) return "https://t.me/affialite_partners_bot?start=" + encodeURIComponent(code);
+    if (typeof code === "string" &&
+        (/^[A-Z0-9]{6}$/.test(code)||/^ref_[a-zA-Z0-9_-]{8,48}$/.test(code)))
+      return "https://t.me/affialite_partners_bot?start=" + encodeURIComponent(code);
     return "";
   }
   async function loadReferral() {
     const request = ++referralRequest;
-    show("referral-panel",false);
+    const eligible=["lead","referrer"].includes(current?.role||current?.user?.role);
+    show("referral-panel",eligible);
+    if(!eligible)return;
+    $("referral-link").value="";
+    $("copy-referral").disabled=true;
+    text("referral-message","Получаем вашу реферальную ссылку…");
     try {
       const result = await api("/invitations/referral");
       if(request !== referralRequest) return;
       const link = referralUrl(result);
-      if (!link || !/^https:\/\//i.test(link)) return;
+      if (!link || !/^https:\/\//i.test(link)) throw new Error("Сервис не вернул ссылку");
       $("referral-link").value = link;
-      show("referral-panel",true);
-    } catch { /* Server decides whether this role can invite. */ }
+      $("copy-referral").disabled=false;
+      text("referral-message","Ссылка готова — её можно скопировать и отправить.");
+    } catch(e){
+      if(request===referralRequest)
+        text("referral-message","Не удалось получить реферальную ссылку: "+e.message);
+    }
   }
   function offerMessage(message, kind = "empty", retry = null) {
     const el = $("offers");
@@ -502,6 +515,10 @@
     application_sent:"Отправил заявку",meeting_scheduled:"Назначена встреча",
     product_received:"Продукт получен",account_opened:"Счёт открыт",loan_issued:"Займ получен"
   };
+  let manualEvents=[];
+  let participantEventsRequest=0;
+  let activeDetailOfferId=null;
+  let participantActivityVersion=0;
   function offerLogoUrl(offer){
     const url=offer?.logo_url;
     return typeof url==="string" && /^\/partners\/api\/offer-logo\/[a-f0-9]{64}$/.test(url)?url:"";
@@ -522,6 +539,107 @@
   }
   const reviewLabels={pending:"Ожидает решения менеджера",approved:"Подтверждено менеджером",
     rejected:"Отклонено менеджером"};
+  function eventTimestamp(value){
+    const date=new Date(Number(value)*1000);
+    return Number.isSafeInteger(Number(value))&&Number(value)>0&&!Number.isNaN(date.getTime())
+      ?date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})
+      :"Время не указано";
+  }
+  function relatedOfferName(event){
+    return manualOffers.find(offer=>offer.id===event.offer_id)?.name||event.offer_name||"Оффер";
+  }
+  function stageEventDescription(event){
+    return event.kind==="mfo_request"?"Запрос согласования МФО":
+      leadStageLabels[event.lead_stage]||"Отчёт по этапу";
+  }
+  function offerEventEntries(events){
+    const entries=[];
+    for(const event of events){
+      entries.push({key:event.id+":send",time:event.created_at,offer_id:event.offer_id,
+        title:stageEventDescription(event)+" — отправлено на проверку",
+        detail:event.file_name?"Файл: "+event.file_name:"Ожидает решения менеджера"});
+      if(event.reviewed_at&&event.review_status!=="pending"){
+        entries.push({key:event.id+":review",time:event.reviewed_at,offer_id:event.offer_id,
+          title:(event.review_status==="approved"?"Подтверждено: ":"Отклонено: ")+stageEventDescription(event),
+          detail:event.review_note||"Решение администратора"});
+      }
+    }
+    return entries;
+  }
+  function participantActivityEntries(){
+    const entries=offerEventEntries(manualEvents);
+    for(const offer of manualOffers){
+      if(!offer.is_assigned||!Number.isSafeInteger(Number(offer.status_updated_at)))continue;
+      entries.push({key:"offer:"+offer.id,time:offer.status_updated_at,offer_id:offer.id,
+        title:(offer.stage==="assigned"?"Назначен оффер":offer.stage==="in_progress"?"Оффер в работе":
+               offer.stage==="submitted"?"Оффер на проверке":offer.stage==="completed"?"Оффер завершён":"Обновлён статус оффера"),
+        detail:offer.name||"Предложение"});
+    }
+    entries.sort((a,b)=>Number(b.time)-Number(a.time)||String(b.key).localeCompare(String(a.key)));
+    return entries;
+  }
+  function makeTimelineEntry(entry,interactive=false){
+    const row=document.createElement("article");row.className="participant-timeline-entry";
+    const title=document.createElement("strong");title.textContent=entry.title;
+    const detail=document.createElement("p");detail.textContent=entry.detail;
+    const date=document.createElement("time");date.textContent=eventTimestamp(entry.time);
+    row.append(title,detail,date);
+    if(interactive){
+      const offer=manualOffers.find(item=>item.id===entry.offer_id);
+      if(offer){
+        const open=document.createElement("button");open.type="button";open.className="btn ghost";
+        open.textContent="Открыть оффер →";
+        open.addEventListener("click",()=>{setParticipantView("offers",true);openOfferDetail(offer);});
+        row.append(open);
+      }
+    }
+    return row;
+  }
+  function renderParticipantActivity(){
+    const root=$("participant-activity-timeline");
+    if(root){
+      root.replaceChildren();
+      const entries=participantActivityEntries().slice(0,35);
+      if(entries.length){
+        const list=document.createElement("div");list.className="participant-activity-feed";
+        entries.forEach(entry=>list.append(makeTimelineEntry(entry,true)));
+        root.append(list);
+      }else{
+        const empty=document.createElement("p");empty.className="muted";
+        empty.textContent="Пока нет изменений по вашим офферам.";
+        root.append(empty);
+      }
+    }
+    const home=$("participant-home-activity-list");
+    if(home&&!home.closest("section")?.hidden){
+      const entries=participantActivityEntries().slice(0,3);
+      if(entries.length){
+        home.replaceChildren();
+        for(const entry of entries){
+          const row=document.createElement("div");row.className="participant-home-activity-item";
+          const body=document.createElement("div");
+          const title=document.createElement("strong");title.textContent=relatedOfferName(entry);
+          const description=document.createElement("span");description.textContent=entry.title;
+          body.append(title,description);
+          const date=document.createElement("time");date.textContent=eventTimestamp(entry.time);
+          row.append(body,date);home.append(row);
+        }
+      }
+    }
+  }
+  async function loadParticipantEvents(){
+    const request=++participantEventsRequest;
+    try{
+      const result=await api("/mvp/my-events");
+      if(request!==participantEventsRequest)return;
+      manualEvents=Array.isArray(result.events)?result.events:[];
+    }catch{
+      if(request!==participantEventsRequest)return;
+      // An unavailable activity service must not prevent access to offers.
+      manualEvents=[];
+    }
+    renderParticipantActivity();
+  }
   const withdrawalLabels={pending:"На рассмотрении",confirmed:"Подтверждена, ожидает платежа",
     rejected:"Отклонена",paid:"Выплачена"};
   function statusMark(source,code,label){
@@ -586,9 +704,90 @@
   }
   const offerDialog=$("participant-offer-dialog");
   const offerDialogContent=$("participant-offer-dialog-content");
-  function closeOfferDialog(){if(offerDialog.open)offerDialog.close();}
+  function closeOfferDialog(){activeDetailOfferId=null;if(offerDialog.open)offerDialog.close();}
   $("participant-offer-close").addEventListener("click",closeOfferDialog);
   offerDialog.addEventListener("click",event=>{if(event.target===offerDialog)closeOfferDialog();});
+  offerDialog.addEventListener("close",()=>{activeDetailOfferId=null;});
+  async function showParticipantEvidence(event){
+    const result=await api("/mvp/evidence",{event_id:event.id});
+    if(typeof result.data!=="string")throw new Error("Файл не получен");
+    const raw=Uint8Array.from(atob(result.data),ch=>ch.charCodeAt(0));
+    const imageMime=/^image\/(?:png|jpeg|webp|gif)$/.test(result.mime)?result.mime:null;
+    const blob=new Blob([raw],{type:imageMime||"application/octet-stream"});
+    const objectUrl=URL.createObjectURL(blob);
+    const dialog=document.createElement("dialog");dialog.className="participant-offer-dialog participant-evidence-dialog";
+    const close=document.createElement("button");close.type="button";close.className="btn ghost";
+    close.textContent="Закрыть";close.addEventListener("click",()=>dialog.close());
+    const name=document.createElement("h3");name.textContent=result.name||"Подтверждение";
+    const download=document.createElement("a");download.className="btn primary";
+    download.href=objectUrl;download.download=result.name||"evidence.bin";
+    download.textContent="Скачать файл";
+    dialog.append(close,name);
+    if(imageMime){
+      const image=document.createElement("img");image.alt="Ваше подтверждение";
+      image.src=objectUrl;image.style.maxWidth="100%";image.style.height="auto";
+      dialog.append(image);
+    }else{
+      const note=document.createElement("p");note.className="muted";
+      note.textContent="Этот формат можно скачать и открыть в подходящем приложении.";
+      dialog.append(note);
+    }
+    dialog.append(download);document.body.append(dialog);
+    dialog.addEventListener("close",()=>{URL.revokeObjectURL(objectUrl);dialog.remove();},{once:true});
+    dialog.showModal();
+  }
+  function renderOfferTimeline(section,events){
+    section.replaceChildren();
+    const title=document.createElement("h3");title.textContent="История оформления";
+    section.append(title);
+    if(!events.length){
+      const empty=document.createElement("p");empty.className="muted";
+      empty.textContent="Этапы ещё не отправлялись. Они появятся здесь по мере оформления.";
+      section.append(empty);return;
+    }
+    const ordered=[...events].sort((a,b)=>Number(a.created_at)-Number(b.created_at)||String(a.id).localeCompare(String(b.id)));
+    for(const event of ordered){
+      const entry=document.createElement("article");entry.className="participant-timeline-entry";
+      const heading=document.createElement("strong");heading.textContent=stageEventDescription(event);
+      const stamp=document.createElement("time");stamp.textContent="Отправлено "+eventTimestamp(event.created_at);
+      entry.append(heading,stamp,statusMark("review",event.review_status,
+        reviewLabels[event.review_status]||"Ожидает проверки"));
+      if(event.has_screenshot){
+        const file=document.createElement("button");file.type="button";file.className="btn ghost";
+        file.textContent="Открыть файл: "+(event.file_name||"подтверждение");
+        const feedback=document.createElement("p");feedback.className="muted";
+        file.addEventListener("click",async()=>{
+          file.disabled=true;feedback.textContent="Загружаем файл…";
+          try{await showParticipantEvidence(event);feedback.textContent="";}
+          catch(e){feedback.textContent="Не удалось открыть файл: "+e.message;}
+          finally{file.disabled=false;}
+        });
+        entry.append(file,feedback);
+      }
+      if(event.reviewed_at){
+        const date=document.createElement("time");date.textContent="Решение "+eventTimestamp(event.reviewed_at);
+        entry.append(date);
+      }
+      if(event.review_note){
+        const note=document.createElement("p");note.textContent="Комментарий: "+event.review_note;
+        entry.append(note);
+      }
+      section.append(entry);
+    }
+  }
+  async function loadOfferTimeline(offerId,section){
+    try{
+      const response=await api("/mvp/my-events",{offer_id:offerId});
+      if(activeDetailOfferId===offerId&&offerDialog.open)
+        renderOfferTimeline(section,Array.isArray(response.events)?response.events:[]);
+    }catch(e){
+      if(activeDetailOfferId===offerId&&offerDialog.open){
+        const fallback=document.createElement("p");fallback.className="muted";
+        fallback.textContent="История временно недоступна. Повторите открытие оффера.";
+        section.replaceChildren(fallback);
+      }
+    }
+  }
   function offerWorkflowGuide(offer){
     const section=document.createElement("section");
     section.className="participant-offer-workflow";
@@ -601,7 +800,7 @@
       requiresApproval
         ?["Запросите доступ","Отправьте запрос на оффер МФО и дождитесь решения менеджера."]
         :["Выполните действие","Перейдите к предложению по ссылке, если доступ разрешён."],
-      ["Отправьте подтверждение","При доступности отчёта выберите этап и приложите ссылку или скриншот."],
+      ["Отправьте подтверждение","Выберите доступный этап и приложите подтверждающий файл размером до 10 МБ."],
       ["Дождитесь решения","Отчёт рассматривает менеджер. Ручной статус не означает банковское начисление."]
     ];
     if(restricted&&!requiresApproval){
@@ -628,6 +827,7 @@
     return section;
   }
   function openOfferDetail(offer){
+    activeDetailOfferId=offer.id;
     offerDialogContent.replaceChildren();
     const title=document.createElement("h2");
     title.id="participant-offer-dialog-title";title.textContent=offer.name||"Предложение";
@@ -668,7 +868,7 @@
       }
       section.append(heading,list);
       const hint=document.createElement("p");hint.className="participant-offer-stage-hint";
-      hint.textContent="Это возможные этапы. Отметки о выполнении будут доступны после подключения подтверждений.";
+      hint.textContent="Отправляйте этапы по порядку. Следующий откроется после проверки предыдущего.";
       section.append(hint);offerDialogContent.append(section);
     }
     offerDialogContent.append(offerWorkflowGuide(offer));
@@ -700,6 +900,15 @@
         reviewLabels[event.review_status]||"Неизвестное решение"));
       if(event.review_note)section.append(document.createTextNode("Комментарий: "+event.review_note));
       offerDialogContent.append(section);
+    }
+    if(offer.is_assigned||offer.latest_event){
+      const timeline=document.createElement("section");
+      timeline.className="participant-offer-activity participant-offer-timeline";
+      const loading=document.createElement("p");loading.className="muted";
+      loading.textContent="Загружаем историю этапов…";
+      timeline.append(loading);offerDialogContent.append(timeline);
+      // Fetch each offer's own complete (bounded) history, not the global latest.
+      queueMicrotask(()=>loadOfferTimeline(offer.id,timeline));
     }
     const eligible=offer.can_apply===true||
       (offer.unavailable_reason==="mfo_request" && offer.requires_request===true);
@@ -879,22 +1088,23 @@
   });
   function updateParticipantKpis(offers,stats){
     const stages={in_progress:0,submitted:0,completed:0};
-    for(const offer of offers){
+    const assignedOffers=offers.filter(offer=>offer?.is_assigned!==false);
+    for(const offer of assignedOffers){
       if(offer && Object.prototype.hasOwnProperty.call(stages,offer.stage))stages[offer.stage]++;
     }
-    // The overview returns all assignments. Derive split counters from this
-    // single authorized payload; backend in_progress includes submitted.
+    // The catalogue also includes unassigned offers; do not count those as
+    // personal assignments or suggest that work has already started.
     const total=Number(stats?.total);
-    const assigned=Number.isSafeInteger(total) && total>=0 && total===offers.length ? total : offers.length;
+    const assigned=assignedOffers.length;
     text("kpi-total",assigned);
     text("kpi-in-progress",stages.in_progress);
     text("kpi-submitted",stages.submitted);
     text("kpi-completed",stages.completed);
-    if(!offers.length)nextStep("Пока нет офферов","Новые назначения появятся здесь автоматически.","К офферам →");
+    if(!offers.length)nextStep("Пока нет офферов","Новые предложения появятся здесь после публикации.","К офферам →");
     else if(stages.in_progress>0)nextStep("Продолжить работу",stages.in_progress+" в работе","Открыть →");
-    else if(offers.some(offer=>offer?.stage==="assigned"))nextStep("Новые задания","Посмотрите условия перед началом.","Открыть →");
+    else if(assignedOffers.some(offer=>offer?.stage==="assigned"))nextStep("Новые задания","Посмотрите условия перед началом.","Открыть →");
     else if(stages.submitted>0)nextStep("На проверке",stages.submitted+" ожидают решения администратора.","Посмотреть →");
-    else nextStep("Всё обработано","Новые офферы появятся после назначения.","К офферам →");
+    else nextStep("Выберите оффер","Все опубликованные предложения доступны в каталоге.","К офферам →");
     updateHomeOverview(offers);
   }
   function resetParticipantKpis(){
@@ -920,11 +1130,12 @@
       const root=$("offers");root.replaceChildren();
       const stats=result.statistics||{};
       const offers=Array.isArray(result.offers)?result.offers:[];
-      updateParticipantKpis(offers,stats);
       manualOffers=offers.filter(offer=>offer&&typeof offer==="object");
+      updateParticipantKpis(manualOffers,stats);
       show("offer-controls",manualOffers.length>0);
       closeOfferDialog();
       renderManualOffers();
+      loadParticipantEvents();
     }catch(e){if(request===offersRequest){
       manualOffers=[];resetParticipantKpis();show("offer-controls",false);show("offer-filter-count",false);
       nextStep("Ошибка загрузки","Повторите попытку в разделе офферов.","К офферам →");
@@ -1153,6 +1364,16 @@
   $("refresh").addEventListener("click",refresh);
   $("pending-refresh").addEventListener("click",refresh);
   $("rejected-refresh").addEventListener("click",refresh);
+  function refreshVisibleData(){
+    if(document.hidden||!participantTabsEnabled||offerDialog.open||!current)return;
+    if(participantView==="statistics")loadStatistics();
+    loadManualOverview();
+  }
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden)refreshVisibleData();
+  });
+  window.addEventListener("focus",refreshVisibleData);
+  window.setInterval(refreshVisibleData,60_000);
   // Telegram viewport/fullscreen initialization is shared by telegram-layout.js.
   refresh();
 })();

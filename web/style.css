@@ -4033,9 +4033,74 @@ dialog select,dialog input { max-width:100%; }
 .admin-control .admin-participant-timeline-item p {
   flex-basis:100%;margin:0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;
 }
+.admin-control .admin-participant-offers {min-width:0;margin:18px 0;padding:20px;}
+.admin-control .admin-participant-offers h3 {margin:9px 0 16px;font-size:clamp(18px,2.5vw,23px);}
+.admin-control .admin-participant-offer-list {
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));
+  gap:10px;margin-bottom:16px;
+}
+.admin-control .admin-participant-offer-choice {
+  display:flex;flex-direction:column;align-items:flex-start;gap:7px;
+  min-width:0;min-height:68px;padding:13px 15px;text-align:left;
+  border:1px solid var(--divider);border-radius:16px;background:rgba(255,255,255,.035);
+  color:inherit;cursor:pointer;overflow-wrap:anywhere;
+}
+.admin-control .admin-participant-offer-choice[aria-pressed="true"] {
+  border-color:var(--accent,#e4a34a);
+  background:rgba(228,163,74,.11);
+  box-shadow:inset 0 0 0 1px rgba(228,163,74,.2);
+}
+.admin-control .admin-participant-offer-choice span {color:var(--color-secondary);font-size:12px;}
+.admin-control .admin-participant-offer-choice:focus-visible {outline:2px solid var(--accent,#e4a34a);outline-offset:2px;}
+.admin-control .admin-participant-offer-detail {
+  min-width:0;padding:16px;border:1px solid var(--divider);border-radius:18px;
+  background:rgba(255,255,255,.025);
+}
+.admin-control .admin-participant-offer-detail h4 {margin:0 0 10px;overflow-wrap:anywhere;}
+.admin-control .admin-offer-progress-list {margin:16px 0 0;padding:0 0 0 19px;list-style:none;border-left:1px solid var(--divider);}
+.admin-control .admin-offer-progress-event {
+  position:relative;min-width:0;padding:0 0 20px 17px;display:grid;gap:7px;
+}
+.admin-control .admin-offer-progress-event:last-child {padding-bottom:0;}
+.admin-control .admin-offer-progress-event::before {
+  content:"";position:absolute;left:-25px;top:4px;width:10px;height:10px;
+  border-radius:50%;background:var(--accent,#e4a34a);box-shadow:0 0 0 4px rgba(228,163,74,.11);
+}
+.admin-control .admin-offer-progress-event strong {overflow-wrap:anywhere;}
+.admin-control .admin-offer-progress-event time {color:var(--color-secondary);font-size:12px;}
+.admin-control .admin-offer-progress-event p {margin:0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;}
+.admin-control .admin-offer-progress-event textarea {width:100%;min-width:0;}
+.admin-control .admin-offer-progress-event .admin-offer-event-actions {display:flex;flex-wrap:wrap;gap:8px;}
+.admin-control .admin-offer-progress-event .btn {min-height:40px;white-space:normal;overflow-wrap:anywhere;}
+.participant-app .participant-offer-timeline,
+.participant-app .participant-activity-feed {
+  display:grid;gap:11px;min-width:0;margin:14px 0;
+}
+.participant-app .participant-offer-timeline {
+  border:1px solid rgba(228,163,74,.24);border-radius:18px;
+  padding:15px;background:rgba(20,21,24,.56);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
+.participant-app .participant-timeline-entry {
+  position:relative;min-width:0;padding:12px 14px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.035);overflow-wrap:anywhere;
+}
+.participant-app .participant-timeline-entry strong {color:var(--accent-amber,#e4a34a);}
+.participant-app .participant-timeline-entry time,
+.participant-app .participant-timeline-entry small {font-size:11px;color:var(--color-secondary);}
+.participant-app .participant-timeline-entry p {font-size:12px;line-height:1.55;margin:7px 0 0;}
+.participant-app .participant-activity-feed:empty {display:none;}
 @media(max-width:540px) {
   .admin-control .admin-participant-timeline {padding:15px;}
   .admin-control .admin-participant-timeline-item time {margin-left:0;}
+  .admin-control .admin-participant-offers {padding:13px;}
+  .admin-control .admin-participant-offer-detail {padding:12px;}
+  .admin-control .admin-participant-offer-list {grid-template-columns:minmax(0,1fr);}
+  .admin-control .admin-offer-progress-event .btn {flex:1 1 100%;}
+  .participant-app .participant-offer-timeline {padding:11px;gap:9px;}
+  .participant-app .participant-timeline-entry {padding:11px 12px;}
 }
 .admin-control .admin-assignment-filter-actions {
   display:flex;align-items:center;justify-content:space-between;

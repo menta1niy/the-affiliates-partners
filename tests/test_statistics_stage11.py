@@ -3,6 +3,7 @@ import unittest
 
 from tests.test_finance_stage8 import Stage8FinanceTests
 from tests.test_registration import HttpHarness, OWNER, ALICE, BOB
+from server import db
 
 
 class Stage11StatisticsTests(unittest.TestCase):
@@ -13,6 +14,47 @@ class Stage11StatisticsTests(unittest.TestCase):
     ready = Stage8FinanceTests.ready
     offer = Stage8FinanceTests.offer
     credit = Stage8FinanceTests.credit
+
+    def test_nine_published_offers_are_counted_once_across_buckets(self):
+        self.ready(ALICE)
+        offers = []
+        for number in range(9):
+            status, created = self.as_user(
+                "/api/admin/mvp/offer", OWNER, name=f"Предложение {number}",
+                category="Дебетовые карты", target_action="Оформить",
+                payout_rub=1000, hold_days=7)
+            self.assertEqual(status, 200, created)
+            offers.append(created["offer_id"])
+
+        def snapshot():
+            status, result = self.as_user("/api/statistics/overview", ALICE)
+            self.assertEqual(status, 200, result)
+            return result
+
+        self.assertEqual(snapshot()["potential"], {
+            "not_started_rub": 9000, "in_work_rub": 0, "hold_rub": 0})
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment", OWNER,
+                                     user_id=ALICE, offer_id=offers[0])[0], 200)
+        self.assertEqual(snapshot()["potential"]["not_started_rub"], 9000)
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment", OWNER,
+                                     user_id=ALICE, offer_id=offers[0],
+                                     stage="in_progress")[0], 200)
+        self.assertEqual(snapshot()["potential"], {
+            "not_started_rub": 8000, "in_work_rub": 1000, "hold_rub": 0})
+        self.assertEqual(self.as_user("/api/admin/mvp/assignment", OWNER,
+                                     user_id=ALICE, offer_id=offers[0],
+                                     stage="completed")[0], 200)
+        self.assertEqual(snapshot()["potential"], {
+            "not_started_rub": 8000, "in_work_rub": 0, "hold_rub": 1000})
+        self.assertEqual(self.credit(ALICE, offers[0], 700, "nine.offers.verified")[0], 200)
+        self.assertEqual(snapshot()["potential"], {
+            "not_started_rub": 8000, "in_work_rub": 0, "hold_rub": 0})
+        self.assertEqual(snapshot()["verified"]["available_rub"], 700)
+        with db.transaction() as conn:
+            conn.execute("UPDATE manual_offers SET active=0 WHERE id=?", (offers[1],))
+            conn.execute("UPDATE manual_offers SET deleted_at=1 WHERE id=?", (offers[2],))
+        self.assertEqual(snapshot()["potential"]["not_started_rub"], 6000)
+
     def test_statistics_distinguish_stages_and_verified_money(self):
         self.ready(ALICE)
         offer1 = self.offer(ALICE)
@@ -54,7 +96,9 @@ class Stage11StatisticsTests(unittest.TestCase):
         self.ready(BOB)
         self.offer(ALICE)
         self.assertEqual(self.as_user("/api/statistics/overview", OWNER)[0], 403)
-        self.assertEqual(self.as_user("/api/statistics/overview", BOB)[1]["assigned_count"], 0)
+        other = self.as_user("/api/statistics/overview", BOB)[1]
+        self.assertEqual(other["assigned_count"], 0)
+        self.assertEqual(other["potential"]["not_started_rub"], 1000)
         self.assertEqual(self.as_user("/api/statistics/overview", ALICE,
                                       user_id=BOB)[1]["assigned_count"], 1)
         self.assertEqual(self.post("/api/statistics/overview", {"initData":"bad"})[0], 401)

@@ -75,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/telegram/webhook", "/api/offers", "/api/tasks", "/api/tasks/report", "/api/status", "/api/lead-view",
                   "/api/mvp/overview", "/api/admin/mvp/catalog", "/api/admin/mvp/offer", "/api/admin/mvp/offer/delete", "/api/admin/mvp/assignment",
                   "/api/admin/mvp/assignment-candidates", "/api/admin/mvp/bulk-assignment",
-                  "/api/mvp/start", "/api/mvp/submit", "/api/mvp/my-events", "/api/admin/mvp/events",
+                  "/api/mvp/start", "/api/mvp/submit", "/api/mvp/my-events", "/api/mvp/evidence", "/api/admin/mvp/events",
                   "/api/admin/mvp/review-event", "/api/admin/mvp/evidence"}
         routes.update({"/api/finance/overview","/api/finance/withdraw",
                        "/api/admin/finance/accrue","/api/admin/finance/withdrawals",
@@ -243,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = offer_workflow.send(user["id"], owner, body)
             elif route == "/api/mvp/my-events":
                 result = offer_workflow.my_events(user["id"], owner, body)
+            elif route == "/api/mvp/evidence":
+                result = offer_workflow.own_evidence(user["id"], owner, body)
             elif route == "/api/admin/mvp/events":
                 result = offer_workflow.admin_queue(user["id"], owner, body)
             elif route == "/api/admin/mvp/review-event":

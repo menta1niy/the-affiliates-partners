@@ -540,6 +540,11 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
         else:
             if user["role"] not in ("owner", "admin", "staff", "referrer", "lead"):
                 raise Problem(403, "Недостаточно прав")
+            # Open registration has no acquisition source or introducer. Its
+            # active, consenting leads may still invite others using their
+            # verified Telegram identity as the issuer.
+            if user["role"] in ("referrer", "lead") and user["consent_at"] is None:
+                raise Problem(403, "Необходимо согласие участника")
             if assignee is not None:
                 raise Problem(400, "Недопустимый ответственный")
             existing = conn.execute(
@@ -635,7 +640,7 @@ def valid_invitation_source(conn, sender_id, code):
     if not isinstance(code, str) or not CODE_PATTERN.fullmatch(code):
         return False
     row = conn.execute(
-        "SELECT i.kind,i.issuer_id,i.assignee_id,u.role AS issuer_role,u.status AS issuer_status,"
+        "SELECT i.kind,i.issuer_id,i.assignee_id,u.role AS issuer_role,u.status AS issuer_status,u.consent_at AS issuer_consent,"
         "b.active AS blogger_active,b.issuer_id AS blogger_issuer,"
         "a.role AS assignee_role,a.status AS assignee_status "
         "FROM invitations i JOIN users u ON u.id=i.issuer_id "
@@ -653,7 +658,8 @@ def valid_invitation_source(conn, sender_id, code):
         return (row["blogger_active"] == 1 and row["blogger_issuer"] == row["issuer_id"]
                 and row["issuer_role"] in ("owner", "admin", "staff") )
     return (row["kind"] == "referral" and row["issuer_id"] != sender_id
-            and row["issuer_role"] in ("owner", "admin", "staff", "referrer", "lead"))
+            and row["issuer_role"] in ("owner", "admin", "staff", "referrer", "lead")
+            and (row["issuer_role"] in ("owner", "admin", "staff") or row["issuer_consent"] is not None))
 
 
 def record_start(update_id, sender_id, code):
@@ -838,15 +844,18 @@ def admin_participant_detail(actor, owner_id, target_id):
                 "reports": [dict(row) for row in reports],
                 "status": snapshot, "status_updated_at": state["updated_at"] if state else None,
                 "audit": audit_rows[:100]}
+        # Operational offer progress is visible to all authorized managers,
+        # including staff within their existing permitted_target scope.
+        if target["role"] in ("lead", "referrer"):
+            from server import offer_workflow
+            offer_workflow.schema(conn)
+            result["offer_events"] = [offer_workflow._public(row) for row in conn.execute(
+                "SELECT * FROM manual_offer_events WHERE telegram_id=? "
+                "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()]
         # Financial details are restricted to the owner and tenant-authorized
         # admins. Staff can still view their existing operational snapshot.
         if staff["role"] in ("owner", "admin") and target["role"] in ("lead", "referrer"):
-            from server import finance, statistics, offer_workflow
-            offer_workflow.schema(conn)
-            result["offer_events"] = [dict(row) for row in conn.execute(
-                "SELECT id,offer_id,kind,lead_stage,review_status,review_note,"
-                "created_at,reviewed_at FROM manual_offer_events WHERE telegram_id=? "
-                "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()]
+            from server import finance, statistics
             result["statistics"] = statistics.participant_snapshot(conn, target_id)
             result["finance"] = {
                 "balances": result["statistics"]["verified"],
