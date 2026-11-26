@@ -1,4 +1,4 @@
-"""Agency admins must not see or mutate records from another agency."""
+"""Global operational admin/staff permissions, with explicit owner safeguards."""
 import json
 import time
 import unittest
@@ -35,16 +35,18 @@ class AdminAgencyScopeTests(unittest.TestCase):
             db.audit(conn, self.staff_a, 'local', self.lead_a, 'local-only')
             db.audit(conn, self.staff_b, 'foreign', self.lead_b, 'foreign-secret')
 
-    def test_admin_dashboard_and_audit_scoped_but_owner_global(self):
+    def test_admin_dashboard_and_audit_are_global_like_owner(self):
         status, dashboard = self.as_user('/api/admin/dashboard', self.admin)
         self.assertEqual(status, 200)
-        self.assertEqual({x['id'] for x in dashboard['users']}, {self.a, self.admin, self.staff_a, self.lead_a})
-        self.assertEqual({x['code'] for x in dashboard['invites']}, {'ref_AAAAAAAA'})
-        self.assertNotIn('foreign-secret', json.dumps(dashboard))
-        self.assertNotIn('ref_BBBBBBBB', json.dumps(dashboard))
+        self.assertTrue({self.a,self.b,self.admin,self.other_admin,self.staff_a,self.staff_b,
+                         self.lead_a,self.lead_b,OWNER}.issubset({x['id'] for x in dashboard['users']}))
+        self.assertEqual({x['code'] for x in dashboard['invites']},
+                         {'ref_AAAAAAAA','ref_BBBBBBBB'})
+        self.assertIn('foreign-secret', json.dumps(dashboard))
+        self.assertIn('ref_BBBBBBBB', json.dumps(dashboard))
         status, events = self.as_user('/api/admin/audit', self.admin)
         self.assertEqual(status, 200)
-        self.assertNotIn('foreign-secret', json.dumps(events))
+        self.assertIn('foreign-secret', json.dumps(events))
         self.assertTrue(all('actor_name' in event and 'target_name' in event for event in events['events']))
         self.assertIn('Test', {event['actor_name'] for event in events['events']})
         self.assertEqual(self.as_user('/api/admin/dashboard', OWNER)[0], 200)
@@ -64,7 +66,7 @@ class AdminAgencyScopeTests(unittest.TestCase):
         self.assertTrue(dashboard['users_truncated'])
         self.assertGreater(dashboard['counts']['pending'], len(dashboard['pending']))
 
-    def test_paginated_search_covers_older_rows_without_crossing_agencies(self):
+    def test_paginated_search_covers_older_rows_across_agencies(self):
         now = int(time.time())
         with db.transaction() as conn:
             conn.executemany(
@@ -73,7 +75,7 @@ class AdminAgencyScopeTests(unittest.TestCase):
                 [(920000 + i, 'Paged Agent', self.a, now + i, now + i) for i in range(207)],
             )
             conn.execute("UPDATE users SET first_name='Hidden Needle' WHERE id=?", (self.lead_b,))
-        expected = 207 + 4
+        expected = 207 + 9
         pages = []
         for page in range(1, 6):
             status, result = self.as_user('/api/admin/users', self.admin, page=page)
@@ -83,19 +85,20 @@ class AdminAgencyScopeTests(unittest.TestCase):
             pages.extend(user['id'] for user in result['users'])
         self.assertEqual(len(pages), expected)
         self.assertEqual(len(set(pages)), expected)
-        self.assertNotIn(self.lead_b, pages)
+        self.assertIn(self.lead_b, pages)
         status, found = self.as_user('/api/admin/users', self.admin, query=str(920000), status='pending')
         self.assertEqual(status, 200)
         self.assertEqual([user['id'] for user in found['users']], [920000])
-        self.assertEqual(self.as_user('/api/admin/users', self.admin, query='Hidden Needle')[1]['total'], 0)
+        self.assertEqual(self.as_user('/api/admin/users', self.admin, query='Hidden Needle')[1]['total'], 1)
         self.assertEqual(self.as_user('/api/admin/users', OWNER, query='Hidden Needle')[1]['total'], 1)
 
-    def test_paginated_users_validate_inputs_and_staff_manager_scope(self):
+    def test_paginated_users_validate_inputs_and_staff_global_access(self):
         with db.transaction() as conn:
             conn.execute('UPDATE users SET manager_id=? WHERE id=?', (self.staff_a, self.lead_a))
         status, result = self.as_user('/api/admin/users', self.staff_a)
         self.assertEqual(status, 200)
-        self.assertEqual([user['id'] for user in result['users']], [self.lead_a])
+        self.assertIn(self.lead_a, [user['id'] for user in result['users']])
+        self.assertIn(self.lead_b, [user['id'] for user in result['users']])
         for bad in [{'page':0}, {'page':True}, {'page':1.5}, {'status':['pending']},
                     {'role':{'x':1}}, {'query':'x'*121}]:
             with self.subTest(bad=bad):
@@ -133,44 +136,49 @@ class AdminAgencyScopeTests(unittest.TestCase):
                     self.assertEqual([row['id'] for row in candidates['users']], [candidate])
                     self.assertEqual(self.as_user('/api/admin/participant', actor, user_id=candidate)[0], 200)
             for actor in (self.staff_a, self.staff_b):
-                self.assertEqual(self.as_user('/api/admin/users', actor, query=str(candidate))[1]['total'], 0)
-                self.assertEqual(self.as_user('/api/admin/participant', actor, user_id=candidate)[0], 403)
-        for actor in (self.admin, self.other_admin):
+                self.assertEqual(self.as_user('/api/admin/users', actor, query=str(candidate))[1]['total'], 1)
+                self.assertEqual(self.as_user('/api/admin/participant', actor, user_id=candidate)[0], 200)
+        for actor in (self.admin, self.other_admin, self.staff_a, self.staff_b):
             dashboard = self.as_user('/api/admin/dashboard', actor)[1]
             self.assertTrue({open_id, referred_id}.issubset({u['id'] for u in dashboard['users']}))
 
-    def test_manual_mvp_offer_assignment_is_agency_scoped(self):
+    def test_manual_mvp_offer_assignment_is_global_for_managers(self):
         payload={"name":"Банковская карта", "category":"Карты", "target_action":"Активация",
                  "payout_rub":800, "hold_days":14, "instructions":"Инструкция", "referral_url":""}
-        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **payload)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **payload)[0],200)
         status, created=self.as_user('/api/admin/mvp/offer', OWNER, **payload)
         self.assertEqual(status,200,created)
         offer=created['offer_id']
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', self.admin,
-                                     user_id=self.lead_b, offer_id=offer, note='')[0],403)
+                                     user_id=self.lead_b, offer_id=offer, note='')[0],200)
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', self.admin,
                                      user_id=self.lead_a, offer_id=offer, note='')[0],200)
         self.assertEqual(self.as_user('/api/admin/participant',self.admin,user_id=self.lead_a)[1]['manual']['statistics']['total'],1)
-        self.assertEqual(self.as_user('/api/admin/participant',self.other_admin,user_id=self.lead_a)[0],403)
+        self.assertEqual(self.as_user('/api/admin/participant',self.other_admin,user_id=self.lead_a)[0],200)
 
-    def test_admin_catalog_crud_and_staff_denied(self):
+    def test_admin_and_staff_catalog_crud(self):
         payload={"name":"Offer", "category":"Card", "target_action":"Apply", "payout_rub":800, "hold_days":14}
         status, result = self.as_user('/api/admin/mvp/offer', self.admin, **payload)
         self.assertEqual(status, 200, result)
         offer = result['offer_id']
         edited = dict(payload, offer_id=offer, name='Updated offer')
-        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **edited)[0],403)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer', self.staff_a, **edited)[0],200)
         self.assertEqual(self.as_user('/api/admin/mvp/offer', self.admin, **edited)[0],200)
         offers = self.as_user('/api/admin/mvp/catalog', OWNER)[1]['offers']
         self.assertEqual(next(x for x in offers if x['id']==offer)['name'], 'Updated offer')
         self.assertEqual(self.as_user('/api/admin/mvp/assignment',self.admin,user_id=self.lead_a,offer_id=offer)[0],200)
-        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.staff_a,offer_id=offer)[0],403)
-        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.admin,offer_id=offer)[0],200)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.staff_a,offer_id=offer)[0],200)
+        # A deleted offer remains deleted; exercise the administrator's
+        # independent delete privilege on a fresh catalogue entry instead.
+        status, fresh = self.as_user('/api/admin/mvp/offer', self.admin, **payload)
+        self.assertEqual(status,200,fresh)
+        self.assertEqual(self.as_user('/api/admin/mvp/offer/delete',self.admin,
+                                      offer_id=fresh['offer_id'])[0],200)
         self.assertNotIn(offer,[x['id'] for x in self.as_user('/api/admin/mvp/catalog',OWNER)[1]['offers']])
         with db.transaction() as conn:
             self.assertEqual(conn.execute('SELECT count(*) FROM manual_assignments WHERE offer_id=?',(offer,)).fetchone()[0],1)
 
-    def test_bulk_assignment_filters_tenants_and_rejects_cross_agency_atomically(self):
+    def test_bulk_assignment_allows_managers_cross_agency_atomically(self):
         payload={"name":"Тестовый оффер","category":"Дебетовые карты","target_action":"Оформить",
                  "payout_rub":900,"hold_days":7}
         status,created=self.as_user("/api/admin/mvp/offer",OWNER,**payload)
@@ -178,43 +186,43 @@ class AdminAgencyScopeTests(unittest.TestCase):
         offer=created["offer_id"]
         status,candidates=self.as_user("/api/admin/mvp/assignment-candidates",self.admin)
         self.assertEqual(status,200,candidates)
-        self.assertEqual([user["id"] for user in candidates["users"]],[self.lead_a])
+        self.assertEqual({user["id"] for user in candidates["users"]},{self.lead_a,self.lead_b})
         self.assertEqual(self.as_user("/api/admin/mvp/assignment-candidates",self.other_admin,
-            query=str(self.lead_a))[1]["total"],0)
+            query=str(self.lead_a))[1]["total"],1)
         request={"mode":"offer_to_leads","offer_id":offer,"user_ids":[self.lead_a,self.lead_b]}
-        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[0],403)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[1]["created"],2)
         with db.transaction() as conn:
-            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],0)
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],2)
         request["user_ids"]=[self.lead_a]
-        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[1]["created"],1)
-        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.staff_a,**request)[0],403)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.admin,**request)[1]["created"],0)
+        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",self.staff_a,**request)[0],200)
 
-    def test_cross_agency_access_denied_and_local_assignment_allowed(self):
+    def test_cross_agency_access_allowed_for_admin(self):
         for path, payload in [
             ('/api/admin/decision', {'user_id': self.lead_b, 'decision': 'block', 'reason': 'test'}),
             ('/api/admin/assign', {'user_id': self.lead_b, 'manager_id': self.staff_a}),
             ('/api/admin/assign', {'user_id': self.lead_a, 'manager_id': self.staff_b}),
         ]:
             with self.subTest(path=path, payload=payload):
-                self.assertEqual(self.as_user(path, self.admin, **payload)[0], 403)
+                self.assertEqual(self.as_user(path, self.admin, **payload)[0], 200)
         self.assertEqual(self.as_user('/api/admin/assign', self.admin, user_id=self.lead_a, manager_id=self.staff_a)[0], 200)
 
-    def test_unscoped_admin_fails_closed(self):
+    def test_unscoped_active_admin_still_has_global_operational_access(self):
         with db.transaction() as conn:
             conn.execute('UPDATE users SET agency_id=NULL WHERE id=?', (self.admin,))
         for path, payload in [('/api/admin/dashboard', {}), ('/api/admin/audit', {}),
                               ('/api/admin/assign', {'user_id': self.lead_a, 'manager_id': self.staff_a})]:
-            self.assertEqual(self.as_user(path, self.admin, **payload)[0], 403)
+            self.assertEqual(self.as_user(path, self.admin, **payload)[0], 200)
 
-    def test_agency_invitation_cannot_cross_assignee_tenant(self):
+    def test_agency_invitation_can_cross_assignee_tenant(self):
         with db.transaction() as conn:
             before = conn.execute("SELECT count(*) FROM invitations").fetchone()[0]
             audits = conn.execute("SELECT count(*) FROM audit").fetchone()[0]
         status, _ = self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_b)
-        self.assertEqual(status, 403)
+        self.assertEqual(status, 200)
         with db.transaction() as conn:
-            self.assertEqual(conn.execute("SELECT count(*) FROM invitations").fetchone()[0], before)
-            self.assertEqual(conn.execute("SELECT count(*) FROM audit").fetchone()[0], audits)
+            self.assertEqual(conn.execute("SELECT count(*) FROM invitations").fetchone()[0], before + 1)
+            self.assertGreater(conn.execute("SELECT count(*) FROM audit").fetchone()[0], audits)
         status, own = self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_a)
         self.assertEqual(status, 200)
         self.assertEqual(own['assignee_id'], self.staff_a)
@@ -223,5 +231,5 @@ class AdminAgencyScopeTests(unittest.TestCase):
         self.assertEqual(global_invite['assignee_id'], self.staff_b)
         with db.transaction() as conn:
             conn.execute('UPDATE users SET agency_id=NULL WHERE id=?', (self.admin,))
-        self.assertEqual(self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_a)[0], 403)
-        self.assertEqual(self.as_user('/api/invitations/referral', self.admin)[0], 403)
+        self.assertEqual(self.as_user('/api/admin/invitations', self.admin, assignee_id=self.staff_a)[0], 200)
+        self.assertEqual(self.as_user('/api/invitations/referral', self.admin)[0], 200)

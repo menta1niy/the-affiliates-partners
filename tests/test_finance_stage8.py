@@ -172,13 +172,15 @@ class Stage8FinanceTests(unittest.TestCase):
         withdraw_id=data["withdrawal"]["id"]
         own=self.as_user("/api/admin/finance/withdrawals",manager)[1]["withdrawals"]
         self.assertEqual([item["id"] for item in own],[withdraw_id])
-        self.assertEqual(self.as_user("/api/admin/finance/withdrawals",other_manager)[1]["withdrawals"],[])
+        self.assertEqual([item["id"] for item in
+                          self.as_user("/api/admin/finance/withdrawals",other_manager)[1]["withdrawals"]],
+                         [withdraw_id])
         self.assertEqual(self.as_user("/api/admin/finance/accrue",manager,
-            user_id=ALICE,offer_id=offer,amount_rub=50,source_reference="manager.scope.2")[0],403)
+            user_id=ALICE,offer_id=offer,amount_rub=50,source_reference="manager.scope.2")[0],200)
         self.assertEqual(self.as_user("/api/admin/finance/decision",manager,
-            withdrawal_id=withdraw_id,decision="confirm")[0],403)
+            withdrawal_id=withdraw_id,decision="confirm")[0],200)
         self.assertEqual(self.as_user("/api/admin/finance/decision",other_manager,
-            withdrawal_id=withdraw_id,decision="reject",note="Нет оснований")[0],403)
+            withdrawal_id=withdraw_id,decision="reject",note="Нет оснований")[0],200)
 
     def test_payment_reference_must_be_unique_across_withdrawals(self):
         self.ready(ALICE)

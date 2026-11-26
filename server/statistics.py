@@ -64,6 +64,15 @@ def overview(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         user = db.get_user(conn, actor)
-        if not user or user["status"] != "active" or user["role"] not in ("lead", "referrer"):
-            raise db.Problem(403, "Статистика доступна подтверждённому участнику")
-        return participant_snapshot(conn, actor)
+        if not user or user["status"] != "active":
+            raise db.Problem(403, "Нет доступа к статистике")
+        target_id = data.get("user_id", actor)
+        if user["role"] in ("owner", "admin", "staff"):
+            if type(target_id) is not int or target_id <= 0:
+                raise db.Problem(400, "Некорректный участник")
+            target = db.get_user(conn, target_id)
+            if not target or target["role"] not in ("lead", "referrer"):
+                raise db.Problem(404, "Участник не найден")
+        elif user["role"] not in ("lead", "referrer") or target_id != actor:
+            raise db.Problem(403, "Нет доступа к статистике")
+        return participant_snapshot(conn, target_id)

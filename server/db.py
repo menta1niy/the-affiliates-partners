@@ -538,8 +538,6 @@ def invite(actor, owner_id, kind, assignee=None, candidate_label=""):
                 target = get_user(conn, assignee)
                 if not target or target["status"] != "active" or target["role"] not in ("owner", "admin", "staff"):
                     raise Problem(400, "Ответственный не найден")
-                if user["role"] == "staff" and assignee != actor:
-                    raise Problem(403, "Недостаточно прав")
                 if agency is not None and target["agency_id"] != agency:
                     raise Problem(403, "Ответственный другого агентства")
             else:
@@ -573,7 +571,7 @@ def invite_blogger(actor, owner_id, blogger_uuid):
     initialize()
     with transaction() as conn:
         owner = require_staff(conn, actor, owner_id)
-        if owner["role"] != "owner":
+        if owner["role"] not in ("owner", "admin", "staff"):
             raise Problem(403, "Ссылки блогеров выдаёт владелец")
         binding = conn.execute("SELECT * FROM crm_bloggers WHERE blogger_uuid=? AND active=1", (blogger_uuid.lower(),)).fetchone()
         if not binding:
@@ -600,9 +598,9 @@ def revoke_invitation(actor, owner_id, code):
         invitation = conn.execute("SELECT kind,issuer_id,active FROM invitations WHERE code=?", (code,)).fetchone()
         if invitation is None:
             raise Problem(404, "Приглашение не найдено")
-        if actor != owner_id and invitation["issuer_id"] != actor:
+        if user["role"] not in ("owner", "admin", "staff") and invitation["issuer_id"] != actor:
             raise Problem(403, "Можно отозвать только своё приглашение")
-        if invitation["kind"] == "blogger" and actor != owner_id:
+        if invitation["kind"] == "blogger" and user["role"] not in ("owner", "admin", "staff"):
             raise Problem(403, "Ссылки блогеров отзывает владелец")
         if not invitation["active"]:
             return {"changed": False}
@@ -717,13 +715,8 @@ def require_staff(conn, actor, owner_id):
 
 
 def admin_agency(staff):
-    """Admins have agency-local authority; missing scope denies access."""
-    if staff["role"] != "admin":
-        return None
-    agency = staff["agency_id"]
-    if type(agency) is not int or agency <= 0:
-        raise Problem(403, "Администратор не привязан к агентству")
-    return agency
+    """Managers operate across agencies. Acquisition attribution is not an ACL."""
+    return None
 
 
 def admin_visible_lead_sql(agency, owner_id):
@@ -739,18 +732,8 @@ def admin_visible_lead_sql(agency, owner_id):
 def permitted_target(conn, staff, target):
     if not target:
         raise Problem(404, "Пользователь не найден")
-    agency = admin_agency(staff)
-    if agency is not None and target["agency_id"] != agency:
-        owner = get_user(conn, target["agency_id"]) if target["agency_id"] else None
-        if not (target["role"] == "lead" and owner is not None and owner["role"] == "owner"
-                and target["manager_id"] in (None, owner["id"])):
-            raise Problem(403, "Пользователь другого агентства")
-    if staff["role"] == "staff" and target["manager_id"] != staff["id"]:
-        raise Problem(403, "Пользователь не закреплён за вами")
-    if staff["role"] == "staff" and target["role"] not in ("lead", "referrer"):
-        raise Problem(403, "Недостаточно прав")
-    if staff["role"] == "admin" and target["role"] in ("owner", "admin"):
-        raise Problem(403, "Недостаточно прав")
+    # All active managers can inspect any profile. Mutation paths separately
+    # protect the platform owner and the acting manager's own identity.
 
 
 def dashboard(actor, owner_id):
@@ -760,17 +743,11 @@ def dashboard(actor, owner_id):
         agency = admin_agency(staff)
         where, params = (("WHERE " + admin_visible_lead_sql(agency, owner_id)[0],
                           admin_visible_lead_sql(agency, owner_id)[1]) if agency is not None
-                         else ("WHERE manager_id=?", (actor,)) if staff["role"] == "staff" else ("", ()))
+                         else ("", ()))
         rows = conn.execute("SELECT * FROM users " + where + " ORDER BY registered_at DESC,id DESC LIMIT 200", params).fetchall()
         counts = dict(conn.execute("SELECT status,count(*) AS n FROM users " + where + " GROUP BY status", params).fetchall())
         users = [public_user(row) for row in rows]
-        invite_where, invite_params = (
-            ("WHERE kind!='blogger' AND issuer_id IN (SELECT id FROM users WHERE agency_id=?) "
-             "AND (assignee_id IS NULL OR assignee_id IN (SELECT id FROM users WHERE agency_id=?))", (agency, agency))
-            if agency is not None else
-            ("WHERE kind!='blogger' AND issuer_id=?", (actor,))
-            if staff["role"] == "staff" else ("", ())
-        )
+        invite_where, invite_params = "", ()
         invitations = conn.execute(
             "SELECT code,kind,issuer_id,assignee_id,created_at,active,candidate_label,blogger_uuid "
             "FROM invitations " + invite_where + " ORDER BY created_at DESC LIMIT 200", invite_params
@@ -811,9 +788,6 @@ def admin_users_page(actor, owner_id, *, page=1, status="", role="", query=""):
             params.extend(values)
         # Staff must never enumerate other managers' participants within the
         # same agency, including when agency_id is present on their profile.
-        if staff["role"] == "staff":
-            conditions.extend(("manager_id=?", "role IN ('lead','referrer')"))
-            params.append(actor)
         if status:
             conditions.append("status=?")
             params.append(status)
@@ -876,7 +850,7 @@ def admin_participant_detail(actor, owner_id, target_id):
                 "ORDER BY created_at DESC,id DESC LIMIT 100", (target_id,)).fetchall()]
         # Financial details are restricted to the owner and tenant-authorized
         # admins. Staff can still view their existing operational snapshot.
-        if staff["role"] in ("owner", "admin") and target["role"] in ("lead", "referrer"):
+        if staff["role"] in ("owner", "admin", "staff") and target["role"] in ("lead", "referrer"):
             from server import finance, statistics
             result["statistics"] = statistics.participant_snapshot(conn, target_id)
             result["finance"] = {
@@ -906,10 +880,8 @@ def decision(actor, owner_id, target_id, choice, reason=""):
         staff = require_staff(conn, actor, owner_id)
         target = get_user(conn, target_id)
         permitted_target(conn, staff, target)
-        if target["role"] == "owner":
-            raise Problem(403, "Владельца нельзя модерировать")
-        if staff["role"] == "staff" and target["status"] == "blocked" and choice != "blocked":
-            raise Problem(403, "Снять блокировку может администратор")
+        if target["role"] == "owner" or target_id == actor:
+            raise Problem(403, "Владельца или самого себя нельзя модерировать")
         status = choice
         if target["status"] != status or target["decision_reason"] != reason:
             conn.execute("UPDATE users SET status=?,decision_reason=?,updated_at=? WHERE id=?", (status, reason, int(time.time()), target_id))
@@ -925,15 +897,13 @@ def assign(actor, owner_id, target_id, manager_id=None, role=None, clear_manager
     initialize()
     with transaction() as conn:
         staff = require_staff(conn, actor, owner_id)
-        if staff["role"] == "staff":
-            raise Problem(403, "Недостаточно прав")
         target = get_user(conn, target_id)
         permitted_target(conn, staff, target)
-        if target_id == owner_id or target["role"] == "owner":
-            raise Problem(403, "Владельца нельзя изменить")
+        if target_id in (owner_id, actor) or target["role"] == "owner":
+            raise Problem(403, "Владельца и собственные права нельзя изменить")
         if target["status"] != "active" and role in ("staff", "admin"):
             raise Problem(409, "Сначала подтвердите пользователя")
-        if role is not None and (role not in ("lead", "referrer", "staff", "admin") or (role == "admin" and staff["role"] != "owner")):
+        if role is not None and role not in ("lead", "referrer", "staff", "admin"):
             raise Problem(403, "Недопустимая роль")
         if clear_manager and manager_id is not None:
             raise Problem(400, "Конфликт назначения руководителя")
@@ -976,8 +946,10 @@ def correct_attribution(actor, owner_id, target_id, source, referrer_id=None, ag
     with transaction() as conn:
         ensure_owner(conn, owner_id)
         operator = get_user(conn, actor)
-        if actor != owner_id or not operator or operator["role"] != "owner" or operator["status"] != "active":
+        if not operator or operator["role"] not in ("owner", "admin", "staff") or operator["status"] != "active":
             raise Problem(403, "Исправление источника доступно только владельцу")
+        if target_id in (owner_id, actor):
+            raise Problem(403, "Нельзя изменить источник владельца или собственный")
         target = get_user(conn, target_id)
         if not target or target["role"] == "owner" or target["consent_at"] is None or target["source"] not in ("agency", "referral"):
             raise Problem(404, "Зарегистрированный участник не найден")
@@ -1058,8 +1030,6 @@ def scoped_audit_rows(conn, staff, limit):
     agency = admin_agency(staff)
     if agency is not None:
         return conn.execute("SELECT * FROM audit WHERE actor_id IN (SELECT id FROM users WHERE agency_id=?) AND (target_id IS NULL OR target_id IN (SELECT id FROM users WHERE agency_id=?)) ORDER BY id DESC LIMIT ?", (agency, agency, limit)).fetchall()
-    if staff["role"] == "staff":
-        return conn.execute("SELECT * FROM audit WHERE actor_id=? OR target_id IN (SELECT id FROM users WHERE manager_id=?) ORDER BY id DESC LIMIT ?", (staff["id"], staff["id"], limit)).fetchall()
     return conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 

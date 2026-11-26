@@ -91,11 +91,9 @@ class OpenLeadReferralTests(unittest.TestCase):
                          ('proof.pdf', 'application/pdf', True))
         self.assertEqual(events[0]['proof_url'], 'https://example.test/proof')
         self.assertNotIn('evidence_data', events[0])
-        self.assertNotIn('finance', detail)
-        self.assertNotIn('statistics', detail)
-        with self.assertRaises(db.Problem) as denied:
-            db.admin_participant_detail(outsider, OWNER, ALICE)
-        self.assertEqual(denied.exception.code, 403)
+        self.assertIn('finance', detail)
+        self.assertIn('statistics', detail)
+        self.assertIn('finance', db.admin_participant_detail(outsider, OWNER, ALICE))
         self.assertIn('finance', self.as_user('/api/admin/participant', OWNER, user_id=ALICE)[1])
 
 

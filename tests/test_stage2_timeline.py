@@ -79,7 +79,7 @@ class Stage2TimelineTests(unittest.TestCase):
         self.assertIsNone(final["next_stage"])
         self.assertEqual(self.as_user("/api/mvp/my-events",BOB,offer_id=offer)[1]["events"],[])
 
-    def test_staff_scoped_details_without_finance(self):
+    def test_staff_global_details_include_finance(self):
         self.activate(ALICE);self.activate(BOB)
         staff_id=800761
         now=int(time.time())
@@ -93,6 +93,6 @@ class Stage2TimelineTests(unittest.TestCase):
         self.assertEqual(status,200,detail)
         self.assertEqual(detail["manual"]["offers"],[])
         self.assertIn("offer_events",detail)
-        self.assertNotIn("finance",detail)
-        self.assertNotIn("statistics",detail)
-        self.assertEqual(self.as_user("/api/admin/participant",staff_id,user_id=BOB)[0],403)
+        self.assertIn("finance",detail)
+        self.assertIn("statistics",detail)
+        self.assertEqual(self.as_user("/api/admin/participant",staff_id,user_id=BOB)[0],200)

@@ -1129,7 +1129,7 @@ dialog select,dialog input { max-width:100%; }
 .admin-control #participant-detail-content>.participant-detail-item {padding:14px;}
 .admin-control #participant-detail-content>.participant-detail-item p {font-size:12px;}
 
-/* Catalog is a visually dense offer overview; write controls are owner-only. */
+/* Catalog is a visually dense offer overview; operational write controls are shared by owner, admin and staff. */
 .admin-control #mvp-catalog-dialog {
   width:min(calc(100% - 24px),790px);
   max-width:790px;max-height:90dvh;

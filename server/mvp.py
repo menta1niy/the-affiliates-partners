@@ -121,10 +121,9 @@ def schema(conn):
 
 
 def _admin(conn, actor, owner_id):
-    operator = db.require_staff(conn, actor, owner_id)
-    if operator["role"] not in ("owner", "admin"):
-        raise db.Problem(403, "Управление офферами доступно администратору")
-    return operator
+    # Managers have the same operational offer controls as the owner.
+    # Target authorization remains enforced by db.permitted_target.
+    return db.require_staff(conn, actor, owner_id)
 
 
 def _field(payload, name, max_length, *, required=True):
@@ -322,7 +321,7 @@ def start_offer(actor, owner_id, data):
 
 
 def assignment_candidates(actor, owner_id, data):
-    """Page through eligible participants without leaking other agencies' leads."""
+    """Page through eligible participants for owner, admin and staff operators."""
     page = data.get("page", 1)
     query = data.get("query", "")
     role = data.get("role_filter", "all")
@@ -338,11 +337,6 @@ def assignment_candidates(actor, owner_id, data):
         schema(conn)
         conditions = ["status='active'", "role IN ('lead','referrer')"]
         params = []
-        agency = db.admin_agency(staff)
-        if agency is not None:
-            scope, scope_params = db.admin_visible_lead_sql(agency, owner_id)
-            conditions.append(scope)
-            params.extend(scope_params)
         if role != "all":
             conditions.append("role=?")
             params.append(role)
@@ -434,8 +428,8 @@ def overview(user_id, owner_id, *, for_admin=None):
     with db.transaction() as conn:
         schema(conn)
         if for_admin is not None:
-            # This is a read-only operational snapshot. Scoped managers may
-            # inspect their own leads, but catalogue CRUD still uses _admin.
+            # Operational snapshot, subject to the same target permissions as
+            # catalogue assignments and milestone reviews.
             staff = db.require_staff(conn, for_admin, owner_id)
             _participant(conn, staff, user_id)
         else:

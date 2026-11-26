@@ -131,9 +131,7 @@ def blogger_create(actor, owner_id, data):
         raise db.Problem(400, "Укажите фиксированную и/или процентную ставку")
     db.initialize()
     with db.transaction() as conn:
-        owner = db.require_staff(conn, actor, owner_id)
-        if owner["role"] != "owner":
-            raise db.Problem(403, "Блогеров регистрирует владелец")
+        db.require_staff(conn, actor, owner_id)
         if db.get_user(conn, telegram_id):
             raise db.Problem(409, "Telegram-аккаунт уже занят")
         if conn.execute("SELECT 1 FROM crm_bloggers WHERE LOWER(channel)=LOWER(?)",
@@ -153,14 +151,19 @@ def blogger_create(actor, owner_id, data):
                      (blogger_uuid, telegram_id, fixed, percent, now, now))
         db.audit(conn, actor, "blogger_registered", telegram_id,
                  "blogger_uuid=" + blogger_uuid)
+        # Blogger ad codes are owned by the real owner identity because
+        # source validation binds CRM campaigns to that identity. The staff
+        # operator remains recorded as the creator in the audit trail.
+        code = db.new_invitation_code(conn)
+        conn.execute("INSERT INTO invitations(code,kind,issuer_id,created_at,blogger_uuid) "
+                     "VALUES(?,'blogger',?,?,?)", (code, owner_id, now, blogger_uuid))
+        db.audit(conn, actor, "invite_blogger", owner_id, "blogger_uuid=" + blogger_uuid)
         db.enqueue(conn, "blogger:created:" + blogger_uuid, telegram_id,
                    "The Affiliates Partners\nДля вас создан блогерский кабинет. "
                    "Ваш внутренний ID: B-" + str(internal).zfill(6) + ".")
-    # Reuse the existing secure invite path; owner-only, one reusable ad code.
-    invite = db.invite_blogger(actor, owner_id, blogger_uuid)
     return {"blogger_uuid": blogger_uuid, "display_id": "B-" + str(internal).zfill(6),
             "channel": channel.strip(), "fixed_rub": fixed, "percent_bps": percent,
-            "invite_code": invite["code"]}
+            "invite_code": code}
 
 
 def blogger_view(actor, owner_id, data):
@@ -201,16 +204,12 @@ def blogger_list(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff = db.require_staff(conn, actor, owner_id)
-        if staff["role"] not in ("owner", "admin"):
-            raise db.Problem(403, "Недостаточно прав")
         schema(conn)
-        agency = db.admin_agency(staff)
-        where = "WHERE u.agency_id=?" if agency is not None else ""
         rows = conn.execute("SELECT c.*,b.channel,u.internal_id FROM blogger_campaigns c "
                             "JOIN crm_bloggers b ON b.blogger_uuid=c.blogger_uuid "
-                            "JOIN users u ON u.id=c.telegram_id " + where +
+                            "JOIN users u ON u.id=c.telegram_id " +
                             " ORDER BY c.created_at DESC LIMIT 100",
-                            (agency,) if agency is not None else ()).fetchall()
+                            ()).fetchall()
         result = []
         for row in rows:
             invite = conn.execute("SELECT code FROM invitations WHERE blogger_uuid=? "
@@ -244,8 +243,6 @@ def blogger_update(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff = db.require_staff(conn, actor, owner_id)
-        if staff["role"] != "owner":
-            raise db.Problem(403, "Условия блогеров меняет владелец")
         schema(conn)
         row = conn.execute("SELECT telegram_id FROM blogger_campaigns WHERE blogger_uuid=?",
                            (blogger_uuid,)).fetchone()
@@ -274,8 +271,6 @@ def fixed_earned(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff = db.require_staff(conn, actor, owner_id)
-        if staff["role"] != "owner":
-            raise db.Problem(403, "Фиксированную оплату подтверждает владелец")
         schema(conn)
         campaign = conn.execute("SELECT * FROM blogger_campaigns WHERE blogger_uuid=? AND active=1",
                                 (blogger_uuid,)).fetchone()
@@ -311,8 +306,6 @@ def reward_paid(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff = db.require_staff(conn, actor, owner_id)
-        if staff["role"] != "owner":
-            raise db.Problem(403, "Выплаты блогерам подтверждает владелец")
         schema(conn)
         row = conn.execute("SELECT r.*,c.telegram_id FROM blogger_rewards r JOIN blogger_campaigns c "
                            "ON c.blogger_uuid=r.blogger_uuid WHERE r.id=?", (reward_id,)).fetchone()

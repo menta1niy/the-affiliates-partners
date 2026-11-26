@@ -63,7 +63,7 @@ class AdminLeadFinanceParity(unittest.TestCase):
         self.assertEqual(paid['finance']['balances']['available_rub'], 300)
         self.assertEqual(paid['statistics']['potential']['in_work_rub'], 1000)
 
-    def test_financial_snapshot_is_not_available_to_leads_or_staff(self):
+    def test_financial_snapshot_available_to_staff_but_not_leads(self):
         self.ready(ALICE)
         self.ready(BOB)
         self.offer(ALICE)
@@ -72,13 +72,13 @@ class AdminLeadFinanceParity(unittest.TestCase):
             conn.execute("UPDATE users SET role='staff',manager_id=NULL WHERE id=?", (BOB,))
             conn.execute("UPDATE users SET manager_id=? WHERE id=?", (BOB, ALICE))
         status, admin = self.as_user('/api/admin/participant', BOB, user_id=ALICE)
-        # Staff now inspect operational progress for their assigned leads,
-        # while the verified finance ledger is still owner/admin only.
+        # All active managers inspect both operational progress and verified
+        # finance; ordinary participants remain self-scoped.
         self.assertEqual(status, 200, admin)
         self.assertIn('manual', admin)
         self.assertIn('offer_events', admin)
-        self.assertNotIn('finance', admin)
-        self.assertNotIn('statistics', admin)
+        self.assertIn('finance', admin)
+        self.assertIn('statistics', admin)
 
     def test_paid_crm_status_alone_does_not_change_ledger_balance(self):
         self.ready(ALICE)

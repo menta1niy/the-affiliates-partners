@@ -62,7 +62,12 @@ def _target(conn, staff, target_id):
     if type(target_id) is not int or target_id <= 0:
         raise db.Problem(400, "Некорректный участник")
     target = db.get_user(conn, target_id)
-    db.permitted_target(conn, staff, target)
+    # All authenticated administration roles operate with owner-level
+    # financial scope. No actor can authorize their own ledger entries.
+    if target is None:
+        raise db.Problem(404, "Пользователь не найден")
+    if target_id == staff["id"]:
+        raise db.Problem(403, "Нельзя проводить выплату или начисление себе")
     if target["role"] not in ("lead", "referrer") or target["status"] != "active":
         raise db.Problem(409, "Аккаунт участника неактивен")
     return target
@@ -133,7 +138,7 @@ def accrue(actor, owner_id, data):
     with db.transaction() as conn:
         schema(conn)
         staff = db.require_staff(conn,actor,owner_id)
-        if staff["role"] not in ("owner","admin"):
+        if staff["role"] not in ("owner","admin","staff"):
             raise db.Problem(403,"Начисления подтверждаются только администратором")
         _target(conn,staff,target_id)
         if not conn.execute("SELECT 1 FROM manual_assignments WHERE telegram_id=? AND offer_id=?",
@@ -206,13 +211,6 @@ def queue(actor, owner_id, data):
         schema(conn)
         conditions=[]
         params=[]
-        agency=db.admin_agency(staff)
-        if agency is not None:
-            conditions.append("u.agency_id=?")
-            params.append(agency)
-        if staff["role"]=="staff":
-            conditions.append("u.manager_id=?")
-            params.append(actor)
         if status!="all":
             conditions.append("w.status=?")
             params.append(status)
@@ -235,7 +233,7 @@ def payout_details(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff=db.require_staff(conn,actor,owner_id)
-        if staff['role'] not in ('owner','admin'):
+        if staff['role'] not in ('owner','admin','staff'):
             raise db.Problem(403,'Реквизиты доступны только администрации')
         schema(conn)
         row=conn.execute('SELECT * FROM finance_withdrawals WHERE id=?',(wid,)).fetchone()
@@ -268,7 +266,7 @@ def decide(actor, owner_id, data):
     db.initialize()
     with db.transaction() as conn:
         staff=db.require_staff(conn,actor,owner_id)
-        if staff["role"] not in ("owner","admin"):
+        if staff["role"] not in ("owner","admin","staff"):
             raise db.Problem(403,"Подтверждение выплат доступно только администрации")
         schema(conn)
         row=conn.execute("SELECT * FROM finance_withdrawals WHERE id=?",(withdrawal_id,)).fetchone()

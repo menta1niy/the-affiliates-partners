@@ -1,4 +1,4 @@
-"""MVP works without CRM workspace, including signed HTTP and tenant RBAC."""
+"""Standalone open catalogue and individually scoped assignments without CRM."""
 import base64
 import io
 import os
@@ -36,10 +36,11 @@ class StandaloneMvpTests(HttpHarness):
         self.assertTrue(session['open_registration'])
         status, user = self.as_user('/api/register', uid, consent=True)
         self.assertEqual(status, 200, user)
-        self.assertEqual(user['status'], 'pending')
-        self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=uid, decision='approve')[0],200)
+        # Open registration is immediately active; it does not require
+        # moderation before published offers become available.
+        self.assertEqual(user['status'], 'active')
 
-    def test_owner_creates_assigns_updates_and_lead_sees_only_own_offers(self):
+    def test_owner_assignments_track_personal_status_over_public_catalogue(self):
         self.register_open_user(ALICE)
         self.register_open_user(BOB)
         offer = self.create_offer()
@@ -51,14 +52,18 @@ class StandaloneMvpTests(HttpHarness):
         self.assertEqual(view['offers'][0]['payout_rub'], 700)
         self.assertEqual(view['offers'][0]['hold_days'], 14)
         self.assertEqual(view['offers'][0]['category'], 'Дебетовые карты')
-        self.assertEqual(self.as_user('/api/mvp/overview', BOB)[1]['offers'], [])
+        bob_offers=self.as_user('/api/mvp/overview', BOB)[1]['offers']
+        self.assertEqual(len(bob_offers),1)
+        self.assertFalse(bob_offers[0]['is_assigned'])
         self.assertEqual(self.as_user('/api/admin/mvp/catalog', ALICE)[0], 403)
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', ALICE,user_id=BOB,offer_id=offer)[0],403)
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,user_id=ALICE,offer_id=offer,stage='completed',note='Проверено администратором')[0],200)
         self.assertEqual(self.as_user('/api/mvp/overview', ALICE)[1]['statistics']['completed'],1)
         self.assertEqual(self.as_user('/api/admin/participant',OWNER,user_id=ALICE)[1]['manual']['offers'][0]['stage'],'completed')
         self.assertEqual(self.as_user('/api/admin/mvp/assignment', OWNER,user_id=ALICE,offer_id=offer,enabled=False,note='')[0],200)
-        self.assertEqual(self.as_user('/api/mvp/overview', ALICE)[1]['offers'], [])
+        alice_offers=self.as_user('/api/mvp/overview', ALICE)[1]['offers']
+        self.assertEqual(len(alice_offers),1)
+        self.assertFalse(alice_offers[0]['is_assigned'])
 
     def test_open_registration_requires_signed_initdata_and_consent(self):
         self.assertEqual(self.post('/api/register',{'initData':'invalid','consent':True})[0],401)
@@ -223,10 +228,12 @@ class StandaloneMvpTests(HttpHarness):
         invalid={"mode":"lead_to_offers","user_id":ALICE,"offer_ids":[offer_a,disabled]}
         self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,**invalid)[0],409)
         self.assertEqual(self.as_user("/api/register",BOB,consent=True)[0],200)
-        self.assertEqual(self.as_user("/api/admin/mvp/bulk-assignment",OWNER,
-            mode="offer_to_leads",offer_id=offer_a,user_ids=[ALICE,BOB])[0],409)
+        status, added=self.as_user("/api/admin/mvp/bulk-assignment",OWNER,
+            mode="offer_to_leads",offer_id=offer_a,user_ids=[ALICE,BOB])
+        self.assertEqual(status,200,added)
+        self.assertEqual(added["created"],1)
         with db.transaction() as conn:
-            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],2)
+            self.assertEqual(conn.execute("SELECT count(*) FROM manual_assignments").fetchone()[0],3)
         for bad in (
             {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[]},
             {"mode":"offer_to_leads","offer_id":offer_a,"user_ids":[True]},

@@ -47,6 +47,7 @@
   }
   let participantRequestId = 0;
   const roles = {owner:"Владелец",admin:"Администратор",staff:"Сотрудник",referrer:"Реферер",lead:"Участник",blogger:"Блогер",manager:"Менеджер"};
+  function canOperate(){return ["owner","admin","staff"].includes(state.role);}
   const statuses = {pending:"Ожидает",active:"Активен",approved:"Подтверждён",rejected:"Отклонён",blocked:"Заблокирован"};
   const manualStages={assigned:"Назначено",in_progress:"В работе",submitted:"На проверке",completed:"Завершено",rejected:"Отклонено"};
   const applicationStageLabels={applied:"Заявка отправлена",meeting_scheduled:"Назначена встреча",picked_up:"Продукт получен",target_done:"Целевое действие выполнено",credited:"Подтверждено CRM",paid:"Выплата отмечена CRM"};
@@ -460,7 +461,7 @@
       content.append(meta);
       if(["lead","referrer"].includes(person.role))
         content.append(participantOfferProgress(data,person,()=>openParticipant(person)));
-      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+      if(["lead","referrer"].includes(person.role) && canOperate()){
         adminLeadFinance(content,data);
       }
       if(data.crm_lead_id){
@@ -480,7 +481,7 @@
           content.append(row);
         }
       }
-      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+      if(["lead","referrer"].includes(person.role) && canOperate()){
         const section=make("section",undefined,"panel admin-profile-assignments");section.append(make("span","ОФФЕРЫ / РУЧНЫЕ СТАТУСЫ","section-kicker"),make("h3","Управление назначениями"));
         const stats=data.manual?.statistics||{};
         const summary=make("div",undefined,"admin-profile-stats");
@@ -512,7 +513,7 @@
             await openParticipant(person);
           },"danger"));
           item.append(select,note,buttons);
-          if(state.role==="owner" || state.role==="admin"){
+          if(canOperate()){
             const credit=make("div",undefined,"admin-finance-credit-inline");
             const amount=make("input");amount.type="number";amount.min="1";amount.max="10000000";
             amount.step="1";amount.inputMode="numeric";amount.placeholder="Сумма начисления, ₽";
@@ -552,7 +553,7 @@
         }));
         content.append(section);
       }
-      if(["lead","referrer"].includes(person.role) && ["owner","admin"].includes(state.role)){
+      if(["lead","referrer"].includes(person.role) && canOperate()){
         content.append(participantTimeline(data));
       }
       const history=make("section",undefined,"admin-audit-profile");history.append(make("h3","История действий"));
@@ -583,7 +584,6 @@
     if (role===null) return;
     const normalized=role.trim().toLowerCase();
     if (normalized && !["admin","staff","referrer","lead"].includes(normalized)){error("Недопустимая роль.");return;}
-    if (normalized==="admin" && state.role!=="owner"){error("Назначение администратора доступно только владельцу.");return;}
     const input=window.prompt("Менеджер: пусто — сохранить текущего; ID — назначить; CLEAR — снять назначение", "");
     if(input===null)return;
     const managerId=input.trim();
@@ -637,18 +637,18 @@
       row.append(make("td",telegramName(user.username,user.id || user.user_id)),make("td",user.internal_id??"—"),make("td",sourceDescription));
       row.className="admin-data-row";
       const actions=make("td");const group=make("div",undefined,"actions");
-      group.append(action("Карточка",()=>openParticipant(user)));
       const targetRole=roleOf(user);
-      const permitted=targetRole!=="owner" &&
-        !(state.role==="admin" && targetRole==="admin") &&
-        (state.role!=="staff" || (Number(user.manager_id)===state.actorId && ["lead","referrer"].includes(targetRole)));
+      if(targetRole!=="owner" || state.role==="owner")
+        group.append(action("Карточка",()=>openParticipant(user)));
+      else group.append(make("span","Аккаунт владельца защищён","muted"));
+      const permitted=targetRole!=="owner" && Number(user.id || user.user_id)!==state.actorId && canOperate();
       if(permitted && statusOf(user)==="pending"){
         group.append(action("Одобрить",()=>decide(user,"approve")),action("Отклонить",()=>decide(user,"reject")));
       }
-      if(permitted && statusOf(user)==="rejected" && (state.role==="owner" || state.role==="admin"))group.append(action("Одобрить",()=>decide(user,"approve")));
-      if(permitted && statusOf(user)==="blocked" && (state.role==="owner" || state.role==="admin"))group.append(action("Разблокировать",()=>decide(user,"approve")));
-      if(permitted && state.role!=="staff")group.append(action("Роль / менеджер",()=>assign(user)));
-      if(permitted && state.role==="owner" && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
+      if(permitted && statusOf(user)==="rejected")group.append(action("Одобрить",()=>decide(user,"approve")));
+      if(permitted && statusOf(user)==="blocked")group.append(action("Разблокировать",()=>decide(user,"approve")));
+      if(permitted)group.append(action("Роль / менеджер",()=>assign(user)));
+      if(permitted && ["agency","referral"].includes(user.source))group.append(action("Исправить источник",()=>correctSource(user)));
       if(permitted && statusOf(user)!=="blocked")group.append(action("Блокировать",()=>decide(user,"block")));
       actions.append(group);row.append(actions);
       row.querySelectorAll("td").forEach((cell,index)=>cell.dataset.label=["Username","Внутренний №","Источник","Действия"][index]);
@@ -709,7 +709,7 @@
         }));
         const start=make("a","Открыть /start","btn ghost");start.href=link;start.target="_blank";start.rel="noopener noreferrer";controls.append(start);
       }
-      if(usable && (state.role==="owner" || Number(invite.issuer_id)===state.actorId) &&
+      if(usable && canOperate() &&
          typeof invite.code==="string" && /^(?:[A-Z0-9]{6}|(?:ag|ref)_[a-zA-Z0-9_-]{8,48})$/.test(invite.code)){
         controls.append(action("Отозвать",async()=>{
           if(!window.confirm("Отозвать приглашение "+invite.code+"? Ссылка перестанет действовать, отменить отзыв нельзя."))return;
@@ -1048,7 +1048,7 @@
   };
   const subtabSection={pending:"people",users:"people",offer_reviews:"people",finance:"people",invitations:"more",bloggers:"more",audit:"more"};
   const defaultSubtab={people:"pending",more:"invitations"};
-  function canManageOffers(){return state.role==="owner" || state.role==="admin";}
+  function canManageOffers(){return canOperate();}
   async function renderOffersView(){
     if(!canManageOffers())return;
     const root=$("admin-offers-list");
@@ -1348,7 +1348,7 @@
       if(state.tab!=="bloggers")return;
       root.replaceChildren();
       if(!result.bloggers?.length){root.append(make("p","Блогеры пока не зарегистрированы.","muted"));return;}
-      const owner=state.role==="owner";
+      const owner=canOperate();
       for(const blogger of result.bloggers){
         const card=make("article",undefined,"admin-offer-event-card");
         card.append(make("span",blogger.display_id+" · "+(blogger.active?"Активен":"Отключён"),"section-kicker"));
@@ -1728,7 +1728,7 @@
       const role=session.role || session.user?.role;
       state.role=role;
       state.actorId=Number(session.user?.id);
-      show("admin-blogger-form",role==="owner");
+      show("admin-blogger-form",canOperate());
       const managerAccess=canManageOffers();
       document.querySelectorAll("[data-owner-admin]").forEach(el=>el.hidden=!managerAccess);
       catalogButton.hidden=!managerAccess;

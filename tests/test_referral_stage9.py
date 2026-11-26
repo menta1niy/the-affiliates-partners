@@ -46,9 +46,7 @@ class Stage9ReferralTests(unittest.TestCase):
         self.assertEqual(self.webhook_start(998001, BOB, invite['code'])[0], 200)
         self.assertEqual(self.as_user('/api/register', BOB, **{**TEST_ONBOARDING, 'consent': True})[0], 200)
         self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=BOB, decision='approve')[0], 200)
-        from tests.test_profile_stage6 import VALID_INN
-        self.assertEqual(self.as_user('/api/profile/identity', BOB,
-                         surname='Иванов', given_name='Иван', inn=VALID_INN)[0], 200)
+        # Current MVP uses consent/adult confirmation, not the removed INN API.
         offer = self.offer(BOB)
         self.assertEqual(self.credit(BOB, offer, 101, 'referral.credit.1')[0], 200)
         self.assertEqual(self.as_user('/api/finance/overview', ALICE)[1]['referral']['earned_kopeks'], 0)
@@ -79,9 +77,7 @@ class Stage9ReferralTests(unittest.TestCase):
         self.assertEqual(self.webhook_start(998002, BOB, created['invite_code'])[0], 200)
         self.assertEqual(self.as_user('/api/register', BOB, **{**TEST_ONBOARDING,'consent':True})[0], 200)
         self.assertEqual(self.as_user('/api/admin/decision', OWNER, user_id=BOB, decision='approve')[0], 200)
-        from tests.test_profile_stage6 import VALID_INN
-        self.assertEqual(self.as_user('/api/profile/identity', BOB,
-                         surname='Иванов', given_name='Иван', inn=VALID_INN)[0], 200)
+        # The legacy /api/profile/identity step was removed from the MVP.
         offer = self.offer(BOB)
         self.payout(BOB, offer, 200, 'blogger.credit.1')
         blogger = self.as_user('/api/blogger/overview', 990011)[1]

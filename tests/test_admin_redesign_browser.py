@@ -505,15 +505,15 @@ class AdminRedesignBrowserTests(unittest.TestCase):
             finally:
                 browser.close()
 
-    def test_staff_cannot_open_bulk_assignment_workspace(self):
+    def test_staff_can_open_bulk_assignment_workspace(self):
         with sync_playwright() as pw:
             browser=pw.chromium.launch(headless=True)
             try:
                 page=self.open_admin(browser,390,'staff',stage4=True)
-                self.assertFalse(page.locator('[data-section="assignments"]').is_visible())
-                page.evaluate("""() => document.querySelector('[data-section="assignments"]').click()""")
-                self.assertTrue(page.locator('[data-workspace="assignments"]').is_hidden())
-                self.assertTrue(page.locator('[data-workspace="overview"]').is_visible())
+                self.assertTrue(page.locator('[data-section="assignments"]').is_visible())
+                page.locator('[data-section="assignments"]').click()
+                self.assertTrue(page.locator('[data-workspace="assignments"]').is_visible())
+                self.assertTrue(page.locator('[data-workspace="overview"]').is_hidden())
                 page.close()
             finally:
                 browser.close()

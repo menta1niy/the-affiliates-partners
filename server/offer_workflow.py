@@ -247,13 +247,8 @@ def admin_queue(actor, owner_id, data):
         schema(conn)
         conditions = []
         params = []
-        agency = db.admin_agency(staff)
-        if agency is not None:
-            conditions.append("u.agency_id=?")
-            params.append(agency)
-        if staff["role"] == "staff":
-            conditions.append("u.manager_id=?")
-            params.append(actor)
+        # Operational reviews are global for owner, admin and staff. Evidence
+        # retrieval and decisions still require an authenticated staff role.
         if status != "all":
             conditions.append("e.review_status=?")
             params.append(status)
