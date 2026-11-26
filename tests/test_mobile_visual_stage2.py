@@ -1,4 +1,4 @@
-"""Stage 2/2: iPhone card, filter, profile, and finance visual regression.
+"""Stage 2/2: current iPhone catalogue toolbar, profile, and finance regression.
 
 Synthetic Telegram HTTP fixture only; no personal data or remote calls.
 """
@@ -20,7 +20,6 @@ FINANCE_OK = FIXTURE.replace(
       withdrawals:[],accruals:[]};
     if(path==='/invitations/referral'){""",
 )
-LEGACY_FIXTURE = FIXTURE.replace("let creditFresh=!minor;", "let creditFresh=!minor&&!legacy;")
 
 
 class MobileVisualStage2Tests(unittest.TestCase):
@@ -37,10 +36,10 @@ class MobileVisualStage2Tests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join(timeout=2)
 
-    def open(self, browser, width, *, legacy=False, finance_ok=False):
+    def open(self, browser, width, *, finance_ok=False):
         page = browser.new_page(viewport={"width": width, "height": 844})
-        page.add_init_script(FINANCE_OK if finance_ok else LEGACY_FIXTURE if legacy else FIXTURE)
-        page.goto(self.base + f"/partners/#tgWebAppData=stage2&legacy={int(legacy)}")
+        page.add_init_script(FINANCE_OK if finance_ok else FIXTURE)
+        page.goto(self.base + "/partners/#tgWebAppData=stage2", wait_until="domcontentloaded")
         page.locator("#participant-nav").wait_for(state="visible")
         return page
 
@@ -53,7 +52,7 @@ class MobileVisualStage2Tests(unittest.TestCase):
             try:
                 for width in (320, 375, 390, 430):
                     with self.subTest(width=width):
-                        page = self.open(browser, width, legacy=True)
+                        page = self.open(browser, width)
                         page.locator('#participant-nav [data-view="offers"]').click()
                         page.locator("#offer-controls").wait_for(state="visible")
                         sections = page.evaluate("""() => {
@@ -69,19 +68,33 @@ class MobileVisualStage2Tests(unittest.TestCase):
                             y:btn.getBoundingClientRect().top,
                             width:btn.getBoundingClientRect().width}))""")
                         self.assertEqual(len(geometry), 4)
-                        self.assertEqual(len({item["y"] for item in geometry}), 2, geometry)
-                        self.assertTrue(all(item["width"] >= 65 for item in geometry), geometry)
+                        # The latest one-row toolbar is intentionally swipeable,
+                        # not a two-row grid. Its overflow must stay local.
+                        self.assertEqual(len({item["y"] for item in geometry}), 1, geometry)
+                        self.assertTrue(all(item["width"] >= 40 for item in geometry), geometry)
                         controls = page.locator("#offer-controls").bounding_box()
-                        self.assertTrue(all(item["x"] >= controls["x"] - 1 and
-                                            item["right"] <= controls["x"] + controls["width"] + 1
-                                            for item in geometry), geometry)
+                        filter_box = page.locator(".participant-offer-filter").bounding_box()
+                        self.assertGreaterEqual(filter_box["x"], controls["x"] - 1)
+                        self.assertLessEqual(filter_box["x"] + filter_box["width"],
+                                             controls["x"] + controls["width"] + 1)
+                        if width == 320:
+                            self.assertTrue(page.locator(".participant-offer-filter").evaluate(
+                                "el => el.scrollWidth > el.clientWidth"))
+                        last_filter = page.locator(".participant-offer-filter button").last
+                        last_filter.scroll_into_view_if_needed()
+                        last_filter.click()
+                        self.assertEqual(last_filter.get_attribute("aria-pressed"), "true")
+                        page.locator('.participant-offer-filter button[data-offer-filter="all"]').click()
                         target = page.locator(".participant-offer-target strong").first
                         self.assertEqual(target.evaluate("el => getComputedStyle(el).overflow"), "visible")
                         self.assert_no_horizontal_overflow(page, width)
 
                         page.locator('#participant-nav [data-view="profile"]').click()
-                        page.locator("#participant-legacy-onboarding").wait_for(state="visible")
-                        self.assertEqual(page.locator("#participant-legacy-onboarding label.check > span").count(), 3)
+                        page.locator("#profile-section").wait_for(state="visible")
+                        self.assertIn("АККАУНТ TELEGRAM", page.locator("#profile-section").inner_text())
+                        self.assertEqual(page.locator("#participant-legacy-onboarding").count(), 0)
+                        self.assertEqual(page.locator("#participant-identity-panel").count(), 0)
+                        self.assertEqual(page.locator("#participant-credit-panel").count(), 0)
                         self.assert_no_horizontal_overflow(page, width)
                         page.close()
             finally:

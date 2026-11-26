@@ -10,7 +10,7 @@ from http.server import ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
 from tests.test_admin_participant_browser import BrowserHandler
-from tests.test_profile_stage6_browser import FIXTURE
+from tests.test_mobile_visual_stage2 import FINANCE_OK
 
 
 TELEGRAM = r"""(() => {
@@ -54,13 +54,15 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                     with self.subTest(width=width):
                         page = browser.new_page(viewport={"width": width, "height": 844})
                         page.route("https://telegram.org/js/telegram-web-app.js", lambda route: route.fulfill(body="", content_type="application/javascript"))
-                        page.add_init_script(TELEGRAM + ";\n" + FIXTURE)
-                        page.goto(self.base + "/partners/#tgWebAppData=stage1")
+                        page.add_init_script(TELEGRAM + ";\n" + FINANCE_OK)
+                        page.goto(self.base + "/partners/#tgWebAppData=stage1", wait_until="domcontentloaded")
                         page.locator("#participant-nav").wait_for(state="visible")
                         self.assertTrue(page.evaluate("Boolean(window.__fullscreenRequested)"))
                         self.assertEqual(page.evaluate("document.documentElement.scrollWidth"), width)
                         page.locator('#participant-nav [data-view="profile"]').click()
-                        page.locator("#participant-credit-save").wait_for(state="visible")
+                        page.locator("#profile-section").wait_for(state="visible")
+                        self.assertEqual(page.locator("#participant-credit-panel").count(), 0)
+                        self.assertEqual(page.locator("#participant-identity-panel").count(), 0)
                         normal = page.evaluate("""() => {
                           const nav = document.querySelector('#participant-nav').getBoundingClientRect();
                           const root = getComputedStyle(document.querySelector('.shell'));
@@ -82,12 +84,13 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                         self.assertGreaterEqual(full["top"], 112, full)
                         self.assertEqual(full["mask"], "fixed", full)
 
-                        page.locator("#participant-credit-save").evaluate("el => el.scrollIntoView({block:'end'})")
+                        page.locator("#profile-section .participant-legal-links").evaluate(
+                            "el => el.scrollIntoView({block:'end'})")
                         geometry = page.evaluate("""() => ({
-                          button:document.querySelector('#participant-credit-save').getBoundingClientRect().bottom,
+                          contentBottom:document.querySelector('#profile-section .participant-legal-links').getBoundingClientRect().bottom,
                           dock:document.querySelector('#participant-nav').getBoundingClientRect().top
                         })""")
-                        self.assertLessEqual(geometry["button"], geometry["dock"] - 12, geometry)
+                        self.assertLessEqual(geometry["contentBottom"], geometry["dock"] - 12, geometry)
 
                         keyboard_visibility = page.evaluate("""() => {
                           document.documentElement.classList.add('tg-keyboard-open');
@@ -95,7 +98,8 @@ class MobileWebviewStage1Tests(unittest.TestCase):
                         }""")
                         self.assertEqual(keyboard_visibility, "hidden")
                         page.evaluate("document.documentElement.classList.remove('tg-keyboard-open')")
-                        page.locator("#finance-request-amount").focus()
+                        page.locator("#finance-request-open").click()
+                        page.locator("#finance-request-amount").wait_for(state="visible")
                         self.assertTrue(page.locator("html").evaluate("el => el.classList.contains('tg-keyboard-open')"))
                         self.assertEqual(page.locator("#participant-nav").evaluate("el => getComputedStyle(el).display"),"none")
                         self.assertEqual(page.locator(".tg-keyboard-done").count(),0)
