@@ -60,6 +60,42 @@ class AdminDetailBrowserSmoke(AdminAgencyScopeTests):
             conn.execute('INSERT INTO crm_assigned_offers(crm_lead_id,offer_id,payload) VALUES(?,?,?)', ('browser-synthetic', 'browser-offer', json.dumps({'id':'browser-offer','name':'<img src=x onerror=alert(1)>','lead_reward':'75','instructions':'Synthetic approved instructions'})))
             conn.execute('INSERT INTO crm_participant_states(crm_lead_id,payload,updated_at) VALUES(?,?,?)', ('browser-synthetic',json.dumps({'applications':[{'application_id':'a','offer_id':'browser-offer','stage':'credited'}],'lead_payouts':[{'conversion_id':'c','offer_id':'browser-offer','amount':'75','status':'confirmed','reversed':False}]}),101))
 
+    def test_new_open_registration_is_visible_in_admin_people_ui(self):
+        new_id = 991245
+        status, registered = self.as_user('/api/register', new_id)
+        self.assertEqual(status, 200, registered)
+        self.assertEqual(registered['user']['status'], 'active')
+        with patch('server.api.bot_token', return_value=TOKEN), \
+             patch('server.api.admin_id', return_value=OWNER), sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                for width in (390, 1440):
+                    with self.subTest(width=width):
+                        page = browser.new_page(viewport={'width': width, 'height': 844})
+                        errors = []
+                        page.on('pageerror', lambda exc: errors.append(str(exc)))
+                        url = self.base + '/partners/admin/#tgWebAppData=' + \
+                              __import__('urllib.parse', fromlist=['quote']).quote(
+                                  init_data(self.admin), safe='')
+                        page.goto(url, wait_until='domcontentloaded')
+                        page.locator('[data-section="people"]').click()
+                        page.locator('[data-subtab="users"]').click()
+                        page.locator('#user-query').fill(str(new_id))
+                        people = page.locator('#users-list tbody tr')
+                        people.first.wait_for(state='visible')
+                        self.assertEqual(people.count(), 1)
+                        self.assertIn('Карточка', people.first.inner_text())
+                        people.first.get_by_role('button', name='Карточка').click()
+                        page.locator('#participant-detail').wait_for(state='visible')
+                        page.locator('#participant-detail').get_by_text(
+                            'Username:', exact=False).wait_for(timeout=10000)
+                        self.assertIn('Username:', page.locator(
+                            '#participant-detail').inner_text())
+                        self.assertFalse(errors, errors)
+                        page.close()
+            finally:
+                browser.close()
+
     def test_owner_admin_card_desktop_mobile(self):
         # Browser visits the real static admin document and requests the actual HTTP backend.
         with patch('server.api.bot_token', return_value=TOKEN), patch('server.api.admin_id', return_value=OWNER), sync_playwright() as p:

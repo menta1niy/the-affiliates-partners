@@ -10,6 +10,7 @@ from tests.test_registration import HttpHarness, OWNER
 class AdminAgencyScopeTests(unittest.TestCase):
     post = HttpHarness.post
     as_user = HttpHarness.as_user
+    webhook_start = HttpHarness.webhook_start
     stop_server = HttpHarness.stop_server
 
     def setUp(self):
@@ -100,6 +101,43 @@ class AdminAgencyScopeTests(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertEqual(self.as_user('/api/admin/users', self.admin, **bad)[0], 400)
         self.assertEqual(self.as_user('/api/admin/users', self.lead_a)[0], 403)
+
+    def test_open_registration_and_unassigned_direct_referral_appear_in_both_admin_lists(self):
+        open_id, referred_id = 991201, 991202
+        status, registered = self.as_user('/api/register', open_id)
+        self.assertEqual(status, 200, registered)
+        self.assertEqual(registered['user']['status'], 'active')
+        status, invite = self.as_user('/api/invitations/referral', OWNER)
+        self.assertEqual(status, 200, invite)
+        code = invite['code']
+        self.assertEqual(self.webhook_start(991203, referred_id, code)[0], 200)
+        status, registered = self.as_user('/api/register', referred_id)
+        self.assertEqual(status, 200, registered)
+        self.assertEqual(registered['user']['source'], 'referral')
+        with db.transaction() as conn:
+            open_user = db.get_user(conn, open_id)
+            referred_user = db.get_user(conn, referred_id)
+            self.assertEqual(open_user['manager_id'], OWNER)
+            self.assertIsNone(referred_user['manager_id'])
+            self.assertEqual(referred_user['agency_id'], OWNER)
+        for candidate in (open_id, referred_id):
+            for actor in (OWNER, self.admin, self.other_admin):
+                with self.subTest(candidate=candidate, actor=actor):
+                    query = str(candidate)
+                    code, page = self.as_user('/api/admin/users', actor, query=query, role='lead', status='active')
+                    self.assertEqual(code, 200, page)
+                    self.assertIn(candidate, [row['id'] for row in page['users']])
+                    self.assertEqual(page['total'], 1)
+                    code, candidates = self.as_user('/api/admin/mvp/assignment-candidates', actor, query=query)
+                    self.assertEqual(code, 200, candidates)
+                    self.assertEqual([row['id'] for row in candidates['users']], [candidate])
+                    self.assertEqual(self.as_user('/api/admin/participant', actor, user_id=candidate)[0], 200)
+            for actor in (self.staff_a, self.staff_b):
+                self.assertEqual(self.as_user('/api/admin/users', actor, query=str(candidate))[1]['total'], 0)
+                self.assertEqual(self.as_user('/api/admin/participant', actor, user_id=candidate)[0], 403)
+        for actor in (self.admin, self.other_admin):
+            dashboard = self.as_user('/api/admin/dashboard', actor)[1]
+            self.assertTrue({open_id, referred_id}.issubset({u['id'] for u in dashboard['users']}))
 
     def test_manual_mvp_offer_assignment_is_agency_scoped(self):
         payload={"name":"Банковская карта", "category":"Карты", "target_action":"Активация",

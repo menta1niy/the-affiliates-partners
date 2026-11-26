@@ -41,9 +41,6 @@ class Stage1UploadFlowTests(unittest.TestCase):
         raw = b"%PDF-1.7\n" + b"evidence content" * 50
         file = {"name": "document.pdf", "data": base64.b64encode(raw).decode("ascii")}
         payload = {"kind": "stage", "offer_id": offer, "lead_stage": "application_sent", "file": file}
-        status, response = self.as_user("/api/mvp/submit", ALICE, **{
-            **payload, "lead_stage": "meeting_scheduled"})
-        self.assertEqual(status, 409, response)
         status, response = self.as_user("/api/mvp/submit", ALICE, **payload)
         self.assertEqual(status, 200, response)
         event_id = response["event"]["id"]
@@ -66,6 +63,52 @@ class Stage1UploadFlowTests(unittest.TestCase):
             file={"name": "archive.zip", "data": base64.b64encode(b"PK\x03\x04safe").decode()})
         self.assertEqual(status, 200, response)
         self.assertEqual(self.as_user("/api/mvp/my-events", BOB)[1]["events"], [])
+
+    def test_optional_file_arbitrary_stage_without_encryption_key(self):
+        self.activate(ALICE)
+        offer = self.create_offer()
+        with patch.dict(os.environ, {"PARTNERS_PROFILE_ENCRYPTION_KEY": ""}):
+            status, submitted = self.as_user(
+                "/api/mvp/submit", ALICE, kind="stage", offer_id=offer,
+                lead_stage="meeting_scheduled")
+            self.assertEqual(status, 200, submitted)
+            event_id = submitted["event"]["id"]
+            self.assertEqual(self.as_user(
+                "/api/mvp/submit", ALICE, kind="stage", offer_id=offer,
+                lead_stage="application_sent")[0], 409)
+            status, events = self.as_user("/api/mvp/my-events", ALICE)
+            self.assertEqual(status, 200, events)
+            self.assertFalse(events["events"][0]["has_screenshot"])
+            self.assertEqual(self.as_user("/api/admin/mvp/evidence", OWNER, event_id=event_id)[0], 404)
+            self.assertEqual(self.as_user("/api/admin/mvp/review-event", OWNER,
+                                          event_id=event_id, decision="approve")[0], 200)
+            raw = b"PK\x03\x04arbitrary-file-format"
+            status, submitted = self.as_user(
+                "/api/mvp/submit", ALICE, kind="stage", offer_id=offer,
+                lead_stage="application_sent",
+                file={"name": "confirmation.custom", "data": base64.b64encode(raw).decode()})
+            self.assertEqual(status, 200, submitted)
+            status, evidence = self.as_user("/api/admin/mvp/evidence", OWNER,
+                                            event_id=submitted["event"]["id"])
+            self.assertEqual(status, 200, evidence)
+            self.assertEqual(base64.b64decode(evidence["data"]), raw)
+
+    def test_legacy_encrypted_file_is_still_readable(self):
+        self.activate(ALICE)
+        offer = self.create_offer()
+        raw = b"legacy evidence"
+        from server.profile import _cipher
+        status, submitted = self.as_user("/api/mvp/submit", ALICE,
+            kind="stage", offer_id=offer, lead_stage="application_sent",
+            file={"name": "old.dat", "data": base64.b64encode(raw).decode()})
+        self.assertEqual(status, 200, submitted)
+        event_id = submitted["event"]["id"]
+        with db.transaction() as conn:
+            conn.execute("UPDATE manual_offer_events SET evidence_data=?,evidence_type=? WHERE id=?",
+                (_cipher().encrypt(raw), '{"name":"old.dat","mime":"application/octet-stream"}', event_id))
+        status, response = self.as_user("/api/admin/mvp/evidence", OWNER, event_id=event_id)
+        self.assertEqual(status, 200, response)
+        self.assertEqual(base64.b64decode(response["data"]), raw)
 
     def test_file_validation_and_limit(self):
         self.assertRaises(db.Problem, offer_workflow._screenshot,

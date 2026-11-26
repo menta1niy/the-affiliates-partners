@@ -111,11 +111,11 @@ class Stage7BrowserTests(unittest.TestCase):
                         self.assertEqual(guide.locator("li").count(),4)
                         self.assertEqual(guide.locator("li strong").all_inner_texts(),
                             ["Изучите условия","Выполните действие",
-                             "Отправьте подтверждение","Дождитесь решения"])
+                             "Отметьте этап","Дождитесь решения"])
                         self.assertIn("Порядок выполнения",guide.inner_text())
                         form=page.locator(".participant-offer-report-form")
                         form.wait_for(state="visible")
-                        self.assertEqual(form.locator("select option").count(),1)
+                        self.assertEqual(form.locator("select option").count(),2)
                         self.assertEqual(form.locator("select").input_value(),"application_sent")
                         self.assertEqual(form.locator('input[type="url"]').count(),0)
                         raw=io.BytesIO()
@@ -139,6 +139,40 @@ class Stage7BrowserTests(unittest.TestCase):
                         self.assertTrue(actions[0]["file"]["data"].startswith("iVBOR"))
                         self.assertEqual(page.evaluate("document.documentElement.scrollWidth"),width)
                         self.assertFalse(errors,errors)
+                        page.close()
+            finally:
+                browser.close()
+
+    def test_lead_can_choose_later_stage_without_attachment(self):
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            try:
+                for width in (320, 375, 390, 430):
+                    with self.subTest(width=width):
+                        page = browser.new_page(viewport={"width": width, "height": 844})
+                        errors = []
+                        page.on("pageerror", lambda e: errors.append(str(e)))
+                        page.add_init_script(LEAD_BOOT)
+                        page.goto(self.base + "/partners/#tgWebAppData=stage7",
+                                  wait_until="domcontentloaded")
+                        page.locator("#kpi-total").get_by_text("2", exact=True).wait_for()
+                        page.locator('#participant-nav [data-view="offers"]').click()
+                        page.locator(".participant-offers .offer-item").first.locator(
+                            ".participant-offer-detail-button").click()
+                        form = page.locator(".participant-offer-report-form")
+                        form.wait_for(state="visible")
+                        self.assertFalse(form.locator('input[type="file"]').get_attribute("required"))
+                        self.assertIn("необязательно", form.inner_text())
+                        form.locator("select").select_option("meeting_scheduled")
+                        form.locator('button[type="submit"]').click()
+                        page.locator("#participant-offer-dialog").wait_for(state="hidden")
+                        calls = page.evaluate("window.__stage7Calls")
+                        self.assertEqual(len(calls), 1)
+                        self.assertEqual(calls[0]["lead_stage"], "meeting_scheduled")
+                        self.assertNotIn("file", calls[0])
+                        self.assertFalse(errors, errors)
+                        self.assertLessEqual(
+                            page.evaluate("document.documentElement.scrollWidth"), width + 1)
                         page.close()
             finally:
                 browser.close()

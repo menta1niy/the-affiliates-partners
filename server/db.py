@@ -726,12 +726,25 @@ def admin_agency(staff):
     return agency
 
 
+def admin_visible_lead_sql(agency, owner_id):
+    """Scoped tenant users plus unassigned registrations owned by the platform.
+
+    Open users and referrals linked to them may have no staff manager;
+    keep this owner-managed intake visible until assigned to a team.
+    """
+    return ("(agency_id=? OR (role='lead' AND agency_id=? "
+            "AND (manager_id IS NULL OR manager_id=?)))", (agency, owner_id, owner_id))
+
+
 def permitted_target(conn, staff, target):
     if not target:
         raise Problem(404, "Пользователь не найден")
     agency = admin_agency(staff)
     if agency is not None and target["agency_id"] != agency:
-        raise Problem(403, "Пользователь другого агентства")
+        owner = get_user(conn, target["agency_id"]) if target["agency_id"] else None
+        if not (target["role"] == "lead" and owner is not None and owner["role"] == "owner"
+                and target["manager_id"] in (None, owner["id"])):
+            raise Problem(403, "Пользователь другого агентства")
     if staff["role"] == "staff" and target["manager_id"] != staff["id"]:
         raise Problem(403, "Пользователь не закреплён за вами")
     if staff["role"] == "staff" and target["role"] not in ("lead", "referrer"):
@@ -745,7 +758,8 @@ def dashboard(actor, owner_id):
     with transaction() as conn:
         staff = require_staff(conn, actor, owner_id)
         agency = admin_agency(staff)
-        where, params = (("WHERE agency_id=?", (agency,)) if agency is not None
+        where, params = (("WHERE " + admin_visible_lead_sql(agency, owner_id)[0],
+                          admin_visible_lead_sql(agency, owner_id)[1]) if agency is not None
                          else ("WHERE manager_id=?", (actor,)) if staff["role"] == "staff" else ("", ()))
         rows = conn.execute("SELECT * FROM users " + where + " ORDER BY registered_at DESC,id DESC LIMIT 200", params).fetchall()
         counts = dict(conn.execute("SELECT status,count(*) AS n FROM users " + where + " GROUP BY status", params).fetchall())
@@ -792,8 +806,9 @@ def admin_users_page(actor, owner_id, *, page=1, status="", role="", query=""):
         agency = admin_agency(staff)
         conditions, params = [], []
         if agency is not None:
-            conditions.append("agency_id=?")
-            params.append(agency)
+            scope, values = admin_visible_lead_sql(agency, owner_id)
+            conditions.append(scope)
+            params.extend(values)
         # Staff must never enumerate other managers' participants within the
         # same agency, including when agency_id is present on their profile.
         if staff["role"] == "staff":

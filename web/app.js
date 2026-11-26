@@ -145,7 +145,8 @@
       const ref=data.referral;
       if(ref){
         show("participant-referral-summary",true);
-        text("referral-invited",ref.invited_count);
+        text("referral-invited",Number.isSafeInteger(ref.invited_count)&&ref.invited_count>=0
+          ?new Intl.NumberFormat("ru-RU").format(ref.invited_count):"—");
         text("referral-earned",kopeksMoney(ref.earned_kopeks));
         const root=$("referral-rewards");root.replaceChildren();
         for(const reward of ref.rewards||[]){
@@ -807,7 +808,7 @@
       requiresApproval
         ?["Запросите доступ","Отправьте запрос на оффер МФО и дождитесь решения менеджера."]
         :["Выполните действие","Перейдите к предложению по ссылке, если доступ разрешён."],
-      ["Отправьте подтверждение","Выберите доступный этап и приложите подтверждающий файл размером до 10 МБ."],
+      ["Отметьте этап","Выберите выполненный этап; файл любого формата до 10 МБ можно приложить по желанию."],
       ["Дождитесь решения","Отчёт рассматривает менеджер. Ручной статус не означает банковское начисление."]
     ];
     if(restricted&&!requiresApproval){
@@ -875,7 +876,7 @@
       }
       section.append(heading,list);
       const hint=document.createElement("p");hint.className="participant-offer-stage-hint";
-      hint.textContent="Отправляйте этапы по порядку. Следующий откроется после проверки предыдущего.";
+      hint.textContent="Выбирайте фактически выполненный этап. Отметки проверяет менеджер; скриншот необязателен.";
       section.append(hint);offerDialogContent.append(section);
     }
     offerDialogContent.append(offerWorkflowGuide(offer));
@@ -948,29 +949,31 @@
       const section=document.createElement("section");section.className="participant-offer-report";
       section.append(document.createElement("hr"));
       const title=document.createElement("h3");title.textContent="Отметить этап";
-      const hint=document.createElement("p");hint.textContent="Этапы выполняются по порядку. Приложите подтверждающий файл размером до 10 МБ. Отчёт проверит менеджер.";
+      const hint=document.createElement("p");hint.textContent="Выберите выполненный этап. Прикладывать скриншот необязательно: если потребуется, подтверждение запросит поддержка. Отметку проверит менеджер.";
       section.append(title,hint);
       const form=document.createElement("form");form.className="participant-offer-report-form";
       const stageLabel=document.createElement("label");stageLabel.textContent="Этап выполнения";
       const stages=document.createElement("select");stages.required=true;
       const pendingStage=offer.latest_event?.kind==="stage"&&offer.latest_event?.review_status==="pending";
       for(const code of offer.lead_stages||[]){
-        if(!offer.requires_request && code!==offer.next_stage)continue;
         if(!Object.hasOwn(leadStageLabels,code))continue;
         const option=document.createElement("option");option.value=code;option.textContent=leadStageLabels[code];stages.append(option);
       }
+      if(offer.next_stage && [...stages.options].some(option=>option.value===offer.next_stage)){
+        stages.value=offer.next_stage;
+      }
       stageLabel.append(stages);
-      const fileLabel=document.createElement("label");fileLabel.textContent="Файл подтверждения (любой формат, до 10 МБ)";
-      const file=document.createElement("input");file.type="file";file.required=true;
+      const fileLabel=document.createElement("label");fileLabel.textContent="Файл подтверждения (необязательно, любой формат, до 10 МБ)";
+      const file=document.createElement("input");file.type="file";
       fileLabel.append(file);
       const note=document.createElement("p");note.className="participant-offer-report-hint";
-      note.textContent="Файл сохранится в защищённом хранилище без изменения формата. Без подтверждения банка выплаты не начисляются.";
+      note.textContent="Если файл приложен, он сохранится на сервере в исходном формате и будет доступен только вам и уполномоченным сотрудникам. Отметка этапа не означает банковского начисления.";
       const submit=document.createElement("button");submit.type="submit";submit.className="btn primary";
       submit.textContent="Отправить этап на проверку";
       const message=document.createElement("p");message.className="participant-form-feedback";message.setAttribute("role","status");
       if(!stages.options.length||pendingStage){
         submit.disabled=true;file.disabled=true;stages.disabled=true;
-        message.textContent=pendingStage?"Предыдущий этап ожидает проверки менеджера.":"Все этапы уже подтверждены.";
+        message.textContent=pendingStage?"Ваша отметка ожидает проверки менеджера.":"Все этапы уже подтверждены.";
       }
       form.append(stageLabel,fileLabel,note,submit,message);
       let sending=false;
@@ -979,19 +982,20 @@
         sending=true;submit.disabled=true;submit.setAttribute("aria-busy","true");
         const original=submit.textContent;
         submit.textContent="Проверяем и отправляем…";
-        message.textContent="Проверяем подтверждение и отправляем отчёт менеджеру…";
+        message.textContent="Отправляем отметку этапа менеджеру…";
         try{
           const values={kind:"stage",offer_id:offer.id,lead_stage:stages.value};
           const uploaded=file.files?.[0];
-          if(!uploaded)throw new Error("Приложите файл подтверждения.");
-          if(uploaded.size<1||uploaded.size>10_000_000)throw new Error("Размер файла должен быть от 1 байта до 10 МБ.");
-          const encoded=await new Promise((resolve,reject)=>{
-            const reader=new FileReader();
-            reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");
-            reader.onerror=()=>reject(new Error("Не удалось прочитать файл"));
-            reader.readAsDataURL(uploaded);
-          });
-          values.file={name:uploaded.name,data:encoded};
+          if(uploaded){
+            if(uploaded.size<1||uploaded.size>10_000_000)throw new Error("Размер файла должен быть от 1 байта до 10 МБ.");
+            const encoded=await new Promise((resolve,reject)=>{
+              const reader=new FileReader();
+              reader.onload=()=>resolve(String(reader.result).split(",")[1]||"");
+              reader.onerror=()=>reject(new Error("Не удалось прочитать файл"));
+              reader.readAsDataURL(uploaded);
+            });
+            values.file={name:uploaded.name,data:encoded};
+          }
           await api("/mvp/submit",values);
           message.textContent="Отчёт отправлен. Ожидайте решения менеджера.";
           closeOfferDialog();await loadManualOverview();

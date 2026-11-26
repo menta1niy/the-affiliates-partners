@@ -79,7 +79,7 @@ def _screenshot(data):
             "image/gif" if raw.startswith((b"GIF87a", b"GIF89a")) else
             "application/pdf" if raw.startswith(b"%PDF-") else
             "application/octet-stream")
-    return raw, json.dumps({"name": name, "mime": mime}, ensure_ascii=False)
+    return raw, json.dumps({"name": name, "mime": mime, "storage": "plain"}, ensure_ascii=False)
 
 
 def _public(row):
@@ -157,10 +157,8 @@ def send(actor, owner_id, data):
             raise db.Problem(400, "Некорректная ссылка подтверждения")
         link = mvp._url(raw_url)
         screenshot, evidence_type = _screenshot(data.get("file", data.get("screenshot")))
-        if not link and screenshot is None:
-            raise db.Problem(400, "Приложите файл с подтверждением")
-        if screenshot is not None:
-            screenshot = _cipher().encrypt(screenshot)
+        # A lead may report a milestone before obtaining any evidence. Staff can
+        # request a supporting file later; declarations still require review.
     db.initialize()
     with db.transaction() as conn:
         mvp.schema(conn)
@@ -175,14 +173,8 @@ def send(actor, owner_id, data):
                 raise db.Problem(400, "Этот этап не включён для оффера")
             if mfo and not mfo_approved(conn, actor, offer_id):
                 raise db.Problem(403, "Сначала запросите и получите одобрение МФО")
-            if not mfo:
-                completed = {r["lead_stage"] for r in conn.execute(
-                    "SELECT lead_stage FROM manual_offer_events WHERE telegram_id=? AND offer_id=? "
-                    "AND kind='stage' AND review_status='approved'",
-                    (actor, offer_id)).fetchall()}
-                next_stage = next((code for code in allowed if code not in completed), None)
-                if stage != next_stage:
-                    raise db.Problem(409, "Этапы выполняются по порядку. Дождитесь подтверждения предыдущего.")
+            # Users may choose any configured milestone. Pending reports and
+            # previously approved milestones remain protected below.
         if kind == "mfo_request" and mfo_approved(conn, actor, offer_id):
             raise db.Problem(409, "МФО уже согласован")
         pending = conn.execute("SELECT 1 FROM manual_offer_events WHERE telegram_id=? AND offer_id=? "
@@ -384,9 +376,17 @@ def own_evidence(actor, owner_id, data):
 
 
 def _evidence_payload(row):
+    raw = bytes(row["evidence_data"])
+    # Older evidence was Fernet-encrypted. The explicit storage marker avoids
+    # guessing from arbitrary bytes and preserves encrypted historical files.
     try:
-        from cryptography.fernet import InvalidToken
-        raw = _cipher().decrypt(bytes(row["evidence_data"]))
-    except InvalidToken:
-        raise db.Problem(503, "Не удалось расшифровать подтверждение") from None
+        metadata = json.loads(row["evidence_type"])
+    except (ValueError, TypeError):
+        metadata = None
+    if not isinstance(metadata, dict) or metadata.get("storage") != "plain":
+        try:
+            from cryptography.fernet import InvalidToken
+            raw = _cipher().decrypt(raw)
+        except InvalidToken:
+            raise db.Problem(503, "Не удалось расшифровать подтверждение") from None
     return {**_file_info(row["evidence_type"]), "data": base64.b64encode(raw).decode("ascii")}

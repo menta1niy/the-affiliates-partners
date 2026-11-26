@@ -340,8 +340,9 @@ def assignment_candidates(actor, owner_id, data):
         params = []
         agency = db.admin_agency(staff)
         if agency is not None:
-            conditions.append("agency_id=?")
-            params.append(agency)
+            scope, scope_params = db.admin_visible_lead_sql(agency, owner_id)
+            conditions.append(scope)
+            params.extend(scope_params)
         if role != "all":
             conditions.append("role=?")
             params.append(role)
